@@ -39,7 +39,9 @@
           <li>Sem ver os palpites, cada um vota em quem acha que ficou <strong>mais longe</strong> (não vale votar em si próprio).</li>
           <li>Quem ficou <strong>mais perto</strong> ganha 1 ponto, ou 2 se acertar no número exato. Quem acertou no <strong>mais longe</strong> ganha 1 ponto.</li>
           <li>Empates dão ponto a todos. No fim, quem estiver empatado vai a desempate: só esses respondem a uma pergunta extra e quem ficar mais perto fica à frente.</li>
-          <li>O anfitrião escolhe quantas perguntas tem o jogo (10 por defeito). São precisos pelo menos 3 jogadores.</li>
+          <li>O anfitrião escolhe quantas perguntas tem o jogo (10 por defeito) e as categorias. São precisos pelo menos 3 jogadores.</li>
+          <li>Com as perguntas dos jogadores ligadas (mínimo 4 jogadores), cada um escreve uma pergunta: quando sai a tua, não respondes, mas votas.</li>
+          <li>No fim há prémios para o mais certeiro, o mais longe da realidade e quem melhor leu os outros.</li>
         </ol>
       </details>
     </section>
@@ -67,8 +69,38 @@
           <span>Tempo para votar <output id="out-vote"></output></span>
           <input type="range" id="set-vote" min="0" max="180" step="15">
         </label>
+        <div class="field-group">
+          <span class="group-title">Categorias</span>
+          <div id="set-cats" class="chips"></div>
+          <p id="cats-warning" class="warn" hidden></p>
+        </div>
+        <label class="switch">
+          <span>
+            <b>Perguntas dos jogadores</b>
+            <small>Cada um escreve uma pergunta antes de começar (mínimo 4 jogadores).</small>
+          </span>
+          <input type="checkbox" id="set-custom">
+        </label>
         <p id="settings-hint" class="hint"></p>
       </div>
+
+      <form id="custom-form" class="card stack" autocomplete="off" hidden>
+        <h2>A tua pergunta</h2>
+        <p class="hint">Uma pergunta com resposta em número. Quando sair, não respondes, mas podes votar.</p>
+        <label class="field">Pergunta
+          <textarea id="custom-text" maxlength="120" rows="2" placeholder="Ex.: Quantos primos tenho?"></textarea>
+        </label>
+        <div class="row">
+          <label class="field">Resposta certa
+            <input id="custom-answer" inputmode="decimal" placeholder="Ex.: 23">
+          </label>
+          <label class="field">Unidade (opcional)
+            <input id="custom-unit" maxlength="20" placeholder="Ex.: anos">
+          </label>
+        </div>
+        <button class="primary" type="submit">Guardar pergunta</button>
+        <p id="custom-status" class="hint center"></p>
+      </form>
 
       <button id="btn-start" class="primary"></button>
       <p id="lobby-hint" class="hint center"></p>
@@ -78,6 +110,7 @@
     <!-- Responder -->
     <section id="screen-answer" class="screen" hidden>
       <p id="ans-tiebreak" class="card center" hidden></p>
+      <p id="ans-cat" class="cat-label"></p>
       <p id="ans-question" class="question"></p>
       <p id="ans-unit" class="unit"></p>
 
@@ -99,6 +132,7 @@
         <p id="ans-mine" class="big-number"></p>
       </div>
       <p id="ans-watch" class="hint center" hidden>Não estás neste desempate. Fica a ver quem fica à frente.</p>
+      <p id="ans-author" class="card center" hidden>Esta pergunta é tua! Não respondes, mas vais poder votar em quem ficou mais longe.</p>
 
       <h3>Quem já respondeu</h3>
       <ul id="ans-progress" class="players"></ul>
@@ -123,23 +157,45 @@
     <!-- Revelação -->
     <section id="screen-reveal" class="screen" hidden>
       <p id="rev-question" class="question small"></p>
-      <div class="answer-box">
-        <span class="label">Resposta certa</span>
-        <strong id="rev-correct"></strong>
+
+      <!-- 1. Palpites, um a um (reta numérica ou mapa) -->
+      <div id="rev-line" class="numline" hidden>
+        <div class="numline-marks"></div>
+        <div class="numline-axis"></div>
+        <div class="numline-correct"></div>
+        <div class="numline-ends"><span class="lo"></span><span class="hi"></span></div>
       </div>
       <div id="rev-map" class="map-wrap" hidden>
-        <div class="map-box"><div class="map-inner"><div class="pins"></div></div></div>
+        <div class="map-box"><div class="map-inner"><svg class="lines" viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div class="pins"></div></div></div>
         <div class="map-zoom">
           <button type="button" data-zoom="-1" aria-label="Afastar">−</button>
           <button type="button" data-zoom="1" aria-label="Aproximar">+</button>
         </div>
       </div>
-      <p id="rev-mine" class="mine"></p>
-      <ul id="rev-list" class="results"></ul>
-      <p id="rev-voters" class="hint"></p>
+      <p id="rev-progress" class="hint center"></p>
 
-      <h3>Classificação</h3>
-      <ol id="rev-scores" class="scores"></ol>
+      <!-- 2. Resposta certa -->
+      <div id="rev-answer" class="answer-box reveal-in" hidden>
+        <span class="label">Resposta certa</span>
+        <strong id="rev-correct"></strong>
+      </div>
+
+      <!-- 3. Quem votou em quem -->
+      <div id="rev-votes-box" class="reveal-in" hidden>
+        <h3>Quem votou em quem</h3>
+        <p id="rev-farthest" class="hint"></p>
+        <ul id="rev-votes" class="votes"></ul>
+      </div>
+
+      <!-- 4. Pontos da ronda e classificação -->
+      <div id="rev-points-box" class="reveal-in stack" hidden>
+        <p id="rev-mine" class="mine"></p>
+        <ul id="rev-list" class="results"></ul>
+        <h3>Classificação</h3>
+        <ol id="rev-scores" class="scores"></ol>
+      </div>
+
+      <button id="btn-step" class="primary" hidden>Seguinte</button>
       <button id="btn-next" class="primary" hidden></button>
       <p id="rev-hint" class="hint center"></p>
     </section>
@@ -166,6 +222,8 @@
       <h1 class="logo small">Fim do jogo</h1>
       <p id="end-winner" class="winner"></p>
       <ol id="end-scores" class="scores"></ol>
+      <h3 id="end-awards-title">Prémios</h3>
+      <div id="end-awards" class="awards"></div>
       <button id="btn-again" class="primary" hidden>Jogar de novo</button>
       <p id="end-hint" class="hint center"></p>
       <button class="ghost btn-leave">Sair da sala</button>

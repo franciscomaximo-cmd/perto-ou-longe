@@ -5,11 +5,32 @@ const { scoreRound, shuffle, distance } = require('./game');
 const { distanceToCountry, centerOf } = require('./geo');
 const QUESTIONS = require('./questions.json');
 
-const MAP_QUESTIONS = QUESTIONS.filter((q) => q.type === 'map');
-const NUMBER_QUESTIONS = QUESTIONS.filter((q) => q.type !== 'map');
-const MAP_SHARE = 0.25; // cerca de 1 em cada 4 perguntas é de mapa
+const MAP_SHARE = 0.25; // cerca de 1 em cada 4 perguntas é de mapa (quando há Geografia)
+
+const CATEGORIES = [
+  { id: 'geografia', label: 'Geografia' },
+  { id: 'desporto', label: 'Desporto' },
+  { id: 'historia', label: 'História' },
+  { id: 'cultura', label: 'Cultura Portuguesa' },
+  { id: 'precos', label: 'Adivinha o Preço' },
+  { id: 'ciencia', label: 'Ciência e Curiosidades' },
+];
+const CATEGORY_LABELS = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.label]));
+const CATEGORY_COUNTS = Object.fromEntries(CATEGORIES.map((c) => [c.id, QUESTIONS.filter((q) => q.category === c.id).length]));
+
+// Lista vazia = todas as categorias.
+function cleanCategories(list) {
+  const ids = [...new Set([].concat(list || []))].filter((id) => CATEGORY_LABELS[id]);
+  return ids.length === CATEGORIES.length ? [] : CATEGORIES.map((c) => c.id).filter((id) => ids.includes(id));
+}
 
 const MIN_PLAYERS = 3;
+// Com perguntas dos jogadores, quem escreveu não responde: com 3 jogadores sobravam só 2
+// a responder e cada um só podia votar no outro. Por isso são precisos 4.
+const MIN_PLAYERS_WITH_CUSTOM = 4;
+const MAX_CUSTOM_TEXT = 120;
+const MIN_CUSTOM_TEXT = 10;
+const MAX_CUSTOM_UNIT = 20;
 const MAX_PLAYERS = 12;
 const DEFAULT_ROUNDS = 10;
 const MIN_ROUNDS = 3;
@@ -57,6 +78,23 @@ function clampRounds(value) {
   return Math.min(MAX_ROUNDS, QUESTIONS.length, Math.max(MIN_ROUNDS, n));
 }
 
+// Texto escrito por um jogador: sem caracteres de controlo, espaços normalizados, tamanho limitado.
+// (O cliente mostra-o sempre como texto, nunca como HTML.)
+function cleanText(raw, max) {
+  return String(raw ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function cleanCustomQuestion(raw = {}) {
+  const text = cleanText(raw.text, MAX_CUSTOM_TEXT);
+  if (text.length < MIN_CUSTOM_TEXT) throw new GameError(`Escreve uma pergunta com pelo menos ${MIN_CUSTOM_TEXT} letras.`);
+  const answer = raw.answer;
+  if (typeof answer !== 'number' || !Number.isFinite(answer) || Math.abs(answer) > 1e12) {
+    throw new GameError('A resposta tem de ser um número.');
+  }
+  const unit = cleanText(raw.unit, MAX_CUSTOM_UNIT);
+  return unit ? { text, answer, unit } : { text, answer };
+}
+
 // Nas perguntas de números a resposta é um número; nas de mapa é um ponto { lat, lon }.
 function validAnswer(question, value) {
   if (question.type === 'map') {
@@ -71,6 +109,14 @@ function validAnswer(question, value) {
     throw new GameError('Escreve um número válido.');
   }
   return value;
+}
+
+// Erro relativo de um palpite, para comparar perguntas com escalas muito diferentes:
+// nos números, a distância a dividir pela resposta; nos mapas, os km a dividir por meia volta
+// à Terra (20 000 km). Limitado a 10 para um disparate não pesar mais do que tudo o resto.
+function relativeError(question, dist) {
+  const scale = question.type === 'map' ? 20000 : Math.max(Math.abs(question.answer), 1);
+  return Math.min(10, dist / scale);
 }
 
 // O que se mostra como resposta certa e como se mede a distância de cada palpite.
@@ -88,7 +134,9 @@ class Room {
     this.notify = notify; // chamado quando o estado muda fora de um pedido de um jogador (temporizadores)
     this.players = new Map();
     this.hostId = null;
-    this.settings = { rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0 };
+    this.settings = { rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0, categories: [], playerQuestions: false };
+    this.customQuestions = new Map(); // id do autor -> pergunta escrita no lobby
+    this.stats = new Map(); // id -> estatísticas do jogo, para os prémios do fim
     this.phase = 'lobby'; // lobby | answering | voting | reveal | tiebreak | tiebreak-reveal | end
     this.round = 0;
     this.questions = [];
@@ -166,6 +214,7 @@ class Room {
     if (!this.players.has(playerId)) return;
     if (this.phase === 'lobby' || this.phase === 'end') {
       this.players.delete(playerId);
+      this.customQuestions.delete(playerId);
     } else {
       // A meio do jogo mantém-se o registo (respostas e votos já dados), apenas fica desligado.
       const player = this.players.get(playerId);
@@ -198,7 +247,39 @@ class Room {
     if (settings.rounds !== undefined) this.settings.rounds = clampRounds(settings.rounds);
     if (settings.answerTime !== undefined) this.settings.answerTime = clampTime(settings.answerTime);
     if (settings.voteTime !== undefined) this.settings.voteTime = clampTime(settings.voteTime);
+    if (settings.categories !== undefined) this.settings.categories = cleanCategories(settings.categories);
+    if (settings.playerQuestions !== undefined) this.settings.playerQuestions = Boolean(settings.playerQuestions);
     this.touch();
+  }
+
+  minPlayers() {
+    return this.settings.playerQuestions ? MIN_PLAYERS_WITH_CUSTOM : MIN_PLAYERS;
+  }
+
+  // Cada jogador escreve (ou reescreve) a sua pergunta na sala de espera.
+  submitCustomQuestion(playerId, raw) {
+    if (this.phase !== 'lobby') throw new GameError('Só podes escrever a pergunta antes de começar.');
+    if (!this.settings.playerQuestions) throw new GameError('O anfitrião não ligou as perguntas dos jogadores.');
+    if (!this.players.has(playerId)) throw new GameError('Não estás nesta sala.');
+    this.customQuestions.set(playerId, { ...cleanCustomQuestion(raw), author: playerId });
+    this.touch();
+  }
+
+  // Perguntas dos jogadores que entram no jogo (só com a opção ligada).
+  activeCustomQuestions() {
+    if (!this.settings.playerQuestions) return [];
+    return [...this.customQuestions.values()].filter((q) => this.players.has(q.author));
+  }
+
+  // Perguntas do banco nas categorias escolhidas.
+  questionPool() {
+    const cats = this.settings.categories;
+    return cats.length ? QUESTIONS.filter((q) => cats.includes(q.category)) : QUESTIONS;
+  }
+
+  // Quantas perguntas o jogo vai mesmo ter (menos do que o pedido se as categorias não chegarem).
+  plannedRounds() {
+    return Math.min(this.settings.rounds, this.questionPool().length + this.activeCustomQuestions().length);
   }
 
   // --- Fluxo do jogo -----------------------------------------------------
@@ -206,10 +287,18 @@ class Room {
   startGame(playerId) {
     this.requireHost(playerId);
     if (this.phase !== 'lobby') throw new GameError('O jogo já começou.');
-    if (this.connectedPlayers().length < MIN_PLAYERS) {
-      throw new GameError(`São precisos pelo menos ${MIN_PLAYERS} jogadores ligados.`);
+    const online = this.connectedPlayers();
+    if (online.length < this.minPlayers()) {
+      throw new GameError(this.settings.playerQuestions
+        ? `Com perguntas dos jogadores são precisos pelo menos ${MIN_PLAYERS_WITH_CUSTOM} jogadores ligados.`
+        : `São precisos pelo menos ${MIN_PLAYERS} jogadores ligados.`);
+    }
+    if (this.settings.playerQuestions) {
+      const missing = online.filter((p) => !this.customQuestions.has(p.id)).map((p) => p.name);
+      if (missing.length) throw new GameError(`Ainda falta a pergunta de: ${missing.join(', ')}.`);
     }
     for (const p of this.players.values()) p.score = 0;
+    this.stats = new Map();
     this.questions = this.pickQuestions();
     this.round = 0;
     this.standings = null;
@@ -218,11 +307,22 @@ class Room {
     this.nextRound();
   }
 
-  // Cerca de um quarto das perguntas são de mapa; o resto são de números.
+  // As perguntas dos jogadores entram todas (se couberem) e o banco completa o resto:
+  // cerca de um quarto de mapa (se houver Geografia), o resto de números.
   pickQuestions() {
-    const rounds = this.settings.rounds;
-    const maps = Math.min(MAP_QUESTIONS.length, Math.max(1, Math.round(rounds * MAP_SHARE)));
-    return shuffle([...this.pickFrom(MAP_QUESTIONS, maps), ...this.pickFrom(NUMBER_QUESTIONS, rounds - maps)]);
+    const rounds = this.plannedRounds();
+    const custom = shuffle(this.activeCustomQuestions()).slice(0, rounds);
+    return shuffle([...custom, ...this.pickBank(rounds - custom.length)]);
+  }
+
+  pickBank(rounds) {
+    if (rounds <= 0) return [];
+    const pool = this.questionPool();
+    const maps = pool.filter((q) => q.type === 'map');
+    const numbers = pool.filter((q) => q.type !== 'map');
+    const wantMaps = maps.length ? Math.max(1, Math.round(rounds * MAP_SHARE)) : 0;
+    const numberCount = Math.min(numbers.length, rounds - Math.min(wantMaps, maps.length));
+    return [...this.pickFrom(maps, rounds - numberCount), ...this.pickFrom(numbers, numberCount)];
   }
 
   // Evita repetir perguntas entre jogos na mesma sala, enquanto houver perguntas novas.
@@ -231,15 +331,17 @@ class Room {
     if (available.length < count) {
       for (const q of pool) this.usedQuestions.delete(q);
       available = pool.filter((q) => !this.questions.includes(q));
+      if (available.length < count) available = pool; // categoria pequena: pode repetir do jogo anterior
     }
     const picked = shuffle(available).slice(0, count);
     for (const q of picked) this.usedQuestions.add(q);
     return picked;
   }
 
-  // Pergunta extra para desempate (sempre de números), que não tenha saído neste jogo.
+  // Pergunta extra para desempate (sempre de números, das categorias escolhidas se houver).
   pickTiebreakQuestion() {
-    return this.pickFrom(NUMBER_QUESTIONS, 1)[0];
+    const numbers = this.questionPool().filter((q) => q.type !== 'map');
+    return this.pickFrom(numbers.length ? numbers : QUESTIONS.filter((q) => q.type !== 'map'), 1)[0];
   }
 
   nextRound() {
@@ -280,6 +382,7 @@ class Room {
       throw new GameError('Só os jogadores empatados respondem ao desempate.');
     }
     const { answers, question } = this.phase === 'tiebreak' ? this.tiebreak : this.current;
+    if (question.author === playerId) throw new GameError('Esta pergunta é tua: não respondes, mas podes votar.');
     if (answers.has(playerId)) throw new GameError('Já respondeste a esta pergunta.');
     answers.set(playerId, validAnswer(question, value));
     this.touch();
@@ -310,7 +413,10 @@ class Room {
     if (this.phase === 'tiebreak') {
       const { ids, answers } = this.tiebreak;
       if (online.every((p) => !ids.includes(p.id) || answers.has(p.id))) this.revealTiebreak();
-    } else if (this.phase === 'answering' && online.every((p) => this.current.answers.has(p.id))) {
+    } else if (
+      this.phase === 'answering' &&
+      online.every((p) => this.current.answers.has(p.id) || p.id === this.current.question.author)
+    ) {
       this.endAnswering();
     } else if (
       this.phase === 'voting' &&
@@ -339,7 +445,69 @@ class Room {
       const player = this.players.get(id);
       if (player) player.score += pts;
     }
+    this.recordStats(question, this.current.result, answers.size);
+    // Revelação em passos, avançada pelo anfitrião: um palpite de cada vez (do mais longe
+    // para o mais perto), depois a resposta certa, os votos e por fim os pontos.
+    this.current.step = 1;
+    this.current.steps = answers.size + 3;
     this.setPhase('reveal');
+  }
+
+  // --- Estatísticas e prémios ---------------------------------------------
+
+  statsOf(id) {
+    if (!this.stats.has(id)) this.stats.set(id, { closest: 0, farthest: 0, correctVotes: 0, errorSum: 0, answered: 0 });
+    return this.stats.get(id);
+  }
+
+  recordStats(question, result, answerCount) {
+    for (const [id, dist] of Object.entries(result.distances)) {
+      const s = this.statsOf(id);
+      s.answered += 1;
+      s.errorSum += relativeError(question, dist);
+    }
+    for (const id of result.closest) this.statsOf(id).closest += 1;
+    // Com uma só resposta, essa pessoa seria ao mesmo tempo a mais perto e a mais longe.
+    if (answerCount >= 2) for (const id of result.farthest) this.statsOf(id).farthest += 1;
+    for (const id of result.correctVoters) this.statsOf(id).correctVotes += 1;
+  }
+
+  // Prémios do fim do jogo; em empate ficam todos os empatados. Um prémio sem ninguém
+  // que o mereça (ex.: ninguém acertou um voto) não aparece.
+  awards() {
+    const entries = [...this.stats.entries()].filter(([id]) => this.players.has(id));
+    const meanError = (s) => (s.answered ? s.errorSum / s.answered : Infinity);
+    const best = (value, { min = false } = {}) => {
+      const scored = entries.map(([id, s]) => [id, value(s)]).filter(([, v]) => Number.isFinite(v) && (min || v > 0));
+      if (!scored.length) return [];
+      const target = min ? Math.min(...scored.map(([, v]) => v)) : Math.max(...scored.map(([, v]) => v));
+      return scored.filter(([, v]) => v === target).map(([id]) => id);
+    };
+
+    // Mais certeiro: mais vezes o mais perto; em empate, o menor erro médio relativo.
+    let sharp = best((s) => s.closest);
+    if (sharp.length > 1) {
+      const lowest = Math.min(...sharp.map((id) => meanError(this.stats.get(id))));
+      sharp = sharp.filter((id) => meanError(this.stats.get(id)) === lowest);
+    }
+    if (!sharp.length) sharp = best(meanError, { min: true });
+
+    const describe = (id) => {
+      const s = this.stats.get(id);
+      return { id, closest: s.closest, farthest: s.farthest, correctVotes: s.correctVotes, meanError: Number.isFinite(meanError(s)) ? Math.round(meanError(s) * 1000) / 1000 : null };
+    };
+    return [
+      { id: 'sharp', winners: sharp.map(describe) },
+      { id: 'far', winners: best((s) => s.farthest).map(describe) },
+      { id: 'reader', winners: best((s) => s.correctVotes).map(describe) },
+    ].filter((a) => a.winners.length);
+  }
+
+  revealStep(playerId) {
+    this.requireHost(playerId);
+    if (this.phase !== 'reveal') throw new GameError('Não há nada para revelar agora.');
+    if (this.current.step < this.current.steps) this.current.step += 1;
+    this.touch();
   }
 
   forceAdvance(playerId) {
@@ -436,6 +604,7 @@ class Room {
     this.questions = [];
     this.standings = null;
     this.tiebreak = null;
+    this.customQuestions.clear(); // no jogo seguinte cada um escreve uma pergunta nova
     for (const p of this.players.values()) p.score = 0;
     // Quem saiu durante o jogo não fica a ocupar lugar na sala nova.
     for (const p of [...this.players.values()]) {
@@ -463,9 +632,14 @@ class Room {
       totalRounds: this.questions.length || this.settings.rounds,
       minRounds: MIN_ROUNDS,
       maxRounds: Math.min(MAX_ROUNDS, QUESTIONS.length),
-      minPlayers: MIN_PLAYERS,
+      minPlayers: this.minPlayers(),
+      // Perguntas dos jogadores: só se diz quem já escreveu; o texto fica com o autor.
+      customReady: [...this.customQuestions.keys()],
+      myQuestion: this.phase === 'lobby' ? this.customQuestions.get(playerId) || null : null,
       maxPlayers: MAX_PLAYERS,
       settings: { ...this.settings },
+      categories: CATEGORIES.map((c) => ({ ...c, count: CATEGORY_COUNTS[c.id] })),
+      plannedRounds: this.plannedRounds(),
       remainingMs: this.deadline ? Math.max(0, this.deadline - Date.now()) : null,
       players: [...this.players.values()].map((p) => ({
         id: p.id,
@@ -476,7 +650,13 @@ class Room {
     };
 
     if (cur && this.phase !== 'lobby') {
-      state.question = { text: cur.question.text, unit: cur.question.unit || '', type: cur.question.type || 'number' };
+      state.question = {
+        text: cur.question.text,
+        unit: cur.question.unit || '',
+        type: cur.question.type || 'number',
+        category: CATEGORY_LABELS[cur.question.category] || '',
+        author: cur.question.author || null,
+      };
       state.answered = [...cur.answers.keys()];
       state.voted = [...cur.votes.keys()];
       state.myAnswer = cur.answers.has(playerId) ? cur.answers.get(playerId) : null;
@@ -490,6 +670,8 @@ class Room {
           center: cur.question.country ? centerOf(cur.question.country) : undefined,
           answers: Object.fromEntries(cur.answers),
           votes: Object.fromEntries(cur.votes),
+          step: cur.step,
+          steps: cur.steps,
           ...cur.result,
         };
       }
@@ -498,7 +680,7 @@ class Room {
     // No desempate o ecrã de resposta mostra a pergunta extra.
     const tb = this.tiebreak;
     if (tb && (this.phase === 'tiebreak' || this.phase === 'tiebreak-reveal')) {
-      state.question = { text: tb.question.text, unit: tb.question.unit || '', type: 'number' };
+      state.question = { text: tb.question.text, unit: tb.question.unit || '', type: 'number', category: CATEGORY_LABELS[tb.question.category] || '' };
       state.answered = [...tb.answers.keys()];
       state.myAnswer = tb.answers.has(playerId) ? tb.answers.get(playerId) : null;
       state.tiebreak = { number: tb.number, ids: [...tb.ids], result: tb.result };
@@ -509,6 +691,7 @@ class Room {
         .filter((ids) => ids.length);
       state.tiebreakPending = this.standings.some((t) => !t.settled);
     }
+    if (this.phase === 'end') state.awards = this.awards();
     return state;
   }
 }

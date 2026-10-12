@@ -39,7 +39,7 @@ test('só o anfitrião começa e configura', () => {
   assert.throws(() => room.startGame(ids[1]), /anfitrião/);
   assert.throws(() => room.updateSettings(ids[1], { answerTime: 30 }), /anfitrião/);
   room.updateSettings(ids[0], { answerTime: 30, voteTime: 5 });
-  assert.deepEqual(room.settings, { rounds: DEFAULT_ROUNDS, answerTime: 30, voteTime: 10 });
+  assert.deepEqual(room.settings, { rounds: DEFAULT_ROUNDS, answerTime: 30, voteTime: 10, categories: [], playerQuestions: false });
 });
 
 test('clampRounds: entre 3 e 30, 10 por defeito', () => {
@@ -230,6 +230,25 @@ test('quem se desliga no desempate fica atrás', () => {
   assert.deepEqual(room.stateFor(ana).standings, [[ana], [eva], [rui]]);
 });
 
+test('a revelação avança em passos, só pelo anfitrião', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  startWithNumber(room, ana);
+  room.submitAnswer(ana, 200);
+  room.submitAnswer(rui, 100);
+  room.submitAnswer(eva, 50);
+  room.forceAdvance(ana); // sem votos
+  assert.equal(room.phase, 'reveal');
+  // 3 palpites + resposta certa + votos + pontos
+  assert.deepEqual([room.stateFor(rui).result.step, room.stateFor(rui).result.steps], [1, 6]);
+  assert.throws(() => room.revealStep(rui), /anfitrião/);
+  for (let i = 0; i < 10; i++) room.revealStep(ana);
+  assert.equal(room.stateFor(eva).result.step, 6, 'não passa do último passo');
+  room.nextQuestion(ana);
+  assert.equal(room.phase, 'answering');
+  assert.throws(() => room.revealStep(ana), /revelar/);
+});
+
 test('pergunta de mapa: dentro do país conta como acerto em cheio', () => {
   const { room, ids } = setup();
   const [ana, rui, eva] = ids;
@@ -278,6 +297,190 @@ test('o desempate nunca usa perguntas de mapa', () => {
   for (let i = 0; i < 30; i++) {
     assert.notEqual(room.pickTiebreakQuestion().type, 'map');
   }
+});
+
+test('todas as perguntas têm categoria e cada categoria tem pelo menos 15', () => {
+  const questions = require('../server/questions.json');
+  const counts = {};
+  for (const q of questions) counts[q.category] = (counts[q.category] || 0) + 1;
+  assert.deepEqual(Object.keys(counts).sort(), ['ciencia', 'cultura', 'desporto', 'geografia', 'historia', 'precos']);
+  for (const [cat, n] of Object.entries(counts)) assert.ok(n >= 15, `${cat}: ${n}`);
+  for (const q of questions.filter((x) => x.category === 'precos')) {
+    assert.equal(q.unit, 'euros', q.text);
+    assert.match(q.text, /\b20\d\d\b/, `o preço indica o ano: ${q.text}`);
+  }
+});
+
+test('só saem perguntas das categorias escolhidas', () => {
+  const { room, ids } = setup();
+  room.updateSettings(ids[0], { categories: ['desporto', 'historia', 'inventada'], rounds: 12 });
+  assert.deepEqual(room.settings.categories, ['desporto', 'historia']);
+  room.startGame(ids[0]);
+  assert.equal(room.questions.length, 12);
+  assert.ok(room.questions.every((q) => ['desporto', 'historia'].includes(q.category)));
+  assert.ok(room.questions.every((q) => q.type !== 'map'), 'sem Geografia não há mapas');
+  assert.equal(room.stateFor(ids[1]).question.category === 'Desporto' || room.stateFor(ids[1]).question.category === 'História', true);
+});
+
+test('escolher todas as categorias é o mesmo que "Todas"', () => {
+  const { room, ids } = setup();
+  room.updateSettings(ids[0], { categories: ['geografia', 'desporto', 'historia', 'cultura', 'precos', 'ciencia'] });
+  assert.deepEqual(room.settings.categories, []);
+});
+
+test('se a categoria não chega para as rondas, o jogo fica mais curto e avisa', () => {
+  const { room, ids } = setup();
+  room.updateSettings(ids[0], { categories: ['precos'], rounds: 30 });
+  const state = room.stateFor(ids[0]);
+  assert.equal(state.plannedRounds, 16);
+  room.startGame(ids[0]);
+  assert.equal(room.questions.length, 16);
+  assert.equal(new Set(room.questions).size, 16);
+});
+
+test('Geografia sozinha mistura perguntas de mapa e de números', () => {
+  const { room, ids } = setup();
+  room.updateSettings(ids[0], { categories: ['geografia'], rounds: 8 });
+  room.startGame(ids[0]);
+  const maps = room.questions.filter((q) => q.type === 'map').length;
+  assert.equal(maps, 2);
+});
+
+// --- Perguntas dos jogadores ---------------------------------------------
+
+function setupCustom(names = ['Ana', 'Rui', 'Eva', 'Tó']) {
+  const ctx = setup(names);
+  ctx.room.updateSettings(ctx.ids[0], { playerQuestions: true, rounds: 5 });
+  return ctx;
+}
+
+test('perguntas dos jogadores: exigem 4 jogadores e uma pergunta de cada', () => {
+  const three = setup();
+  three.room.updateSettings(three.ids[0], { playerQuestions: true });
+  assert.equal(three.room.stateFor(three.ids[0]).minPlayers, 4);
+  assert.throws(() => three.room.startGame(three.ids[0]), /pelo menos 4/);
+
+  const { room, ids } = setupCustom();
+  room.submitCustomQuestion(ids[0], { text: 'Quantos primos tenho?', answer: 23 });
+  room.submitCustomQuestion(ids[1], { text: 'Quantos gatos tem a minha avó?', answer: 4, unit: 'gatos' });
+  assert.throws(() => room.startGame(ids[0]), /Eva, Tó/);
+  assert.deepEqual(room.stateFor(ids[2]).customReady, [ids[0], ids[1]]);
+  assert.equal(room.stateFor(ids[2]).myQuestion, null, 'não se vê a pergunta dos outros');
+  assert.equal(room.stateFor(ids[1]).myQuestion.unit, 'gatos');
+});
+
+test('perguntas dos jogadores: validação e limpeza do texto', () => {
+  const { room, ids } = setupCustom();
+  assert.throws(() => room.submitCustomQuestion(ids[0], { text: 'Curta?', answer: 1 }), /pelo menos/);
+  assert.throws(() => room.submitCustomQuestion(ids[0], { text: 'Quantos anos tem o meu pai?', answer: 'cinquenta' }), /número/);
+  assert.throws(() => room.submitCustomQuestion(ids[0], { text: 'Quantos anos tem o meu pai?', answer: NaN }), /número/);
+  room.submitCustomQuestion(ids[0], {
+    text: '  <script>alert(1)</script>\n\nQuantos   anos tem o meu pai?' + 'x'.repeat(300),
+    answer: 58,
+    unit: 'anos'.repeat(10),
+  });
+  const q = room.customQuestions.get(ids[0]);
+  assert.equal(q.text.length, 120);
+  assert.ok(!/\n/.test(q.text));
+  assert.equal(q.unit.length, 20);
+  // O texto é guardado tal como foi escrito (sem HTML interpretado): o cliente mostra-o com textContent.
+  assert.ok(q.text.startsWith('<script>'));
+
+  const off = setup();
+  assert.throws(() => off.room.submitCustomQuestion(off.ids[0], { text: 'Quantos anos tem o meu pai?', answer: 58 }), /não ligou/);
+});
+
+test('perguntas dos jogadores: o autor não responde, mas vota, e não conta para mais perto/longe', () => {
+  const { room, ids } = setupCustom();
+  const [ana, rui, eva, to] = ids;
+  for (const [i, id] of ids.entries()) room.submitCustomQuestion(id, { text: `Pergunta número ${i} de teste?`, answer: 100 + i });
+  room.startGame(ana);
+  assert.equal(room.questions.filter((q) => q.author).length, 4);
+  assert.equal(room.questions.length, 5);
+
+  // Põe a pergunta da Ana na primeira ronda.
+  room.current.question = room.customQuestions.get(ana);
+  assert.equal(room.stateFor(rui).question.author, ana);
+  assert.throws(() => room.submitAnswer(ana, 100), /é tua/);
+  room.submitAnswer(rui, 100); // em cheio
+  room.submitAnswer(eva, 90);
+  assert.equal(room.phase, 'answering');
+  room.submitAnswer(to, 500);
+  assert.equal(room.phase, 'voting', 'avança sem esperar pela resposta do autor');
+
+  assert.deepEqual(room.candidatesFor(ana).sort(), [rui, eva, to].sort());
+  room.submitVote(ana, to);
+  room.submitVote(rui, to);
+  room.submitVote(eva, rui);
+  room.submitVote(to, eva);
+  assert.equal(room.phase, 'reveal');
+  const r = room.current.result;
+  assert.deepEqual(r.closest, [rui]);
+  assert.deepEqual(r.farthest, [to]);
+  assert.ok(!(ana in r.distances));
+  assert.deepEqual(scoresOf(room), { [ana]: 1, [rui]: 3, [eva]: 0, [to]: 0 });
+});
+
+test('perguntas dos jogadores: limpam-se ao voltar à sala de espera', () => {
+  const { room, ids } = setupCustom();
+  for (const [i, id] of ids.entries()) room.submitCustomQuestion(id, { text: `Pergunta número ${i} de teste?`, answer: i });
+  room.startGame(ids[0]);
+  while (room.phase !== 'end') {
+    if (room.phase === 'tiebreak') finishTiebreaks(room, ids[0]);
+    else { room.forceAdvance(ids[0]); room.nextQuestion(ids[0]); }
+  }
+  room.backToLobby(ids[0]);
+  assert.equal(room.customQuestions.size, 0);
+});
+
+// --- Prémios -------------------------------------------------------------
+
+// Joga uma ronda de números com respostas e votos dados.
+function playRound(room, host, answer, guesses, votes) {
+  room.current.question = { text: 'Teste?', answer, category: 'ciencia' };
+  for (const [id, v] of Object.entries(guesses)) room.submitAnswer(id, v);
+  for (const [voter, target] of Object.entries(votes)) room.submitVote(voter, target);
+  if (room.phase !== 'reveal') room.forceAdvance(host);
+  if (room.phase !== 'reveal') room.forceAdvance(host);
+}
+
+test('prémios: mais certeiro, mais longe e melhor a ler os outros', () => {
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
+  const [ana, rui, eva, to] = ids;
+  room.updateSettings(ana, { rounds: 3 });
+  room.startGame(ana);
+  playRound(room, ana, 100, { [ana]: 100, [rui]: 150, [eva]: 300, [to]: 90 }, { [ana]: eva, [rui]: eva, [eva]: to, [to]: rui });
+  room.nextQuestion(ana);
+  playRound(room, ana, 1000, { [ana]: 990, [rui]: 5000, [eva]: 1200, [to]: 2000 }, { [ana]: rui, [rui]: to, [eva]: rui, [to]: eva });
+  room.nextQuestion(ana);
+  playRound(room, ana, 10, { [ana]: 50, [rui]: 12, [eva]: 9, [to]: 11 }, { [ana]: rui, [rui]: ana, [eva]: ana, [to]: rui });
+  room.nextQuestion(ana);
+  finishTiebreaks(room, ana);
+  assert.equal(room.phase, 'end');
+
+  const awards = Object.fromEntries(room.stateFor(rui).awards.map((a) => [a.id, a.winners.map((w) => w.id)]));
+  // Mais perto: Ana 2 vezes (100 e 990); Eva e Tó 1 vez cada (empatados na 3.ª, a 1 do 10).
+  assert.deepEqual(awards.sharp, [ana]);
+  // Mais longe: Eva (300), Rui (5000) e Ana (50), uma vez cada: empate entre os três.
+  assert.deepEqual(awards.far.sort(), [ana, rui, eva].sort());
+  // Votos certos: Ana (Eva, Rui), Rui (Eva, Ana) e Eva (Rui, Ana) com 2; Tó com 0.
+  assert.deepEqual(awards.reader.sort(), [ana, rui, eva].sort());
+  assert.equal(room.stateFor(rui).awards.find((a) => a.id === 'sharp').winners[0].closest, 2);
+});
+
+test('prémios: empate no mais certeiro desfaz-se pelo erro médio', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  room.updateSettings(ana, { rounds: 3 });
+  room.startGame(ana);
+  playRound(room, ana, 100, { [ana]: 100, [rui]: 120, [eva]: 400 }, {});
+  room.nextQuestion(ana);
+  playRound(room, ana, 100, { [ana]: 300, [rui]: 105, [eva]: 400 }, {});
+  room.nextQuestion(ana);
+  playRound(room, ana, 100, { [ana]: 300, [rui]: 300, [eva]: 400 }, {});
+  // Ana e Rui: 2 vezes mais perto cada (na 3.ª empatam); Rui tem menor erro médio.
+  assert.deepEqual(room.awards().find((a) => a.id === 'sharp').winners.map((w) => w.id), [rui]);
+  assert.equal(room.awards().find((a) => a.id === 'reader'), undefined, 'sem votos não há prémio');
 });
 
 test('nenhuma pergunta pede contas', () => {

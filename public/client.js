@@ -146,9 +146,23 @@
     });
   }
 
+  $('#set-custom').addEventListener('change', (e) => act('settings:update', { playerQuestions: e.target.checked }));
+
+  $('#custom-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const answer = parseNumber($('#custom-answer').value);
+    if (answer === null) return toast('A resposta tem de ser um número.');
+    act('question:submit', {
+      text: $('#custom-text').value,
+      answer,
+      unit: $('#custom-unit').value,
+    }, () => toast('Pergunta guardada.'));
+  });
+
   $('#btn-start').addEventListener('click', () => act('game:start'));
   $$('.btn-force').forEach((btn) => btn.addEventListener('click', () => act('round:force')));
   $('#btn-next').addEventListener('click', () => act('round:next'));
+  $('#btn-step').addEventListener('click', () => act('reveal:step'));
   $('#btn-tb-next').addEventListener('click', () => act('round:next'));
   $('#btn-again').addEventListener('click', () => act('game:lobby'));
 
@@ -200,7 +214,8 @@
   function setupMap(wrap) {
     const box = wrap.querySelector('.map-box');
     const inner = wrap.querySelector('.map-inner');
-    if (mapSvg && !inner.querySelector('svg')) inner.insertAdjacentHTML('afterbegin', mapSvg);
+    // (O mapa da revelação também tem um <svg class="lines"> por cima, para as linhas.)
+    if (mapSvg && !inner.querySelector('svg:not(.lines)')) inner.insertAdjacentHTML('afterbegin', mapSvg);
     if (wrap.dataset.ready) return;
     wrap.dataset.ready = '1';
     wrap.dataset.zoom = '0';
@@ -243,8 +258,15 @@
     tiebreak: '#screen-answer', 'tiebreak-reveal': '#screen-tiebreak',
   };
 
+  let lastPhase = null;
+
   function render() {
     const phase = state ? state.phase : 'home';
+    // De volta à sala de espera depois de um jogo: a pergunta antiga já foi usada.
+    if (phase === 'lobby' && lastPhase && lastPhase !== 'lobby') {
+      for (const sel of ['#custom-text', '#custom-answer', '#custom-unit']) $(sel).value = '';
+    }
+    lastPhase = phase;
     for (const sel of new Set(Object.values(SCREENS))) $(sel).hidden = sel !== SCREENS[phase];
 
     deadline = state && state.remainingMs != null ? Date.now() + state.remainingMs : null;
@@ -312,9 +334,15 @@
     const online = state.players.filter((p) => p.connected).length;
     $('#lobby-code').textContent = state.code;
     $('#lobby-count').textContent = `(${state.players.length}/${state.maxPlayers})`;
-    $('#lobby-players').replaceChildren(...state.players.map((p) => playerRow(p)));
+    const custom = state.settings.playerQuestions;
+    $('#lobby-players').replaceChildren(...state.players.map((p) => playerRow(p, custom
+      ? el('span', { class: 'state', text: state.customReady.includes(p.id) ? 'pergunta ✓' : 'a escrever…' })
+      : null)));
 
     const host = isHost();
+    $('#set-custom').checked = custom;
+    $('#set-custom').disabled = !host;
+    renderCustomForm(custom);
     $('#set-rounds').min = state.minRounds;
     $('#set-rounds').max = state.maxRounds;
     for (const s of SETTINGS) {
@@ -329,14 +357,62 @@
     $('#settings-hint').textContent = host
       ? 'Nos tempos, arrasta até ao início para jogar sem limite.'
       : 'Só o anfitrião pode mudar a configuração.';
+    renderCategories(host);
 
     const missing = state.minPlayers - online;
+    const noQuestion = custom
+      ? state.players.filter((p) => p.connected && !state.customReady.includes(p.id)).map((p) => p.name)
+      : [];
     $('#btn-start').hidden = !host;
-    $('#btn-start').disabled = missing > 0;
+    $('#btn-start').disabled = missing > 0 || noQuestion.length > 0;
     $('#btn-start').textContent = 'Começar jogo';
     $('#lobby-hint').textContent = missing > 0
       ? `${missing === 1 ? 'Falta 1 jogador' : `Faltam ${missing} jogadores`} para começar (mínimo ${state.minPlayers}).`
+      : noQuestion.length ? `Falta a pergunta de: ${noQuestion.join(', ')}.`
       : host ? '' : 'À espera que o anfitrião comece o jogo…';
+  }
+
+  // Formulário da pergunta de cada jogador. Só preenche os campos com o que está guardado
+  // quando estão vazios, para não apagar o que o jogador está a escrever.
+  function renderCustomForm(on) {
+    $('#custom-form').hidden = !on;
+    if (!on) return;
+    const mine = state.myQuestion;
+    if (mine && !$('#custom-text').value && !$('#custom-answer').value) {
+      $('#custom-text').value = mine.text;
+      $('#custom-answer').value = fmt(mine.answer);
+      $('#custom-unit').value = mine.unit || '';
+    }
+    $('#custom-status').textContent = mine
+      ? `Guardada: "${mine.text}" (${withUnit(mine.answer, mine.unit)}). Podes alterar até o jogo começar.`
+      : 'Ainda não guardaste a tua pergunta.';
+  }
+
+  // Categorias: "Todas" ou uma seleção (lista vazia no servidor = todas).
+  function renderCategories(host) {
+    const chosen = state.settings.categories;
+    const all = chosen.length === 0;
+    const send = (categories) => act('settings:update', { categories });
+    const toggle = (id) => {
+      const current = all ? [] : chosen;
+      const next = current.includes(id) ? current.filter((c) => c !== id) : [...current, id];
+      send(next);
+    };
+    $('#set-cats').replaceChildren(
+      el('button', { type: 'button', class: all ? 'on' : '', text: 'Todas', onclick: () => send([]) }),
+      ...state.categories.map((c) => el('button', {
+        type: 'button',
+        class: !all && chosen.includes(c.id) ? 'on' : '',
+        onclick: () => toggle(c.id),
+      }, [c.label, ' ', el('small', { text: `(${c.count})` })])),
+    );
+    $$('#set-cats button').forEach((b) => { b.disabled = !host; });
+
+    const short = state.plannedRounds < state.settings.rounds;
+    $('#cats-warning').hidden = !short;
+    if (short) {
+      $('#cats-warning').textContent = `Estas categorias só têm ${state.plannedRounds} perguntas: o jogo vai ter ${state.plannedRounds} em vez de ${state.settings.rounds}.`;
+    }
   }
 
   function progressList(sel, doneIds, onlyIds = null) {
@@ -354,9 +430,13 @@
 
   function renderAnswer() {
     $('#ans-question').textContent = state.question.text;
+    const author = state.question.author;
+    $('#ans-cat').textContent = author ? `Pergunta de ${nameOf(author)}` : state.question.category || '';
     const isMap = state.question.type === 'map';
     const tb = state.phase === 'tiebreak' ? state.tiebreak : null;
-    const playing = !tb || tb.ids.includes(state.me);
+    const isAuthor = author === state.me;
+    const playing = (!tb || tb.ids.includes(state.me)) && !isAuthor;
+    $('#ans-author').hidden = !isAuthor;
     const answered = state.myAnswer !== null;
     $('#ans-unit').textContent = isMap
       ? (answered ? 'Palpite enviado. À espera dos outros…' : 'Toca no mapa onde achas que fica.')
@@ -365,7 +445,7 @@
     if (tb) $('#ans-tiebreak').textContent = `Desempate entre ${listNames(tb.ids)}. Só eles respondem, sem votação: quem ficar mais perto fica à frente.`;
     $('#ans-form').hidden = isMap || answered || !playing;
     $('#ans-done').hidden = isMap || !answered;
-    $('#ans-watch').hidden = playing;
+    $('#ans-watch').hidden = playing || isAuthor;
     $('#ans-map').hidden = !isMap;
     if (isMap) {
       setupMap($('#ans-map'));
@@ -377,7 +457,8 @@
     } else if (answered) {
       $('#ans-mine').textContent = withUnit(state.myAnswer, state.question.unit);
     }
-    progressList('#ans-progress', state.answered, tb ? tb.ids : null);
+    const answering = tb ? tb.ids : author ? state.players.map((p) => p.id).filter((id) => id !== author) : null;
+    progressList('#ans-progress', state.answered, answering);
   }
 
   function missText(exact, dist, isMap) {
@@ -447,12 +528,196 @@
     }));
   }
 
+  // --- Revelação em passos -------------------------------------------------
+  // O servidor diz em que passo vamos (r.step de r.steps); com n palpites:
+  // passos 1..n mostram os palpites do mais longe para o mais perto,
+  // n+1 a resposta certa, n+2 os votos e n+3 os pontos e a classificação.
+
+  const median = (sorted) => {
+    const m = sorted.length >> 1;
+    return sorted.length % 2 ? sorted[m] : (sorted[m - 1] + sorted[m]) / 2;
+  };
+
+  // Escala da reta: segue os valores visíveis, mas corta os muito afastados (desenhados
+  // na ponta, a tracejado, com uma seta). A resposta certa fica sempre dentro da escala.
+  function lineScale(values, correct) {
+    const sorted = [...values].sort((a, b) => a - b);
+    let lo = sorted[0];
+    let hi = sorted[sorted.length - 1];
+    const med = median(sorted);
+    const mad = median(sorted.map((v) => Math.abs(v - med)).sort((a, b) => a - b));
+    if (mad > 0) {
+      const inside = sorted.filter((v) => Math.abs(v - med) <= 8 * mad);
+      lo = inside[0];
+      hi = inside[inside.length - 1];
+    }
+    if (correct != null) { lo = Math.min(lo, correct); hi = Math.max(hi, correct); }
+    if (lo === hi) { lo -= Math.abs(lo) * 0.1 || 1; hi += Math.abs(hi) * 0.1 || 1; }
+    const pad = (hi - lo) * 0.06;
+    lo -= pad;
+    hi += pad;
+    return {
+      lo, hi,
+      pos: (v) => Math.min(100, Math.max(0, ((v - lo) / (hi - lo)) * 100)),
+      clipped: (v) => (v < lo ? 'lo' : v > hi ? 'hi' : ''),
+    };
+  }
+
+  const LANE = 42; // altura de cada fila de etiquetas, em px
+
+  // Atualiza (ou cria) a marca de um palpite, para que mude de sítio com transição.
+  function upsertMark(container, key, cls, html) {
+    let mark = container.querySelector(`[data-key="${key}"]`);
+    if (!mark) {
+      mark = el('div', { class: 'mark appear', 'data-key': key });
+      container.append(mark);
+    }
+    mark.className = `mark ${cls} ${mark.classList.contains('appear') ? 'appear' : ''}`;
+    mark.replaceChildren(...html);
+    return mark;
+  }
+
+  function renderNumberLine(r, order, shown, showCorrect) {
+    const box = $('#rev-line');
+    const marks = box.querySelector('.numline-marks');
+    const correctBox = box.querySelector('.numline-correct');
+    if (box.dataset.round !== String(state.round)) {
+      marks.replaceChildren();
+      correctBox.replaceChildren();
+      box.dataset.round = String(state.round);
+    }
+    const ids = order.slice(0, shown);
+    const values = ids.map((id) => r.answers[id]);
+    if (showCorrect || !values.length) values.push(r.correct);
+    const scale = lineScale(values, showCorrect ? r.correct : null);
+    const unit = state.question.unit;
+
+    // Filas: cada etiqueta vai para a primeira fila onde não choca com a anterior.
+    // As etiquetas ficam entre 12% e 88% para não saírem da caixa.
+    const shownX = (v) => Math.min(88, Math.max(12, scale.pos(v)));
+    const lanes = [];
+    const placed = ids
+      .map((id) => ({ id, x: shownX(r.answers[id]) }))
+      .sort((a, b) => a.x - b.x)
+      .map((m) => {
+        let lane = lanes.findIndex((last) => m.x - last > 24);
+        if (lane === -1) { lane = lanes.length; lanes.push(m.x); } else lanes[lane] = m.x;
+        return { ...m, lane };
+      });
+    const height = Math.max(1, lanes.length) * LANE + 10;
+    marks.style.height = `${height}px`;
+
+    const keep = new Set();
+    for (const { id, x, lane } of placed) {
+      const value = r.answers[id];
+      const cut = scale.clipped(value);
+      const cls = [
+        showCorrect && r.closest.includes(id) ? 'near' : '',
+        showCorrect && r.farthest.includes(id) ? 'far' : '',
+        cut ? 'clipped' : '',
+      ].join(' ');
+      const valueText = `${cut === 'lo' ? '◀ ' : ''}${fmt(value)}${cut === 'hi' ? ' ▶' : ''}`;
+      const mark = upsertMark(marks, id, cls, [
+        el('span', { class: 'tag-box' }, [nameOf(id), el('b', { text: valueText })]),
+        el('span', { class: 'stem' }),
+      ]);
+      mark.style.left = `${x}%`;
+      mark.style.top = `${lane * LANE}px`;
+      mark.style.height = `${height - lane * LANE}px`;
+      keep.add(id);
+    }
+    for (const m of marks.querySelectorAll('.mark')) if (!keep.has(m.dataset.key)) m.remove();
+
+    correctBox.classList.toggle('shown', showCorrect);
+    if (showCorrect) {
+      const mark = upsertMark(correctBox, 'correct', 'correct', [
+        el('span', { class: 'stem' }),
+        el('span', { class: 'tag-box', text: withUnit(r.correct, unit) }),
+      ]);
+      mark.style.left = `${shownX(r.correct)}%`;
+    } else {
+      correctBox.replaceChildren();
+    }
+    box.querySelector('.lo').textContent = fmt(Number(scale.lo.toPrecision(3)));
+    box.querySelector('.hi').textContent = fmt(Number(scale.hi.toPrecision(3)));
+  }
+
+  function renderMapReveal(r, order, shown, showCorrect) {
+    const wrap = $('#rev-map');
+    setupMap(wrap);
+    $$('#rev-map path').forEach((p) => p.classList.toggle('target', p.dataset.c === r.country));
+    const fresh = wrap.dataset.round !== String(state.round) || Number(wrap.dataset.shown || 0) > shown;
+    const before = fresh ? 0 : Number(wrap.dataset.shown || 0);
+    wrap.dataset.round = String(state.round);
+    wrap.dataset.shown = String(shown);
+
+    const ids = order.slice(0, shown);
+    const clsOf = (id) => (showCorrect && r.closest.includes(id) ? 'near' : showCorrect && r.farthest.includes(id) ? 'far' : '');
+    const center = r.center && toPercent(r.center);
+    wrap.querySelector('.lines').replaceChildren(...(center ? ids.map((id) => {
+      const p = toPercent(r.answers[id]);
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      for (const [k, v] of Object.entries({ x1: p.x, y1: p.y, x2: center.x, y2: center.y })) line.setAttribute(k, v);
+      line.setAttribute('class', clsOf(id));
+      return line;
+    }) : []));
+    wrap.querySelector('.pins').replaceChildren(
+      center ? pin(r.center, 'target') : null,
+      ...ids.map((id, i) => pin(r.answers[id], `${clsOf(id)} ${i >= before ? 'appear' : ''}`,
+        `${nameOf(id)} · ${fmt(r.distances[id])} km`)),
+    );
+  }
+
+  function renderVotes(r) {
+    $('#rev-farthest').textContent = r.farthest.length
+      ? `Quem ficou mais longe: ${listNames(r.farthest)}.`
+      : '';
+    const entries = Object.entries(r.votes);
+    $('#rev-votes').replaceChildren(...(entries.length ? entries.map(([voter, target], i) => {
+      const hit = r.correctVoters.includes(voter);
+      return el('li', { class: `reveal-in ${hit ? 'hit' : ''}`, style: `--i:${i}` }, [
+        el('b', { text: nameOf(voter) }),
+        el('span', { class: 'arrow', text: '→' }),
+        el('span', { text: nameOf(target) }),
+        el('span', { class: 'ok', text: hit ? '✓ acertou' : '' }),
+      ]);
+    }) : [el('li', { text: 'Ninguém votou nesta ronda.' })]));
+  }
+
   function renderReveal() {
     const r = state.result;
     const unit = state.question.unit;
     const isMap = state.question.type === 'map';
     $('#rev-question').textContent = state.question.text;
     $('#rev-correct').textContent = isMap ? r.correct : withUnit(r.correct, unit);
+
+    // Ordem da revelação: do mais longe para o mais perto.
+    const order = Object.keys(r.answers).sort((a, b) => r.distances[b] - r.distances[a]);
+    const n = order.length;
+    const shown = Math.min(r.step, n);
+    const showCorrect = r.step > n;
+    const showVotes = r.step > n + 1;
+    const showPoints = r.step >= r.steps;
+
+    $('#rev-line').hidden = isMap;
+    $('#rev-map').hidden = !isMap;
+    if (isMap) renderMapReveal(r, order, shown, showCorrect);
+    else renderNumberLine(r, order, shown, showCorrect);
+    $('#rev-progress').textContent = n === 0 ? 'Ninguém respondeu a esta pergunta.'
+      : shown < n ? `Palpite ${shown} de ${n} (do mais longe para o mais perto)` : '';
+
+    // Nas perguntas de mapa o país já aparece pintado desde o início.
+    $('#rev-answer').hidden = !(showCorrect || isMap);
+    $('#rev-votes-box').hidden = !showVotes;
+    if (showVotes) renderVotes(r);
+    $('#rev-points-box').hidden = !showPoints;
+
+    const host = isHost();
+    $('#btn-step').hidden = !host || showPoints;
+    $('#btn-step').textContent = shown < n ? 'Seguinte palpite' : 'Seguinte';
+    $('#btn-next').hidden = !host || !showPoints;
+    $('#rev-hint').textContent = host ? '' : 'O anfitrião vai mostrando a revelação…';
+    if (!showPoints) return;
 
     const myGain = r.points[state.me] || 0;
     $('#rev-mine').textContent = myGain ? `Ganhaste ${myGain} ponto${myGain === 1 ? '' : 's'} nesta ronda!` : 'Nenhum ponto para ti nesta ronda.';
@@ -477,18 +742,6 @@
       ]);
     });
 
-    $('#rev-map').hidden = !isMap;
-    if (isMap) {
-      setupMap($('#rev-map'));
-      $$('#rev-map path').forEach((p) => p.classList.toggle('target', p.dataset.c === r.country));
-      $('#rev-map .pins').replaceChildren(
-        r.center ? pin(r.center, 'target') : null,
-        ...answered.map((id) => {
-          const cls = r.closest.includes(id) ? 'near' : r.farthest.includes(id) ? 'far' : '';
-          return pin(r.answers[id], cls, nameOf(id));
-        }),
-      );
-    }
     for (const p of state.players) {
       if (!(p.id in r.answers)) {
         rows.push(el('li', {}, [
@@ -501,16 +754,11 @@
     }
     $('#rev-list').replaceChildren(...rows);
 
-    $('#rev-voters').textContent = r.correctVoters.length
-      ? `Acertaram no mais longe: ${r.correctVoters.map(nameOf).join(', ')}.`
-      : Object.keys(r.votes).length ? 'Ninguém acertou no mais longe.' : '';
-
     renderScores('#rev-scores');
     const last = state.round >= state.totalRounds;
     const tied = standingGroups().some((g) => g.length > 1);
-    $('#btn-next').hidden = !isHost();
     $('#btn-next').textContent = !last ? 'Próxima pergunta' : tied ? 'Ir ao desempate' : 'Ver classificação final';
-    $('#rev-hint').textContent = isHost() ? '' : 'À espera do anfitrião…';
+    $('#rev-hint').textContent = host ? '' : 'À espera do anfitrião…';
   }
 
   function renderTiebreakReveal() {
@@ -552,12 +800,45 @@
     $('#tbr-hint').textContent = isHost() ? '' : 'À espera do anfitrião…';
   }
 
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const AWARDS = {
+    sharp: {
+      icon: '🎯', title: 'Mais certeiro',
+      why: (w) => (w.closest
+        ? `${plural(w.closest, 'vez', 'vezes')} o mais perto${w.meanError != null ? ` · erro médio de ${fmt(Math.round(w.meanError * 100))}%` : ''}`
+        : `Menor erro médio: ${fmt(Math.round(w.meanError * 100))}%`),
+    },
+    far: { icon: '🛸', title: 'Mais longe da realidade', why: (w) => `${plural(w.farthest, 'vez', 'vezes')} o mais longe` },
+    reader: { icon: '🔮', title: 'Melhor a ler os outros', why: (w) => plural(w.correctVotes, 'voto certo', 'votos certos') },
+  };
+
+  // Os cartões só são recriados quando os prémios mudam, para a animação não repetir.
+  function renderAwards() {
+    const awards = state.awards || [];
+    const key = JSON.stringify(awards);
+    const box = $('#end-awards');
+    $('#end-awards-title').hidden = !awards.length;
+    if (box.dataset.key === key) return;
+    box.dataset.key = key;
+    box.replaceChildren(...awards.map((a, i) => {
+      const meta = AWARDS[a.id];
+      const ids = a.winners.map((w) => w.id);
+      return el('div', { class: `award ${ids.includes(state.me) ? 'me' : ''}`, style: `--i:${i}` }, [
+        el('span', { class: 'icon', text: meta.icon, 'aria-hidden': 'true' }),
+        el('span', { class: 'title', text: meta.title }),
+        el('span', { class: 'who', text: listNames(ids) }),
+        el('span', { class: 'why', text: meta.why(a.winners[0]) }),
+      ]);
+    }));
+  }
+
   function renderEnd() {
     renderScores('#end-scores');
     const winners = standingGroups()[0].map((p) => p.name);
     $('#end-winner').textContent = winners.length === 1
       ? `🏆 ${winners[0]} ganhou!`
       : `🏆 Empate entre ${winners.slice(0, -1).join(', ')} e ${winners[winners.length - 1]}!`;
+    renderAwards();
     $('#btn-again').hidden = !isHost();
     $('#end-hint').textContent = isHost() ? '' : 'O anfitrião pode começar um novo jogo.';
   }

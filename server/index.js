@@ -93,10 +93,12 @@ io.on('connection', (socket) => {
   const actions = {
     'settings:update': (room, id, p) => room.updateSettings(id, p),
     'game:start': (room, id) => room.startGame(id),
+    'question:submit': (room, id, p) => room.submitCustomQuestion(id, p),
     'answer:submit': (room, id, p) => room.submitAnswer(id, p.value),
     'vote:submit': (room, id, p) => room.submitVote(id, p.targetId),
     'round:force': (room, id) => room.forceAdvance(id),
     'round:next': (room, id) => room.nextQuestion(id),
+    'reveal:step': (room, id) => room.revealStep(id),
     'game:lobby': (room, id) => room.backToLobby(id),
   };
   for (const [event, action] of Object.entries(actions)) {

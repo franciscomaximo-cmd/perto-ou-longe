@@ -1,8 +1,13 @@
 'use strict';
 
 const crypto = require('crypto');
-const { scoreRound, shuffle } = require('./game');
+const { scoreRound, shuffle, distance } = require('./game');
+const { distanceToCountry, centerOf } = require('./geo');
 const QUESTIONS = require('./questions.json');
+
+const MAP_QUESTIONS = QUESTIONS.filter((q) => q.type === 'map');
+const NUMBER_QUESTIONS = QUESTIONS.filter((q) => q.type !== 'map');
+const MAP_SHARE = 0.25; // cerca de 1 em cada 4 perguntas é de mapa
 
 const MIN_PLAYERS = 3;
 const MAX_PLAYERS = 12;
@@ -52,6 +57,31 @@ function clampRounds(value) {
   return Math.min(MAX_ROUNDS, QUESTIONS.length, Math.max(MIN_ROUNDS, n));
 }
 
+// Nas perguntas de números a resposta é um número; nas de mapa é um ponto { lat, lon }.
+function validAnswer(question, value) {
+  if (question.type === 'map') {
+    const lat = Number(value && value.lat);
+    const lon = Number(value && value.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) {
+      throw new GameError('Toca no mapa para escolher um sítio.');
+    }
+    return { lat: Math.round(lat * 1000) / 1000, lon: Math.round(lon * 1000) / 1000 };
+  }
+  if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 1e12) {
+    throw new GameError('Escreve um número válido.');
+  }
+  return value;
+}
+
+// O que se mostra como resposta certa e como se mede a distância de cada palpite.
+function correctOf(question) {
+  return question.type === 'map' ? question.label : question.answer;
+}
+function measureFor(question) {
+  if (question.type === 'map') return (value) => distanceToCountry(question.country, value);
+  return (value) => distance(value, question.answer);
+}
+
 class Room {
   constructor(code, notify) {
     this.code = code;
@@ -59,11 +89,14 @@ class Room {
     this.players = new Map();
     this.hostId = null;
     this.settings = { rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0 };
-    this.phase = 'lobby'; // lobby | answering | voting | reveal | end
+    this.phase = 'lobby'; // lobby | answering | voting | reveal | tiebreak | tiebreak-reveal | end
     this.round = 0;
     this.questions = [];
     this.usedQuestions = new Set();
     this.current = null;
+    this.standings = null; // classificação final: [{ ids, settled }], do 1.º lugar para baixo
+    this.tiebreak = null;
+    this.tiebreakCount = 0;
     this.timer = null;
     this.deadline = null;
     this.hostTimer = null;
@@ -179,20 +212,34 @@ class Room {
     for (const p of this.players.values()) p.score = 0;
     this.questions = this.pickQuestions();
     this.round = 0;
+    this.standings = null;
+    this.tiebreak = null;
+    this.tiebreakCount = 0;
     this.nextRound();
   }
 
-  // Evita repetir perguntas entre jogos na mesma sala, enquanto houver perguntas novas.
+  // Cerca de um quarto das perguntas são de mapa; o resto são de números.
   pickQuestions() {
     const rounds = this.settings.rounds;
-    let available = QUESTIONS.filter((_, i) => !this.usedQuestions.has(i));
-    if (available.length < rounds) {
-      this.usedQuestions.clear();
-      available = QUESTIONS;
+    const maps = Math.min(MAP_QUESTIONS.length, Math.max(1, Math.round(rounds * MAP_SHARE)));
+    return shuffle([...this.pickFrom(MAP_QUESTIONS, maps), ...this.pickFrom(NUMBER_QUESTIONS, rounds - maps)]);
+  }
+
+  // Evita repetir perguntas entre jogos na mesma sala, enquanto houver perguntas novas.
+  pickFrom(pool, count) {
+    let available = pool.filter((q) => !this.usedQuestions.has(q));
+    if (available.length < count) {
+      for (const q of pool) this.usedQuestions.delete(q);
+      available = pool.filter((q) => !this.questions.includes(q));
     }
-    const picked = shuffle(available).slice(0, rounds);
-    for (const q of picked) this.usedQuestions.add(QUESTIONS.indexOf(q));
+    const picked = shuffle(available).slice(0, count);
+    for (const q of picked) this.usedQuestions.add(q);
     return picked;
+  }
+
+  // Pergunta extra para desempate (sempre de números), que não tenha saído neste jogo.
+  pickTiebreakQuestion() {
+    return this.pickFrom(NUMBER_QUESTIONS, 1)[0];
   }
 
   nextRound() {
@@ -227,13 +274,14 @@ class Room {
   }
 
   submitAnswer(playerId, value) {
-    if (this.phase !== 'answering') throw new GameError('Já não é possível responder.');
+    if (this.phase !== 'answering' && this.phase !== 'tiebreak') throw new GameError('Já não é possível responder.');
     if (!this.players.has(playerId)) throw new GameError('Não estás nesta sala.');
-    if (this.current.answers.has(playerId)) throw new GameError('Já respondeste a esta pergunta.');
-    if (typeof value !== 'number' || !Number.isFinite(value) || Math.abs(value) > 1e12) {
-      throw new GameError('Escreve um número válido.');
+    if (this.phase === 'tiebreak' && !this.tiebreak.ids.includes(playerId)) {
+      throw new GameError('Só os jogadores empatados respondem ao desempate.');
     }
-    this.current.answers.set(playerId, value);
+    const { answers, question } = this.phase === 'tiebreak' ? this.tiebreak : this.current;
+    if (answers.has(playerId)) throw new GameError('Já respondeste a esta pergunta.');
+    answers.set(playerId, validAnswer(question, value));
     this.touch();
     this.checkProgress();
   }
@@ -259,7 +307,10 @@ class Room {
   checkProgress() {
     const online = this.connectedPlayers();
     if (online.length === 0 || !this.current) return;
-    if (this.phase === 'answering' && online.every((p) => this.current.answers.has(p.id))) {
+    if (this.phase === 'tiebreak') {
+      const { ids, answers } = this.tiebreak;
+      if (online.every((p) => !ids.includes(p.id) || answers.has(p.id))) this.revealTiebreak();
+    } else if (this.phase === 'answering' && online.every((p) => this.current.answers.has(p.id))) {
       this.endAnswering();
     } else if (
       this.phase === 'voting' &&
@@ -283,7 +334,7 @@ class Room {
   reveal() {
     if (this.phase !== 'answering' && this.phase !== 'voting') return;
     const { question, answers, votes } = this.current;
-    this.current.result = scoreRound(question.answer, answers, votes);
+    this.current.result = scoreRound(correctOf(question), answers, votes, measureFor(question));
     for (const [id, pts] of Object.entries(this.current.result.points)) {
       const player = this.players.get(id);
       if (player) player.score += pts;
@@ -295,14 +346,86 @@ class Room {
     this.requireHost(playerId);
     if (this.phase === 'answering') this.endAnswering();
     else if (this.phase === 'voting') this.reveal();
+    else if (this.phase === 'tiebreak') this.revealTiebreak();
     else throw new GameError('Não há nada para avançar agora.');
   }
 
   nextQuestion(playerId) {
     this.requireHost(playerId);
+    if (this.phase === 'tiebreak-reveal') return this.nextTiebreak();
     if (this.phase !== 'reveal') throw new GameError('Ainda não é altura de avançar.');
-    if (this.round >= this.questions.length) this.setPhase('end');
-    else this.nextRound();
+    if (this.round < this.questions.length) return this.nextRound();
+    this.standings = this.buildStandings();
+    this.nextTiebreak();
+  }
+
+  // --- Desempates no fim do jogo ----------------------------------------
+  // Cada grupo de jogadores com os mesmos pontos responde a uma pergunta extra,
+  // sem votação: quem fica mais perto fica à frente. Repete enquanto houver empate.
+
+  buildStandings() {
+    const sorted = [...this.players.values()].sort((a, b) => b.score - a.score);
+    const tiers = [];
+    for (const p of sorted) {
+      const last = tiers[tiers.length - 1];
+      if (last && last.score === p.score) last.ids.push(p.id);
+      else tiers.push({ score: p.score, ids: [p.id] });
+    }
+    return tiers.map((t) => ({ ids: t.ids, settled: t.ids.length === 1 }));
+  }
+
+  nextTiebreak() {
+    for (;;) {
+      const index = this.standings.findIndex((t) => !t.settled);
+      if (index === -1) {
+        this.tiebreak = null;
+        this.setPhase('end');
+        return;
+      }
+      const tier = this.standings[index];
+      const online = tier.ids.filter((id) => this.players.get(id)?.connected);
+      if (online.length >= 2) {
+        this.tiebreakCount += 1;
+        this.tiebreak = {
+          number: this.tiebreakCount,
+          ids: tier.ids,
+          question: this.pickTiebreakQuestion(),
+          answers: new Map(),
+          result: null,
+        };
+        this.setPhase('tiebreak', this.settings.answerTime, () => this.revealTiebreak());
+        return;
+      }
+      // Sem pelo menos 2 jogadores ligados não há desempate: quem está ligado fica à frente.
+      const offline = tier.ids.filter((id) => !online.includes(id));
+      const split = [online, offline].filter((ids) => ids.length).map((ids) => ({ ids, settled: true }));
+      this.standings.splice(index, 1, ...split);
+    }
+  }
+
+  revealTiebreak() {
+    if (this.phase !== 'tiebreak') return;
+    const tb = this.tiebreak;
+    const correct = tb.question.answer;
+    const distances = {};
+    const measure = measureFor(tb.question);
+    for (const [id, value] of tb.answers) distances[id] = measure(value);
+
+    // Agrupa por distância (mais perto primeiro); quem não respondeu fica atrás, empatado entre si.
+    const groups = [];
+    for (const id of Object.keys(distances).sort((a, b) => distances[a] - distances[b])) {
+      const last = groups[groups.length - 1];
+      if (last && distances[last[0]] === distances[id]) last.push(id);
+      else groups.push([id]);
+    }
+    const unanswered = tb.ids.filter((id) => !tb.answers.has(id));
+    const tiers = groups.map((ids) => ({ ids, settled: ids.length === 1 }));
+    if (unanswered.length) tiers.push({ ids: unanswered, settled: true });
+
+    const index = this.standings.findIndex((t) => t.ids === tb.ids);
+    this.standings.splice(index, 1, ...tiers);
+    tb.result = { correct, answers: Object.fromEntries(tb.answers), distances, unanswered };
+    this.setPhase('tiebreak-reveal');
   }
 
   backToLobby(playerId) {
@@ -311,6 +434,8 @@ class Room {
     this.current = null;
     this.round = 0;
     this.questions = [];
+    this.standings = null;
+    this.tiebreak = null;
     for (const p of this.players.values()) p.score = 0;
     // Quem saiu durante o jogo não fica a ocupar lugar na sala nova.
     for (const p of [...this.players.values()]) {
@@ -351,7 +476,7 @@ class Room {
     };
 
     if (cur && this.phase !== 'lobby') {
-      state.question = { text: cur.question.text, unit: cur.question.unit || '' };
+      state.question = { text: cur.question.text, unit: cur.question.unit || '', type: cur.question.type || 'number' };
       state.answered = [...cur.answers.keys()];
       state.voted = [...cur.votes.keys()];
       state.myAnswer = cur.answers.has(playerId) ? cur.answers.get(playerId) : null;
@@ -359,12 +484,30 @@ class Room {
       if (this.phase === 'voting') state.candidates = this.candidatesFor(playerId);
       if (cur.result) {
         state.result = {
-          correct: cur.question.answer,
+          correct: correctOf(cur.question),
+          // Só nas perguntas de mapa: para pintar o país e assinalar o centro.
+          country: cur.question.country,
+          center: cur.question.country ? centerOf(cur.question.country) : undefined,
           answers: Object.fromEntries(cur.answers),
           votes: Object.fromEntries(cur.votes),
           ...cur.result,
         };
       }
+    }
+
+    // No desempate o ecrã de resposta mostra a pergunta extra.
+    const tb = this.tiebreak;
+    if (tb && (this.phase === 'tiebreak' || this.phase === 'tiebreak-reveal')) {
+      state.question = { text: tb.question.text, unit: tb.question.unit || '', type: 'number' };
+      state.answered = [...tb.answers.keys()];
+      state.myAnswer = tb.answers.has(playerId) ? tb.answers.get(playerId) : null;
+      state.tiebreak = { number: tb.number, ids: [...tb.ids], result: tb.result };
+    }
+    if (this.standings) {
+      state.standings = this.standings
+        .map((t) => t.ids.filter((id) => this.players.has(id)))
+        .filter((ids) => ids.length);
+      state.tiebreakPending = this.standings.some((t) => !t.settled);
     }
     return state;
   }

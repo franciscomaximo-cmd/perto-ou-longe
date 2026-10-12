@@ -139,6 +139,41 @@ button.ghost { background: transparent; border-color: transparent; color: var(--
 #ans-form { display: flex; flex-direction: column; gap: 10px; }
 .big-number { font-size: 2.2rem; font-weight: 800; margin: 4px 0 0; color: var(--accent); }
 
+/* Mapa */
+.map-wrap { display: flex; flex-direction: column; gap: 10px; position: relative; }
+.map-box {
+  overflow: auto;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  background: #a9cfe9; /* mar */
+  max-height: 60vh;
+  -webkit-overflow-scrolling: touch;
+}
+.map-inner { position: relative; width: 100%; cursor: crosshair; }
+.map-inner svg { display: block; width: 100%; height: auto; aspect-ratio: 360 / 142; }
+.map-inner path { fill: #fff; stroke: #9b96bd; stroke-width: .6; vector-effect: non-scaling-stroke; }
+.map-inner path.target { fill: var(--near); stroke: #1a7a52; }
+.map-zoom { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
+.map-zoom button { width: 38px; height: 38px; padding: 0; font-size: 1.3rem; line-height: 1; background: rgba(29, 24, 70, .85); }
+.pins { position: absolute; inset: 0; pointer-events: none; }
+.pin {
+  position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px;
+  border-radius: 50%; background: var(--accent); border: 2px solid var(--bg);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
+}
+.pin.near { background: var(--near); }
+.pin.far { background: var(--far); }
+/* Anel à volta do país certo, para se ver mesmo quando o país é pequeno. */
+.pin.target {
+  width: 30px; height: 30px; margin: -15px 0 0 -15px;
+  background: transparent; border: 3px solid var(--near); box-shadow: 0 0 0 2px var(--bg);
+}
+.pin-label {
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  white-space: nowrap; font-size: .72rem; font-weight: 700;
+  background: var(--bg); color: var(--text); border-radius: 6px; padding: 1px 5px;
+}
+
 /* Votação */
 .options { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .options button { padding: 18px 10px; overflow-wrap: anywhere; }

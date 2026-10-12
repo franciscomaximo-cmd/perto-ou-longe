@@ -13,10 +13,12 @@ function distance(value, correct) {
  * @param {number} correct resposta certa
  * @param {Map<string, number>} answers id do jogador -> palpite
  * @param {Map<string, string>} votes id de quem votou -> id em quem votou
+ * @param {(value: any) => number} [measure] distância de um palpite à resposta certa
+ *   (por defeito, diferença entre números; nas perguntas de mapa, km até ao país)
  */
-function scoreRound(correct, answers, votes) {
+function scoreRound(correct, answers, votes, measure = (value) => distance(value, correct)) {
   const distances = {};
-  for (const [id, value] of answers) distances[id] = distance(value, correct);
+  for (const [id, value] of answers) distances[id] = measure(value);
 
   const ids = Object.keys(distances);
   if (ids.length === 0) {

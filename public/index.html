@@ -35,10 +35,11 @@
       <details class="rules">
         <summary>Como se joga</summary>
         <ol>
-          <li>Todos respondem com um número à mesma pergunta.</li>
+          <li>Todos respondem com um número à mesma pergunta. Nas perguntas de mapa, toca no mapa onde achas que fica o país: conta a distância em km até ele, e tocar dentro do país é acertar em cheio.</li>
           <li>Sem ver os palpites, cada um vota em quem acha que ficou <strong>mais longe</strong> (não vale votar em si próprio).</li>
           <li>Quem ficou <strong>mais perto</strong> ganha 1 ponto, ou 2 se acertar no número exato. Quem acertou no <strong>mais longe</strong> ganha 1 ponto.</li>
-          <li>Empates dão ponto a todos. O anfitrião escolhe quantas perguntas tem o jogo (10 por defeito). São precisos pelo menos 3 jogadores.</li>
+          <li>Empates dão ponto a todos. No fim, quem estiver empatado vai a desempate: só esses respondem a uma pergunta extra e quem ficar mais perto fica à frente.</li>
+          <li>O anfitrião escolhe quantas perguntas tem o jogo (10 por defeito). São precisos pelo menos 3 jogadores.</li>
         </ol>
       </details>
     </section>
@@ -76,6 +77,7 @@
 
     <!-- Responder -->
     <section id="screen-answer" class="screen" hidden>
+      <p id="ans-tiebreak" class="card center" hidden></p>
       <p id="ans-question" class="question"></p>
       <p id="ans-unit" class="unit"></p>
 
@@ -84,10 +86,19 @@
         <p id="ans-preview" class="hint center"></p>
         <button class="primary" type="submit">Responder</button>
       </form>
+      <div id="ans-map" class="map-wrap" hidden>
+        <div class="map-box"><div class="map-inner"><div class="pins"></div></div></div>
+        <div class="map-zoom">
+          <button type="button" data-zoom="-1" aria-label="Afastar">−</button>
+          <button type="button" data-zoom="1" aria-label="Aproximar">+</button>
+        </div>
+        <button id="btn-map-answer" class="primary" type="button" disabled>Responder</button>
+      </div>
       <div id="ans-done" class="card center" hidden>
         <p class="label">O teu palpite</p>
         <p id="ans-mine" class="big-number"></p>
       </div>
+      <p id="ans-watch" class="hint center" hidden>Não estás neste desempate. Fica a ver quem fica à frente.</p>
 
       <h3>Quem já respondeu</h3>
       <ul id="ans-progress" class="players"></ul>
@@ -116,6 +127,13 @@
         <span class="label">Resposta certa</span>
         <strong id="rev-correct"></strong>
       </div>
+      <div id="rev-map" class="map-wrap" hidden>
+        <div class="map-box"><div class="map-inner"><div class="pins"></div></div></div>
+        <div class="map-zoom">
+          <button type="button" data-zoom="-1" aria-label="Afastar">−</button>
+          <button type="button" data-zoom="1" aria-label="Aproximar">+</button>
+        </div>
+      </div>
       <p id="rev-mine" class="mine"></p>
       <ul id="rev-list" class="results"></ul>
       <p id="rev-voters" class="hint"></p>
@@ -124,6 +142,23 @@
       <ol id="rev-scores" class="scores"></ol>
       <button id="btn-next" class="primary" hidden></button>
       <p id="rev-hint" class="hint center"></p>
+    </section>
+
+    <!-- Resultado do desempate -->
+    <section id="screen-tiebreak" class="screen" hidden>
+      <h2 class="center">Desempate</h2>
+      <p id="tbr-question" class="question small"></p>
+      <div class="answer-box">
+        <span class="label">Resposta certa</span>
+        <strong id="tbr-correct"></strong>
+      </div>
+      <ul id="tbr-list" class="results"></ul>
+      <p id="tbr-status" class="hint"></p>
+
+      <h3>Classificação</h3>
+      <ol id="tbr-scores" class="scores"></ol>
+      <button id="btn-tb-next" class="primary" hidden></button>
+      <p id="tbr-hint" class="hint center"></p>
     </section>
 
     <!-- Fim -->

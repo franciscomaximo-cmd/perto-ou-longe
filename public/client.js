@@ -149,6 +149,7 @@
   $('#btn-start').addEventListener('click', () => act('game:start'));
   $$('.btn-force').forEach((btn) => btn.addEventListener('click', () => act('round:force')));
   $('#btn-next').addEventListener('click', () => act('round:next'));
+  $('#btn-tb-next').addEventListener('click', () => act('round:next'));
   $('#btn-again').addEventListener('click', () => act('game:lobby'));
 
   // --- Responder e votar --------------------------------------------------
@@ -171,6 +172,63 @@
     if (selectedVote) act('vote:submit', { targetId: selectedVote });
   });
 
+  // --- Mapa ---------------------------------------------------------------
+  // O recorte tem de bater certo com scripts/gerar-mapa.js (projeção equirretangular).
+  const MAP_TOP = 84;
+  const MAP_BOTTOM = -58;
+  const ZOOMS = [1, 2, 4, 8];
+  let mapSvg = '';
+  let mapPick = null; // ponto escolhido e ainda não enviado
+
+  fetch('mapa.svg')
+    .then((r) => r.text())
+    .then((svg) => { mapSvg = svg; render(); })
+    .catch(() => toast('Não foi possível carregar o mapa.'));
+
+  const toPercent = ({ lat, lon }) => ({
+    x: ((lon + 180) / 360) * 100,
+    y: ((MAP_TOP - lat) / (MAP_TOP - MAP_BOTTOM)) * 100,
+  });
+
+  function pin(point, cls = '', label = '') {
+    const { x, y } = toPercent(point);
+    return el('span', { class: `pin ${cls}`, style: `left:${x}%;top:${y}%` },
+      label ? el('span', { class: 'pin-label', text: label }) : null);
+  }
+
+  // Põe o SVG no mapa (quando já chegou) e liga os botões de zoom uma vez.
+  function setupMap(wrap) {
+    const box = wrap.querySelector('.map-box');
+    const inner = wrap.querySelector('.map-inner');
+    if (mapSvg && !inner.querySelector('svg')) inner.insertAdjacentHTML('afterbegin', mapSvg);
+    if (wrap.dataset.ready) return;
+    wrap.dataset.ready = '1';
+    wrap.dataset.zoom = '0';
+    wrap.querySelectorAll('[data-zoom]').forEach((btn) => btn.addEventListener('click', () => {
+      const level = Math.min(ZOOMS.length - 1, Math.max(0, Number(wrap.dataset.zoom) + Number(btn.dataset.zoom)));
+      // Mantém o centro da vista ao aproximar ou afastar.
+      const cx = (box.scrollLeft + box.clientWidth / 2) / inner.offsetWidth;
+      const cy = (box.scrollTop + box.clientHeight / 2) / inner.offsetHeight;
+      wrap.dataset.zoom = String(level);
+      inner.style.width = `${ZOOMS[level] * 100}%`;
+      box.scrollLeft = cx * inner.offsetWidth - box.clientWidth / 2;
+      box.scrollTop = cy * inner.offsetHeight - box.clientHeight / 2;
+    }));
+  }
+
+  $('#ans-map .map-inner').addEventListener('click', (e) => {
+    if (!state || state.myAnswer !== null) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const fx = (e.clientX - rect.left) / rect.width;
+    const fy = (e.clientY - rect.top) / rect.height;
+    mapPick = { lon: fx * 360 - 180, lat: MAP_TOP - fy * (MAP_TOP - MAP_BOTTOM) };
+    renderAnswer();
+  });
+
+  $('#btn-map-answer').addEventListener('click', () => {
+    if (mapPick) act('answer:submit', { value: mapPick });
+  });
+
   // --- Ligação ------------------------------------------------------------
 
   socket.on('connect', rejoin); // também cobre reconexões depois de o telemóvel bloquear
@@ -182,28 +240,33 @@
   const SCREENS = {
     home: '#screen-home', lobby: '#screen-lobby', answering: '#screen-answer',
     voting: '#screen-vote', reveal: '#screen-reveal', end: '#screen-end',
+    tiebreak: '#screen-answer', 'tiebreak-reveal': '#screen-tiebreak',
   };
 
   function render() {
     const phase = state ? state.phase : 'home';
-    for (const [key, sel] of Object.entries(SCREENS)) $(sel).hidden = key !== phase;
+    for (const sel of new Set(Object.values(SCREENS))) $(sel).hidden = sel !== SCREENS[phase];
 
     deadline = state && state.remainingMs != null ? Date.now() + state.remainingMs : null;
     renderTopbar();
     tick();
 
-    if (state && state.round !== lastRound) {
-      lastRound = state.round;
+    // Cada pergunta (ronda normal ou desempate) começa com a caixa de resposta limpa.
+    const questionKey = state && `${state.round}-${state.tiebreak ? state.tiebreak.number : 0}`;
+    if (state && questionKey !== lastRound) {
+      lastRound = questionKey;
       $('#ans-input').value = '';
       $('#ans-preview').textContent = '';
       selectedVote = null;
+      mapPick = null;
     }
 
     if (phase === 'home') renderHome();
     if (phase === 'lobby') renderLobby();
-    if (phase === 'answering') renderAnswer();
+    if (phase === 'answering' || phase === 'tiebreak') renderAnswer();
     if (phase === 'voting') renderVote();
     if (phase === 'reveal') renderReveal();
+    if (phase === 'tiebreak-reveal') renderTiebreakReveal();
     if (phase === 'end') renderEnd();
 
     $$('.btn-force').forEach((b) => { b.hidden = !isHost(); });
@@ -214,7 +277,7 @@
     $('#topbar').hidden = !state;
     if (!state) return;
     $('#tb-code').textContent = state.code;
-    $('#tb-round').textContent = inGame && state.round ? `Pergunta ${state.round} de ${state.totalRounds}` : 'Sala de espera';
+    $('#tb-round').textContent = state.tiebreak ? 'Desempate' : inGame && state.round ? `Pergunta ${state.round} de ${state.totalRounds}` : 'Sala de espera';
   }
 
   function tick() {
@@ -276,8 +339,9 @@
       : host ? '' : 'À espera que o anfitrião comece o jogo…';
   }
 
-  function progressList(sel, doneIds) {
+  function progressList(sel, doneIds, onlyIds = null) {
     const rows = state.players
+      .filter((p) => !onlyIds || onlyIds.includes(p.id))
       .filter((p) => p.connected || doneIds.includes(p.id))
       .map((p) => {
         const done = doneIds.includes(p.id);
@@ -290,13 +354,41 @@
 
   function renderAnswer() {
     $('#ans-question').textContent = state.question.text;
-    $('#ans-unit').textContent = state.question.unit ? `Resposta em ${state.question.unit}` : '';
+    const isMap = state.question.type === 'map';
+    const tb = state.phase === 'tiebreak' ? state.tiebreak : null;
+    const playing = !tb || tb.ids.includes(state.me);
     const answered = state.myAnswer !== null;
-    $('#ans-form').hidden = answered;
-    $('#ans-done').hidden = !answered;
-    if (answered) $('#ans-mine').textContent = withUnit(state.myAnswer, state.question.unit);
-    progressList('#ans-progress', state.answered);
+    $('#ans-unit').textContent = isMap
+      ? (answered ? 'Palpite enviado. À espera dos outros…' : 'Toca no mapa onde achas que fica.')
+      : state.question.unit ? `Resposta em ${state.question.unit}` : '';
+    $('#ans-tiebreak').hidden = !tb;
+    if (tb) $('#ans-tiebreak').textContent = `Desempate entre ${listNames(tb.ids)}. Só eles respondem, sem votação: quem ficar mais perto fica à frente.`;
+    $('#ans-form').hidden = isMap || answered || !playing;
+    $('#ans-done').hidden = isMap || !answered;
+    $('#ans-watch').hidden = playing;
+    $('#ans-map').hidden = !isMap;
+    if (isMap) {
+      setupMap($('#ans-map'));
+      const point = answered ? state.myAnswer : mapPick;
+      $('#ans-map .pins').replaceChildren(...(point ? [pin(point)] : []));
+      $('#btn-map-answer').hidden = answered;
+      $('#btn-map-answer').disabled = !mapPick;
+      $('#btn-map-answer').textContent = mapPick ? 'Responder' : 'Toca no mapa para escolher';
+    } else if (answered) {
+      $('#ans-mine').textContent = withUnit(state.myAnswer, state.question.unit);
+    }
+    progressList('#ans-progress', state.answered, tb ? tb.ids : null);
   }
+
+  function missText(exact, dist, isMap) {
+    if (isMap) return exact ? 'tocou dentro do país' : 'de distância do país';
+    return exact ? 'acertou no número' : `falhou por ${fmt(dist)}`;
+  }
+
+  const listNames = (ids) => {
+    const names = ids.map(nameOf);
+    return names.length === 1 ? names[0] : `${names.slice(0, -1).join(', ')} e ${names[names.length - 1]}`;
+  };
 
   function renderVote() {
     $('#vote-question').textContent = state.question.text;
@@ -321,13 +413,32 @@
     progressList('#vote-progress', state.voted);
   }
 
-  function renderScores(sel) {
+  // Grupos de jogadores do 1.º lugar para baixo. Depois do jogo vem do servidor
+  // (já com os desempates); antes disso agrupa só pelos pontos.
+  function standingGroups() {
+    if (state.standings) return state.standings.map((ids) => ids.map(player).filter(Boolean));
     const sorted = [...state.players].sort((a, b) => b.score - a.score || a.name.localeCompare(b.name, 'pt'));
-    const top = sorted.length ? sorted[0].score : 0;
-    let position = 0;
-    $(sel).replaceChildren(...sorted.map((p, i) => {
-      if (i === 0 || p.score !== sorted[i - 1].score) position = i + 1; // empatados partilham a posição
-      const classes = [p.id === state.me ? 'me' : '', p.score === top && top > 0 ? 'first' : ''].join(' ');
+    const groups = [];
+    for (const p of sorted) {
+      const last = groups[groups.length - 1];
+      if (last && last[0].score === p.score) last.push(p);
+      else groups.push([p]);
+    }
+    return groups;
+  }
+
+  function renderScores(sel) {
+    const groups = standingGroups();
+    const top = groups.length ? groups[0][0].score : 0;
+    const rows = [];
+    let count = 0;
+    for (const [g, group] of groups.entries()) {
+      const position = count + 1; // empatados partilham a posição
+      count += group.length;
+      for (const p of group) rows.push({ p, position, first: g === 0 && top > 0 });
+    }
+    $(sel).replaceChildren(...rows.map(({ p, position, first }) => {
+      const classes = [p.id === state.me ? 'me' : '', first ? 'first' : ''].join(' ');
       return el('li', { class: classes }, [
         el('span', { class: 'pos', text: `${position}.º` }),
         el('span', { class: 'name', text: p.name }),
@@ -339,8 +450,9 @@
   function renderReveal() {
     const r = state.result;
     const unit = state.question.unit;
+    const isMap = state.question.type === 'map';
     $('#rev-question').textContent = state.question.text;
-    $('#rev-correct').textContent = withUnit(r.correct, unit);
+    $('#rev-correct').textContent = isMap ? r.correct : withUnit(r.correct, unit);
 
     const myGain = r.points[state.me] || 0;
     $('#rev-mine').textContent = myGain ? `Ganhaste ${myGain} ponto${myGain === 1 ? '' : 's'} nesta ronda!` : 'Nenhum ponto para ti nesta ronda.';
@@ -359,11 +471,24 @@
           near ? el('span', { class: 'badge near', text: exact ? 'em cheio!' : 'mais perto' }) : null,
           far ? el('span', { class: 'badge far', text: 'mais longe' }) : null,
         ]),
-        el('span', { class: 'value', text: fmt(r.answers[id]) }),
-        el('span', { class: 'meta', text: `${exact ? 'acertou no número' : `falhou por ${fmt(r.distances[id])}`} · ${votes} voto${votes === 1 ? '' : 's'}` }),
+        el('span', { class: 'value', text: isMap ? `${fmt(r.distances[id])} km` : fmt(r.answers[id]) }),
+        el('span', { class: 'meta', text: `${missText(exact, r.distances[id], isMap)} · ${votes} voto${votes === 1 ? '' : 's'}` }),
         el('span', { class: 'gain', text: gain ? `+${gain}` : '' }),
       ]);
     });
+
+    $('#rev-map').hidden = !isMap;
+    if (isMap) {
+      setupMap($('#rev-map'));
+      $$('#rev-map path').forEach((p) => p.classList.toggle('target', p.dataset.c === r.country));
+      $('#rev-map .pins').replaceChildren(
+        r.center ? pin(r.center, 'target') : null,
+        ...answered.map((id) => {
+          const cls = r.closest.includes(id) ? 'near' : r.farthest.includes(id) ? 'far' : '';
+          return pin(r.answers[id], cls, nameOf(id));
+        }),
+      );
+    }
     for (const p of state.players) {
       if (!(p.id in r.answers)) {
         rows.push(el('li', {}, [
@@ -382,15 +507,54 @@
 
     renderScores('#rev-scores');
     const last = state.round >= state.totalRounds;
+    const tied = standingGroups().some((g) => g.length > 1);
     $('#btn-next').hidden = !isHost();
-    $('#btn-next').textContent = last ? 'Ver classificação final' : 'Próxima pergunta';
+    $('#btn-next').textContent = !last ? 'Próxima pergunta' : tied ? 'Ir ao desempate' : 'Ver classificação final';
     $('#rev-hint').textContent = isHost() ? '' : 'À espera do anfitrião…';
+  }
+
+  function renderTiebreakReveal() {
+    const r = state.tiebreak.result;
+    const unit = state.question.unit;
+    $('#tbr-question').textContent = state.question.text;
+    $('#tbr-correct').textContent = withUnit(r.correct, unit);
+
+    const answered = Object.keys(r.answers).sort((a, b) => r.distances[a] - r.distances[b]);
+    const best = answered.length ? r.distances[answered[0]] : null;
+    const rows = answered.map((id) => {
+      const near = r.distances[id] === best;
+      return el('li', { class: near ? 'near' : '' }, [
+        el('span', { class: 'name' }, [nameOf(id), near ? el('span', { class: 'badge near', text: 'mais perto' }) : null]),
+        el('span', { class: 'value', text: fmt(r.answers[id]) }),
+        el('span', { class: 'meta', text: r.distances[id] === 0 ? 'acertou no número' : `falhou por ${fmt(r.distances[id])}` }),
+        el('span', { class: 'gain', text: '' }),
+      ]);
+    });
+    for (const id of r.unanswered) {
+      rows.push(el('li', {}, [
+        el('span', { class: 'name', text: nameOf(id) }),
+        el('span', { class: 'value', text: '—' }),
+        el('span', { class: 'meta', text: 'sem resposta' }),
+        el('span', { class: 'gain', text: '' }),
+      ]));
+    }
+    $('#tbr-list').replaceChildren(...rows);
+
+    // Quem ficou outra vez empatado (com resposta) vai a nova pergunta.
+    const stillTied = answered.filter((id) => answered.some((o) => o !== id && r.distances[o] === r.distances[id]));
+    $('#tbr-status').textContent = stillTied.length
+      ? `${listNames(stillTied)} voltaram a empatar: vai sair outra pergunta.`
+      : 'Desempate resolvido.';
+
+    renderScores('#tbr-scores');
+    $('#btn-tb-next').hidden = !isHost();
+    $('#btn-tb-next').textContent = state.tiebreakPending ?'Continuar desempate' : 'Ver classificação final';
+    $('#tbr-hint').textContent = isHost() ? '' : 'À espera do anfitrião…';
   }
 
   function renderEnd() {
     renderScores('#end-scores');
-    const top = Math.max(...state.players.map((p) => p.score));
-    const winners = state.players.filter((p) => p.score === top).map((p) => p.name);
+    const winners = standingGroups()[0].map((p) => p.name);
     $('#end-winner').textContent = winners.length === 1
       ? `🏆 ${winners[0]} ganhou!`
       : `🏆 Empate entre ${winners.slice(0, -1).join(', ')} e ${winners[winners.length - 1]}!`;

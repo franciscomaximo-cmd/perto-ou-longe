@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#1d1846">
+  <title>Perto ou Longe</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header id="topbar" hidden>
+    <span id="tb-code" class="pill"></span>
+    <span id="tb-round"></span>
+    <span id="tb-timer" class="pill timer" hidden></span>
+  </header>
+
+  <main>
+    <!-- Entrada -->
+    <section id="screen-home" class="screen">
+      <h1 class="logo">Perto <em>ou</em> Longe</h1>
+      <p class="tagline">Adivinha números e descobre quem falhou por mais.</p>
+
+      <label class="field">O teu nome
+        <input id="home-name" maxlength="16" autocomplete="nickname" enterkeyhint="next">
+      </label>
+      <button id="btn-create" class="primary">Criar sala</button>
+
+      <div class="divider"><span>ou entra numa sala</span></div>
+
+      <label class="field">Código da sala
+        <input id="home-code" class="code-input" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+      </label>
+      <button id="btn-join">Entrar</button>
+
+      <details class="rules">
+        <summary>Como se joga</summary>
+        <ol>
+          <li>Todos respondem com um número à mesma pergunta.</li>
+          <li>Sem ver os palpites, cada um vota em quem acha que ficou <strong>mais longe</strong> (não vale votar em si próprio).</li>
+          <li>Quem ficou <strong>mais perto</strong> ganha 1 ponto. Quem acertou no <strong>mais longe</strong> ganha 1 ponto.</li>
+          <li>Empates dão ponto a todos. São 10 perguntas por jogo, com pelo menos 3 jogadores.</li>
+        </ol>
+      </details>
+    </section>
+
+    <!-- Sala de espera -->
+    <section id="screen-lobby" class="screen" hidden>
+      <p class="label center">Código da sala</p>
+      <div id="lobby-code" class="big-code"></div>
+      <button id="btn-share" class="ghost">Partilhar convite</button>
+
+      <h2>Jogadores <span id="lobby-count" class="muted"></span></h2>
+      <ul id="lobby-players" class="players"></ul>
+
+      <div class="card">
+        <h2>Configuração</h2>
+        <label class="slider">
+          <span>Tempo para responder <output id="out-answer"></output></span>
+          <input type="range" id="set-answer" min="0" max="180" step="15">
+        </label>
+        <label class="slider">
+          <span>Tempo para votar <output id="out-vote"></output></span>
+          <input type="range" id="set-vote" min="0" max="180" step="15">
+        </label>
+        <p id="settings-hint" class="hint"></p>
+      </div>
+
+      <button id="btn-start" class="primary"></button>
+      <p id="lobby-hint" class="hint center"></p>
+      <button class="ghost btn-leave">Sair da sala</button>
+    </section>
+
+    <!-- Responder -->
+    <section id="screen-answer" class="screen" hidden>
+      <p id="ans-question" class="question"></p>
+      <p id="ans-unit" class="unit"></p>
+
+      <form id="ans-form" autocomplete="off">
+        <input id="ans-input" class="number-input" inputmode="decimal" placeholder="O teu palpite" enterkeyhint="send">
+        <p id="ans-preview" class="hint center"></p>
+        <button class="primary" type="submit">Responder</button>
+      </form>
+      <div id="ans-done" class="card center" hidden>
+        <p class="label">O teu palpite</p>
+        <p id="ans-mine" class="big-number"></p>
+      </div>
+
+      <h3>Quem já respondeu</h3>
+      <ul id="ans-progress" class="players"></ul>
+      <button class="ghost btn-force" hidden>Avançar já</button>
+    </section>
+
+    <!-- Votar -->
+    <section id="screen-vote" class="screen" hidden>
+      <p id="vote-question" class="question small"></p>
+      <h2 class="center">Quem ficou mais longe?</h2>
+      <p class="hint center">Os palpites só são revelados no fim. Confia no teu instinto.</p>
+
+      <div id="vote-options" class="options"></div>
+      <button id="btn-vote" class="primary" disabled>Confirmar voto</button>
+      <p id="vote-status" class="card center" hidden></p>
+
+      <h3>Quem já votou</h3>
+      <ul id="vote-progress" class="players"></ul>
+      <button class="ghost btn-force" hidden>Avançar já</button>
+    </section>
+
+    <!-- Revelação -->
+    <section id="screen-reveal" class="screen" hidden>
+      <p id="rev-question" class="question small"></p>
+      <div class="answer-box">
+        <span class="label">Resposta certa</span>
+        <strong id="rev-correct"></strong>
+      </div>
+      <p id="rev-mine" class="mine"></p>
+      <ul id="rev-list" class="results"></ul>
+      <p id="rev-voters" class="hint"></p>
+
+      <h3>Classificação</h3>
+      <ol id="rev-scores" class="scores"></ol>
+      <button id="btn-next" class="primary" hidden></button>
+      <p id="rev-hint" class="hint center"></p>
+    </section>
+
+    <!-- Fim -->
+    <section id="screen-end" class="screen" hidden>
+      <h1 class="logo small">Fim do jogo</h1>
+      <p id="end-winner" class="winner"></p>
+      <ol id="end-scores" class="scores"></ol>
+      <button id="btn-again" class="primary" hidden>Jogar de novo</button>
+      <p id="end-hint" class="hint center"></p>
+      <button class="ghost btn-leave">Sair da sala</button>
+    </section>
+  </main>
+
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="client.js"></script>
+</body>
+</html>

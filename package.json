@@ -1,0 +1,19 @@
+{
+  "name": "perto-ou-longe",
+  "version": "1.0.0",
+  "description": "Jogo multijogador para telemóveis: adivinha números e apanha quem ficou mais longe.",
+  "main": "server/index.js",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "socket.io": "^4.8.1"
+  }
+}

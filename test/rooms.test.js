@@ -92,12 +92,40 @@ test('uma ronda completa: responder, votar, revelar e pontuar', () => {
 });
 
 test('um jogador desligado não bloqueia a ronda', () => {
-  const { room, ids } = setup();
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
   startWithNumber(room, ids[0]);
   room.submitAnswer(ids[0], 1);
   room.submitAnswer(ids[1], 2);
-  room.disconnect(ids[2], 'socket-2');
+  room.submitAnswer(ids[2], 3);
+  room.disconnect(ids[3], 'socket-3');
   assert.equal(room.phase, 'voting');
+});
+
+test('com menos de 3 respostas não há votação nem pontos de voto', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  startWithNumber(room, ana);
+  room.submitAnswer(ana, 200);
+  room.submitAnswer(rui, 100);
+  room.disconnect(eva, 'socket-2'); // a Eva não responde
+  assert.equal(room.phase, 'reveal', 'passa direto à revelação');
+  const r = room.stateFor(ana).result;
+  assert.equal(r.voting, false);
+  assert.deepEqual(r.votes, {});
+  assert.deepEqual(r.correctVoters, []);
+  // 2 palpites + resposta certa + pontos (sem o passo dos votos)
+  assert.deepEqual([r.step, r.steps], [1, 4]);
+  assert.deepEqual(scoresOf(room), { [ana]: 1, [rui]: 0, [eva]: 0 }, 'só o ponto de mais perto');
+});
+
+test('sem respostas, a revelação vai direto ao fim da ronda', () => {
+  const { room, ids } = setup();
+  startWithNumber(room, ids[0]);
+  room.forceAdvance(ids[0]);
+  const r = room.stateFor(ids[1]).result;
+  assert.equal(r.voting, false);
+  assert.equal(r.step, r.steps);
+  assert.equal(r.steps, 2);
 });
 
 // Joga todas as rondas sem respostas e para na revelação da última.
@@ -155,7 +183,7 @@ test('sem empates o jogo termina sem desempate', () => {
   assert.deepEqual(room.stateFor(ana).standings, [[ana], [rui], [eva]]);
 });
 
-test('só os empatados vão a desempate e quem fica mais perto fica à frente', () => {
+test('empates abaixo do 1.º lugar ficam como empate, sem desempate', () => {
   const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
   const [ana, rui, eva, to] = ids;
   room.updateSettings(ana, { rounds: 3 });
@@ -164,28 +192,44 @@ test('só os empatados vão a desempate e quem fica mais perto fica à frente', 
   room.players.get(rui).score = 2;
   room.players.get(eva).score = 2;
   room.players.get(to).score = 0;
+  room.nextQuestion(ana);
+  assert.equal(room.phase, 'end');
+  assert.deepEqual(room.stateFor(to).standings, [[ana], [rui, eva], [to]]);
+  assert.equal(room.stateFor(to).tiebreakWinner, null);
+});
+
+test('desempate do 1.º lugar: só os empatados respondem e o vencedor fica marcado', () => {
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
+  const [ana, rui, eva, to] = ids;
+  room.updateSettings(ana, { rounds: 3 });
+  playToLastReveal(room, ana);
+  room.players.get(ana).score = 3;
+  room.players.get(rui).score = 3;
+  room.players.get(eva).score = 1;
+  room.players.get(to).score = 1; // empate mais abaixo: fica como está
   const before = scoresOf(room);
   room.nextQuestion(ana);
 
   assert.equal(room.phase, 'tiebreak');
-  assert.deepEqual(room.tiebreak.ids, [rui, eva]);
+  assert.deepEqual(room.tiebreak.ids, [ana, rui]);
   assert.ok(!room.questions.includes(room.tiebreak.question), 'a pergunta de desempate é nova');
-  assert.throws(() => room.submitAnswer(ana, 1), /empatados/);
-  assert.throws(() => room.submitAnswer(to, 1), /empatados/);
+  assert.throws(() => room.submitAnswer(eva, 1), /empatados/);
 
   const correct = room.tiebreak.question.answer;
-  room.submitAnswer(eva, correct + 1);
-  room.submitAnswer(rui, correct + 5);
+  room.submitAnswer(rui, correct + 1);
+  room.submitAnswer(ana, correct + 5);
   assert.equal(room.phase, 'tiebreak-reveal');
-  assert.deepEqual(room.stateFor(to).standings, [[ana], [eva], [rui], [to]]);
-  assert.equal(room.stateFor(to).tiebreakPending, false);
+  const state = room.stateFor(to);
+  assert.deepEqual(state.standings, [[rui], [ana], [eva, to]]);
+  assert.equal(state.tiebreakPending, false, 'o botão passa a "Ver classificação final"');
+  assert.equal(state.tiebreakWinner, rui);
   assert.deepEqual(scoresOf(room), before, 'o desempate não mexe nos pontos');
 
   room.nextQuestion(ana);
-  assert.equal(room.phase, 'end');
+  assert.equal(room.phase, 'end', 'não há desempate para o empate de Eva e Tó');
 });
 
-test('se voltarem a empatar sai outra pergunta, só para os que continuam empatados', () => {
+test('se o 1.º lugar voltar a empatar sai outra pergunta, só para esses', () => {
   const { room, ids } = setup();
   const [ana, rui, eva] = ids;
   room.updateSettings(ana, { rounds: 3 });
@@ -195,22 +239,40 @@ test('se voltarem a empatar sai outra pergunta, só para os que continuam empata
   assert.deepEqual(room.tiebreak.ids, [ana, rui, eva]);
   const first = room.tiebreak.question;
   let correct = first.answer;
+  room.submitAnswer(ana, correct + 3);
+  room.submitAnswer(rui, correct - 3);
+  room.submitAnswer(eva, correct + 50);
+  assert.deepEqual(room.stateFor(ana).standings, [[ana, rui], [eva]]);
+  assert.equal(room.stateFor(ana).tiebreakPending, true, 'o botão diz "Continuar desempate"');
+
+  room.nextQuestion(ana);
+  assert.equal(room.phase, 'tiebreak');
+  assert.deepEqual(room.tiebreak.ids, [ana, rui]);
+  assert.notEqual(room.tiebreak.question, first);
+  correct = room.tiebreak.question.answer;
+  room.submitAnswer(rui, correct + 1);
+  room.submitAnswer(ana, correct + 2);
+  assert.equal(room.stateFor(ana).tiebreakPending, false);
+  room.nextQuestion(ana);
+  assert.equal(room.phase, 'end');
+  assert.deepEqual(room.stateFor(ana).standings, [[rui], [ana], [eva]]);
+  assert.equal(room.stateFor(ana).tiebreakWinner, rui);
+});
+
+test('se os perdedores do desempate empatarem entre si, não há novo desempate', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  room.updateSettings(ana, { rounds: 3 });
+  playToLastReveal(room, ana);
+  room.nextQuestion(ana);
+  const correct = room.tiebreak.question.answer;
   room.submitAnswer(ana, correct);
   room.submitAnswer(rui, correct + 3);
   room.submitAnswer(eva, correct - 3);
   assert.deepEqual(room.stateFor(ana).standings, [[ana], [rui, eva]]);
-  assert.equal(room.stateFor(ana).tiebreakPending, true);
-
-  room.nextQuestion(ana);
-  assert.equal(room.phase, 'tiebreak');
-  assert.deepEqual(room.tiebreak.ids, [rui, eva]);
-  assert.notEqual(room.tiebreak.question, first);
-  correct = room.tiebreak.question.answer;
-  room.submitAnswer(eva, correct + 1);
-  room.submitAnswer(rui, correct + 2);
+  assert.equal(room.stateFor(ana).tiebreakPending, false);
   room.nextQuestion(ana);
   assert.equal(room.phase, 'end');
-  assert.deepEqual(room.stateFor(ana).standings, [[ana], [eva], [rui]]);
 });
 
 test('quem se desliga no desempate fica atrás', () => {
@@ -218,7 +280,9 @@ test('quem se desliga no desempate fica atrás', () => {
   const [ana, rui, eva] = ids;
   room.updateSettings(ana, { rounds: 3 });
   playToLastReveal(room, ana);
-  room.players.get(ana).score = 4;
+  room.players.get(ana).score = 0;
+  room.players.get(rui).score = 4;
+  room.players.get(eva).score = 4;
   room.nextQuestion(ana);
   assert.deepEqual(room.tiebreak.ids, [rui, eva]);
 
@@ -227,7 +291,18 @@ test('quem se desliga no desempate fica atrás', () => {
   assert.equal(room.phase, 'tiebreak-reveal');
   room.nextQuestion(ana);
   assert.equal(room.phase, 'end');
-  assert.deepEqual(room.stateFor(ana).standings, [[ana], [eva], [rui]]);
+  assert.deepEqual(room.stateFor(ana).standings, [[eva], [rui], [ana]]);
+});
+
+test('perguntas de desempate têm resposta grande ou com casas decimais', () => {
+  const { QUESTIONS, goodForTiebreak } = require('../server/rooms');
+  const good = QUESTIONS.filter(goodForTiebreak);
+  assert.ok(good.length > 100);
+  for (const q of good) assert.ok(Math.abs(q.answer) >= 100 || !Number.isInteger(q.answer), q.text);
+  const legislatura = QUESTIONS.find((q) => /legislatura/.test(q.text));
+  assert.equal(goodForTiebreak(legislatura), false);
+  const { room } = setup();
+  for (let i = 0; i < 40; i++) assert.ok(goodForTiebreak(room.pickTiebreakQuestion()));
 });
 
 test('a revelação avança em passos, só pelo anfitrião', () => {
@@ -369,6 +444,19 @@ test('perguntas dos jogadores: exigem 4 jogadores e uma pergunta de cada', () =>
   assert.equal(room.stateFor(ids[1]).myQuestion.unit, 'gatos');
 });
 
+test('perguntas dos jogadores: saem todas, mesmo com menos rondas pedidas', () => {
+  const { room, ids } = setupCustom();
+  room.updateSettings(ids[0], { rounds: 3 });
+  const lobby = room.stateFor(ids[0]);
+  assert.equal(lobby.customNeeded, 4);
+  assert.equal(lobby.minRounds, 4, 'o mínimo do regulador sobe para 4');
+  assert.equal(lobby.plannedRounds, 4);
+  for (const [i, id] of ids.entries()) room.submitCustomQuestion(id, { text: `Pergunta número ${i} de teste?`, answer: i });
+  room.startGame(ids[0]);
+  assert.equal(room.questions.length, 4);
+  assert.deepEqual(room.questions.map((q) => q.author).sort(), [...ids].sort());
+});
+
 test('perguntas dos jogadores: validação e limpeza do texto', () => {
   const { room, ids } = setupCustom();
   assert.throws(() => room.submitCustomQuestion(ids[0], { text: 'Curta?', answer: 1 }), /pelo menos/);
@@ -484,13 +572,33 @@ test('prémios: empate no mais certeiro desfaz-se pelo erro médio', () => {
 });
 
 test('nenhuma pergunta pede contas', () => {
-  const questions = require('../server/questions.json');
-  for (const q of questions) {
+  const { QUESTIONS } = require('../server/rooms');
+  for (const q of QUESTIONS) {
     assert.doesNotMatch(q.text, /×|elevado|\bsoma\b|Quanto é|segundos tem|horas tem/, q.text);
   }
 });
 
-test('o temporizador fecha a fase de respostas', async () => {
+test('perguntas de mapa: "fica" ou "ficam" conforme o artigo guardado de cada país', () => {
+  const { QUESTIONS } = require('../server/rooms');
+  const text = (label) => QUESTIONS.find((q) => q.label === label).text;
+  assert.equal(text('Filipinas'), 'Onde ficam as Filipinas?');
+  assert.equal(text('Camarões'), 'Onde ficam os Camarões?');
+  assert.equal(text('Paquistão'), 'Onde fica o Paquistão?');
+  assert.equal(text('Angola'), 'Onde fica Angola?');
+  assert.equal(text('Geórgia'), 'Onde fica a Geórgia (o país)?');
+  for (const q of QUESTIONS.filter((x) => x.type === 'map')) {
+    assert.ok(['', 'o', 'a', 'os', 'as'].includes(q.article), `artigo em falta: ${q.label}`);
+  }
+});
+
+test('monumentos estrangeiros não estão em Geografia', () => {
+  const { QUESTIONS } = require('../server/rooms');
+  const bigBen = QUESTIONS.find((q) => /Big Ben/.test(q.text));
+  assert.equal(bigBen.category, 'ciencia');
+  assert.ok(!QUESTIONS.some((q) => q.category === 'geografia' && /Torre Eiffel|Burj|Pisa|Empire State/.test(q.text)));
+});
+
+test('o temporizador fecha a fase de respostas (com poucas respostas, sem votação)', async () => {
   const { room, ids } = setup();
   room.settings.answerTime = 0.05; // 50 ms, só para o teste
   startWithNumber(room, ids[0]);
@@ -498,6 +606,7 @@ test('o temporizador fecha a fase de respostas', async () => {
   room.submitAnswer(ids[1], 2);
   assert.ok(room.stateFor(ids[0]).remainingMs > 0);
   await new Promise((r) => setTimeout(r, 100));
-  assert.equal(room.phase, 'voting');
+  assert.equal(room.phase, 'reveal');
+  assert.equal(room.stateFor(ids[0]).result.voting, false);
   room.destroy();
 });

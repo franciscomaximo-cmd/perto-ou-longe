@@ -189,8 +189,9 @@ textarea:focus { border-color: var(--accent); }
 .map-inner svg { display: block; width: 100%; height: auto; aspect-ratio: 360 / 142; }
 .map-inner path { fill: #fff; stroke: #9b96bd; stroke-width: .6; vector-effect: non-scaling-stroke; }
 .map-inner path.target { fill: var(--near); stroke: #1a7a52; }
-.map-zoom { position: absolute; top: 8px; right: 8px; display: flex; gap: 6px; }
-.map-zoom button { width: 38px; height: 38px; padding: 0; font-size: 1.3rem; line-height: 1; background: rgba(29, 24, 70, .85); }
+/* Botões de zoom por baixo do mapa, para nenhuma etiqueta ficar por cima deles. */
+.map-zoom { display: flex; justify-content: flex-end; gap: 6px; margin-top: -4px; }
+.map-zoom button { width: 38px; height: 38px; padding: 0; font-size: 1.3rem; line-height: 1; }
 .pins { position: absolute; inset: 0; pointer-events: none; }
 .pin {
   position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px;
@@ -215,7 +216,7 @@ textarea:focus { border-color: var(--accent); }
 .reveal-in { animation: rise .35s ease-out both; }
 .appear { animation: pop .4s cubic-bezier(.2, 1.4, .4, 1) both; }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
-@keyframes pop { from { opacity: 0; transform: translate(-50%, 0) scale(.4); } }
+@keyframes pop { from { opacity: 0; scale: .4; } }
 
 /* Reta numérica: palpites por cima do eixo, resposta certa por baixo. */
 .numline {
@@ -224,25 +225,46 @@ textarea:focus { border-color: var(--accent); }
   padding: 12px 0 8px;
 }
 .numline-marks { position: relative; margin: 0 12px; }
-.numline-axis { height: 3px; margin: 0 12px; background: var(--line); border-radius: 2px; }
+.numline-axis { position: relative; height: 3px; margin: 0 12px; background: var(--line); border-radius: 2px; }
 .numline-correct { position: relative; height: 0; margin: 0 12px; }
 .numline-correct.shown { height: 54px; }
-.numline-ends { display: flex; justify-content: space-between; margin: 4px 12px 0; color: var(--muted); font-size: .75rem; }
+/* Corte na reta entre a escala e os palpites fora dela */
+.numline-cut {
+  position: absolute; top: 50%; transform: translate(-50%, -50%);
+  padding: 0 4px; background: var(--card); color: var(--muted); font-weight: 800; line-height: 1;
+}
+.numline-cut.cut-lo { left: 13.5%; }
+.numline-cut.cut-hi { left: 86.5%; }
+/* Cada marca tem largura zero no sítio exato do palpite: o pé fica nesse ponto e a
+   etiqueta pode afastar-se para o lado (--dx) para caber na caixa. */
 .mark {
-  position: absolute; transform: translateX(-50%);
-  display: flex; flex-direction: column; align-items: center;
+  position: absolute; width: 0;
   transition: left .45s ease, top .45s ease;
   white-space: nowrap; font-size: .78rem; line-height: 1.2;
 }
-.mark .tag-box { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 2px 7px; text-align: center; }
+.mark .tag-box {
+  position: absolute; top: 0; left: 0;
+  transform: translateX(calc(-50% + var(--dx, 0px)));
+  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 2px 7px; text-align: center;
+}
 .mark .tag-box b { display: block; font-size: .85rem; }
-.mark .stem { width: 2px; flex: 1; min-height: 6px; background: var(--muted); }
+.mark .stem { position: absolute; left: -1px; width: 2px; top: 34px; bottom: 0; background: var(--muted); }
 .mark.near .tag-box { border-color: var(--near); }
 .mark.far .tag-box { border-color: var(--far); }
 .mark.clipped .tag-box { border-style: dashed; }
-.mark.correct { top: 4px; }
-.mark.correct .tag-box { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
-.mark.correct .stem { order: -1; background: var(--accent); min-height: 8px; flex: none; height: 8px; }
+.mark.correct { top: 0; height: 54px; }
+.mark.correct .tag-box { top: 10px; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
+.mark.correct .stem { top: 0; bottom: auto; height: 10px; background: var(--accent); }
+
+/* Botões do anfitrião na revelação: sempre à vista no fundo do ecrã. */
+#btn-step, #btn-next, #btn-tb-next {
+  position: sticky; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 4;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+}
+.note { margin: 0; text-align: center; color: var(--accent); font-weight: 600; font-size: .9rem; }
+.field-error { margin: 0; color: var(--far); font-size: .85rem; font-weight: 600; }
+.field-error:empty { display: none; }
+.won-tb { font-size: .75rem; font-weight: 600; color: var(--muted); margin-left: 6px; }
 
 /* Linhas do mapa até ao país certo */
 .map-inner .lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }

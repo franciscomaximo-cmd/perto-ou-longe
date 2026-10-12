@@ -6,7 +6,9 @@ Jogo multijogador para telemóveis. Todos respondem com um número à mesma perg
 - Há também perguntas de mapa ("Onde fica o Paquistão?"): cada um toca num mapa-mundo em branco. Conta a distância em km até ao país; tocar dentro do país é acertar em cheio.
 - Quem vota no **mais longe** ganha 1 ponto.
 - Empates dão ponto a todos. Ninguém pode votar em si próprio.
-- No fim, cada grupo de jogadores com os mesmos pontos vai a desempate: só eles respondem a uma pergunta extra, sem votação, e quem fica mais perto fica à frente. Se voltarem a empatar, sai outra pergunta. O desempate decide a ordem, não dá pontos.
+- Se numa ronda responderem menos de 3 jogadores (o autor da pergunta não responde, alguém não respondeu a tempo…), não há votação: passa logo à revelação, sem pontos de voto.
+- No fim, se houver empate no 1.º lugar, os empatados vão a desempate: só eles respondem a uma pergunta extra, sem votação, e quem fica mais perto ganha ("venceu o desempate" na classificação). Se voltarem a empatar, sai outra pergunta. Os empates mais abaixo ficam como empate. O desempate decide a ordem, não dá pontos, e usa só perguntas com resposta grande (≥ 100) ou com casas decimais.
+- Os números escrevem-se à portuguesa: vírgula decimal ("12,5") e ponto de milhares ("1.200").
 - De 3 a 12 jogadores.
 - O anfitrião (quem cria a sala) define, na configuração da sala, o número de perguntas (de 3 a 30, 10 por defeito), o tempo para responder e para votar (de 15 a 180 s, ou sem limite) e as categorias: Geografia, Desporto, História, Cultura Portuguesa, Adivinha o Preço e Ciência e Curiosidades (ou todas). Se as categorias escolhidas não tiverem perguntas suficientes, o anfitrião é avisado e o jogo fica mais curto.
 - **Perguntas dos jogadores** (opção do anfitrião, mínimo 4 jogadores): cada um escreve uma pergunta com resposta em número antes de começar. Quando sai a pergunta de alguém, essa pessoa não responde nem conta para mais perto ou mais longe, mas vota. Com 3 jogadores sobravam 2 a responder e cada um só podia votar no outro, por isso são precisos 4.
@@ -54,7 +56,10 @@ Para adicionar perguntas, acrescenta entradas a `server/questions.json`:
 Categorias: `geografia`, `desporto`, `historia`, `cultura`, `precos`, `ciencia` (os nomes que aparecem
 no jogo estão em `CATEGORIES`, em `server/rooms.js`).
 
-Perguntas de mapa: `{ "type": "map", "text": "Onde fica o Paquistão?", "country": "586", "label": "Paquistão", "category": "geografia" }`.
+Perguntas de mapa: `{ "type": "map", "country": "586", "label": "Paquistão", "article": "o", "category": "geografia" }`.
+O texto da pergunta é montado a partir do artigo: `"o"`/`"a"` dá "Onde fica o Paquistão?", `"os"`/`"as"`
+dá "Onde ficam as Filipinas?" e `""` (sem artigo) dá "Onde fica Angola?". Um `"note"` opcional
+acrescenta uma explicação entre parênteses ("Onde fica a Geórgia (o país)?").
 O `country` é o código ISO numérico do país, tal como aparece no `world-atlas` (países à escala 1:110m;
 alguns países pequenos, como Malta ou Singapura, não existem a esta escala). Cerca de um quarto das
 perguntas de cada jogo são de mapa; os desempates usam sempre perguntas de números.

@@ -56,16 +56,8 @@
   const withUnit = (n, unit) => (unit ? `${fmt(n)} ${unit}` : fmt(n));
   const formatTime = (s) => (s > 0 ? `${s} s` : 'Sem limite');
 
-  // Aceita "1 000", "1.000.000", "12,5" e "12.5".
-  function parseNumber(raw) {
-    let s = String(raw).trim().replace(/[\s ]/g, '');
-    if (!s) return null;
-    if (s.includes(',')) s = s.replace(/\./g, '').replace(',', '.');
-    else if ((s.match(/\./g) || []).length > 1) s = s.replace(/\./g, '');
-    if (!/^-?\d+(\.\d+)?$/.test(s)) return null;
-    const n = Number(s);
-    return Number.isFinite(n) ? n : null;
-  }
+  // Leitura de números à portuguesa: ver public/numero.js.
+  const { parseNumber } = window;
 
   const player = (id) => (state && state.players.find((p) => p.id === id)) || null;
   const nameOf = (id) => (player(id) ? player(id).name : '?');
@@ -148,10 +140,20 @@
 
   $('#set-custom').addEventListener('change', (e) => act('settings:update', { playerQuestions: e.target.checked }));
 
+  // Como nos palpites: mostra como o número vai ser lido, ou o erro por baixo do campo.
+  function checkCustomAnswer(showError) {
+    const raw = $('#custom-answer').value;
+    const n = parseNumber(raw);
+    $('#custom-preview').textContent = n === null || !raw.trim() ? '' : `Resposta: ${fmt(n)}`;
+    $('#custom-error').textContent = n === null && (showError || raw.trim()) ? 'A resposta tem de ser um número.' : '';
+    return n;
+  }
+  $('#custom-answer').addEventListener('input', () => checkCustomAnswer(false));
+
   $('#custom-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    const answer = parseNumber($('#custom-answer').value);
-    if (answer === null) return toast('A resposta tem de ser um número.');
+    const answer = checkCustomAnswer(true);
+    if (answer === null) return $('#custom-answer').focus();
     act('question:submit', {
       text: $('#custom-text').value,
       answer,
@@ -228,6 +230,7 @@
       inner.style.width = `${ZOOMS[level] * 100}%`;
       box.scrollLeft = cx * inner.offsetWidth - box.clientWidth / 2;
       box.scrollTop = cy * inner.offsetHeight - box.clientHeight / 2;
+      if (wrap.relayout) wrap.relayout(); // com outro zoom, as etiquetas chocam de outra maneira
     }));
   }
 
@@ -265,6 +268,8 @@
     // De volta à sala de espera depois de um jogo: a pergunta antiga já foi usada.
     if (phase === 'lobby' && lastPhase && lastPhase !== 'lobby') {
       for (const sel of ['#custom-text', '#custom-answer', '#custom-unit']) $(sel).value = '';
+      $('#custom-preview').textContent = '';
+      $('#custom-error').textContent = '';
     }
     lastPhase = phase;
     for (const sel of new Set(Object.values(SCREENS))) $(sel).hidden = sel !== SCREENS[phase];
@@ -350,9 +355,16 @@
       input.disabled = !host;
       // Não mexe no regulador enquanto o anfitrião o está a arrastar.
       if (document.activeElement !== input) {
-        input.value = state.settings[s.key];
-        $(s.out).textContent = s.format(state.settings[s.key]);
+        // O número de perguntas nunca fica abaixo do mínimo (que sobe com as perguntas dos jogadores).
+        const value = s.key === 'rounds' ? Math.max(state.settings.rounds, state.minRounds) : state.settings[s.key];
+        input.value = value;
+        $(s.out).textContent = s.format(value);
       }
+    }
+    const raised = state.settings.playerQuestions && state.customNeeded >= 3;
+    $('#rounds-note').hidden = !raised;
+    if (raised) {
+      $('#rounds-note').textContent = `O jogo terá pelo menos ${state.customNeeded} perguntas para incluir as de todos.`;
     }
     $('#settings-hint').textContent = host
       ? 'Nos tempos, arrasta até ao início para jogar sem limite.'
@@ -522,7 +534,11 @@
       const classes = [p.id === state.me ? 'me' : '', first ? 'first' : ''].join(' ');
       return el('li', { class: classes }, [
         el('span', { class: 'pos', text: `${position}.º` }),
-        el('span', { class: 'name', text: p.name }),
+        el('span', { class: 'name' }, [
+          p.name,
+          // Explica porque está à frente de quem tem os mesmos pontos.
+          state.standings && p.id === state.tiebreakWinner ? el('span', { class: 'won-tb', text: '(venceu o desempate)' }) : null,
+        ]),
         el('span', { class: 'pts', text: `${p.score} pt${p.score === 1 ? '' : 's'}` }),
       ]);
     }));
@@ -577,6 +593,15 @@
     return mark;
   }
 
+  // Põe a etiqueta dentro da caixa (o pé da marca fica no sítio certo) e devolve o centro
+  // e a meia-largura da etiqueta, em % da largura da reta.
+  function fitTag(tag, x, width) {
+    const half = ((tag.offsetWidth / 2 + 3) / width) * 100;
+    const center = Math.min(100 - half, Math.max(half, x));
+    tag.style.setProperty('--dx', `${((center - x) / 100) * width}px`);
+    return { center, half };
+  }
+
   function renderNumberLine(r, order, shown, showCorrect) {
     const box = $('#rev-line');
     const marks = box.querySelector('.numline-marks');
@@ -592,23 +617,24 @@
     const scale = lineScale(values, showCorrect ? r.correct : null);
     const unit = state.question.unit;
 
-    // Filas: cada etiqueta vai para a primeira fila onde não choca com a anterior.
-    // As etiquetas ficam entre 12% e 88% para não saírem da caixa.
-    const shownX = (v) => Math.min(88, Math.max(12, scale.pos(v)));
-    const lanes = [];
-    const placed = ids
-      .map((id) => ({ id, x: shownX(r.answers[id]) }))
-      .sort((a, b) => a.x - b.x)
-      .map((m) => {
-        let lane = lanes.findIndex((last) => m.x - last > 24);
-        if (lane === -1) { lane = lanes.length; lanes.push(m.x); } else lanes[lane] = m.x;
-        return { ...m, lane };
-      });
-    const height = Math.max(1, lanes.length) * LANE + 10;
-    marks.style.height = `${height}px`;
+    // Os palpites fora da escala ficam numa zona própria na ponta, depois de um corte (≫),
+    // para não parecerem perto da resposta certa.
+    const cuts = ids.map((id) => scale.clipped(r.answers[id]));
+    const hasLo = cuts.includes('lo');
+    const hasHi = cuts.includes('hi');
+    const left = hasLo ? 22 : 4;
+    const right = hasHi ? 78 : 96;
+    const xOf = (v) => {
+      const cut = scale.clipped(v);
+      if (cut === 'lo') return 5;
+      if (cut === 'hi') return 95;
+      return left + ((v - scale.lo) / (scale.hi - scale.lo)) * (right - left);
+    };
+    box.querySelector('.cut-lo').hidden = !hasLo;
+    box.querySelector('.cut-hi').hidden = !hasHi;
 
     const keep = new Set();
-    for (const { id, x, lane } of placed) {
+    for (const id of ids) {
       const value = r.answers[id];
       const cut = scale.clipped(value);
       const cls = [
@@ -616,17 +642,35 @@
         showCorrect && r.farthest.includes(id) ? 'far' : '',
         cut ? 'clipped' : '',
       ].join(' ');
-      const valueText = `${cut === 'lo' ? '◀ ' : ''}${fmt(value)}${cut === 'hi' ? ' ▶' : ''}`;
+      const valueText = `${cut === 'lo' ? '≪ ' : ''}${fmt(value)}${cut === 'hi' ? ' ≫' : ''}`;
       const mark = upsertMark(marks, id, cls, [
         el('span', { class: 'tag-box' }, [nameOf(id), el('b', { text: valueText })]),
         el('span', { class: 'stem' }),
       ]);
-      mark.style.left = `${x}%`;
-      mark.style.top = `${lane * LANE}px`;
-      mark.style.height = `${height - lane * LANE}px`;
+      mark.style.left = `${xOf(value)}%`;
       keep.add(id);
     }
     for (const m of marks.querySelectorAll('.mark')) if (!keep.has(m.dataset.key)) m.remove();
+
+    // Filas: mede cada etiqueta e põe-na na primeira fila onde não choca com outra.
+    const width = marks.clientWidth || 1;
+    const items = ids.map((id) => {
+      const mark = marks.querySelector(`[data-key="${id}"]`);
+      return { mark, ...fitTag(mark.querySelector('.tag-box'), xOf(r.answers[id]), width) };
+    }).sort((a, b) => a.center - b.center);
+    const lanes = [];
+    for (const it of items) {
+      let lane = lanes.findIndex((edge) => it.center - it.half > edge + 1);
+      if (lane === -1) { lane = lanes.length; lanes.push(0); }
+      lanes[lane] = it.center + it.half;
+      it.lane = lane;
+    }
+    const height = Math.max(1, lanes.length) * LANE + 12;
+    marks.style.height = `${height}px`;
+    for (const it of items) {
+      it.mark.style.top = `${it.lane * LANE}px`;
+      it.mark.style.height = `${height - it.lane * LANE}px`;
+    }
 
     correctBox.classList.toggle('shown', showCorrect);
     if (showCorrect) {
@@ -634,12 +678,39 @@
         el('span', { class: 'stem' }),
         el('span', { class: 'tag-box', text: withUnit(r.correct, unit) }),
       ]);
-      mark.style.left = `${shownX(r.correct)}%`;
+      mark.style.left = `${xOf(r.correct)}%`;
+      fitTag(mark.querySelector('.tag-box'), xOf(r.correct), width);
     } else {
       correctBox.replaceChildren();
     }
-    box.querySelector('.lo').textContent = fmt(Number(scale.lo.toPrecision(3)));
-    box.querySelector('.hi').textContent = fmt(Number(scale.hi.toPrecision(3)));
+  }
+
+  // Etiquetas dos pinos no mapa: se chocarem com outra já posta, passam para baixo do pino
+  // ou afastam-se uma fila de cada vez.
+  function layoutPinLabels(wrap) {
+    const inner = wrap.querySelector('.map-inner').getBoundingClientRect();
+    const placed = [];
+    // Quanto pior é uma posição: choques com outras etiquetas e, pior ainda, ficar fora do
+    // mapa (a etiqueta deixava de se ver).
+    const badness = (a) => placed.filter((b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top).length
+      + (a.top < inner.top || a.bottom > inner.bottom ? 3 : 0);
+    const ROW = 22; // um pouco mais do que a altura de uma etiqueta
+    const options = [0, 1, 2, 3].flatMap((row) => [['above', row], ['below', row]]);
+    const apply = ([side, row], label) => {
+      label.style.top = side === 'below' ? `${14 + row * ROW}px` : 'auto';
+      label.style.bottom = side === 'above' ? `${14 + row * ROW}px` : 'auto';
+    };
+    for (const label of wrap.querySelectorAll('.pins .pin-label')) {
+      let best = null;
+      for (const option of options) {
+        apply(option, label);
+        const score = badness(label.getBoundingClientRect());
+        if (!best || score < best.score) best = { option, score };
+        if (score === 0) break;
+      }
+      apply(best.option, label);
+      placed.push(label.getBoundingClientRect());
+    }
   }
 
   function renderMapReveal(r, order, shown, showCorrect) {
@@ -666,6 +737,8 @@
       ...ids.map((id, i) => pin(r.answers[id], `${clsOf(id)} ${i >= before ? 'appear' : ''}`,
         `${nameOf(id)} · ${fmt(r.distances[id])} km`)),
     );
+    wrap.relayout = () => layoutPinLabels(wrap);
+    wrap.relayout();
   }
 
   function renderVotes(r) {
@@ -693,11 +766,14 @@
 
     // Ordem da revelação: do mais longe para o mais perto.
     const order = Object.keys(r.answers).sort((a, b) => r.distances[b] - r.distances[a]);
+    // Passos: n palpites, a resposta certa, os votos (só se houve votação) e os pontos.
+    // Sem respostas, o servidor já começa no último passo.
     const n = order.length;
     const shown = Math.min(r.step, n);
     const showCorrect = r.step > n;
-    const showVotes = r.step > n + 1;
+    const showVotes = r.voting && r.step > n + 1;
     const showPoints = r.step >= r.steps;
+    $('#rev-novote').hidden = r.voting || n === 0;
 
     $('#rev-line').hidden = isMap;
     $('#rev-map').hidden = !isMap;
@@ -737,17 +813,18 @@
           far ? el('span', { class: 'badge far', text: 'mais longe' }) : null,
         ]),
         el('span', { class: 'value', text: isMap ? `${fmt(r.distances[id])} km` : fmt(r.answers[id]) }),
-        el('span', { class: 'meta', text: `${missText(exact, r.distances[id], isMap)} · ${votes} voto${votes === 1 ? '' : 's'}` }),
+        el('span', { class: 'meta', text: missText(exact, r.distances[id], isMap) + (r.voting ? ` · ${votes} voto${votes === 1 ? '' : 's'}` : '') }),
         el('span', { class: 'gain', text: gain ? `+${gain}` : '' }),
       ]);
     });
 
     for (const p of state.players) {
       if (!(p.id in r.answers)) {
+        const author = p.id === state.question.author;
         rows.push(el('li', {}, [
           el('span', { class: 'name', text: p.name }),
-          el('span', { class: 'value', text: '—' }),
-          el('span', { class: 'meta', text: 'sem resposta' }),
+          el('span', { class: 'value', text: author ? '✍️' : '—' }),
+          el('span', { class: 'meta', text: author ? 'autor da pergunta' : 'sem resposta' }),
           el('span', { class: 'gain', text: r.points[p.id] ? `+${r.points[p.id]}` : '' }),
         ]));
       }
@@ -756,7 +833,8 @@
 
     renderScores('#rev-scores');
     const last = state.round >= state.totalRounds;
-    const tied = standingGroups().some((g) => g.length > 1);
+    // Só há desempate para o 1.º lugar.
+    const tied = standingGroups()[0].length > 1;
     $('#btn-next').textContent = !last ? 'Próxima pergunta' : tied ? 'Ir ao desempate' : 'Ver classificação final';
     $('#rev-hint').textContent = host ? '' : 'À espera do anfitrião…';
   }
@@ -788,11 +866,10 @@
     }
     $('#tbr-list').replaceChildren(...rows);
 
-    // Quem ficou outra vez empatado (com resposta) vai a nova pergunta.
-    const stillTied = answered.filter((id) => answered.some((o) => o !== id && r.distances[o] === r.distances[id]));
-    $('#tbr-status').textContent = stillTied.length
-      ? `${listNames(stillTied)} voltaram a empatar: vai sair outra pergunta.`
-      : 'Desempate resolvido.';
+    // Só o 1.º lugar vai a nova pergunta, se continuar empatado.
+    $('#tbr-status').textContent = state.tiebreakPending
+      ? `${listNames(state.standings[0])} continuam empatados no 1.º lugar: vai sair outra pergunta.`
+      : state.tiebreakWinner ? `${nameOf(state.tiebreakWinner)} venceu o desempate.` : 'Desempate terminado.';
 
     renderScores('#tbr-scores');
     $('#btn-tb-next').hidden = !isHost();

@@ -38,7 +38,8 @@
           <li>Todos respondem com um número à mesma pergunta. Nas perguntas de mapa, toca no mapa onde achas que fica o país: conta a distância em km até ele, e tocar dentro do país é acertar em cheio.</li>
           <li>Sem ver os palpites, cada um vota em quem acha que ficou <strong>mais longe</strong> (não vale votar em si próprio).</li>
           <li>Quem ficou <strong>mais perto</strong> ganha 1 ponto, ou 2 se acertar no número exato. Quem acertou no <strong>mais longe</strong> ganha 1 ponto.</li>
-          <li>Empates dão ponto a todos. No fim, quem estiver empatado vai a desempate: só esses respondem a uma pergunta extra e quem ficar mais perto fica à frente.</li>
+          <li>Empates dão ponto a todos. Se responderem menos de 3 jogadores, não há votação nessa ronda.</li>
+          <li>No fim, se houver empate no 1.º lugar, os empatados vão a desempate: só eles respondem a uma pergunta extra e quem ficar mais perto ganha. Os outros empates ficam como estão.</li>
           <li>O anfitrião escolhe quantas perguntas tem o jogo (10 por defeito) e as categorias. São precisos pelo menos 3 jogadores.</li>
           <li>Com as perguntas dos jogadores ligadas (mínimo 4 jogadores), cada um escreve uma pergunta: quando sai a tua, não respondes, mas votas.</li>
           <li>No fim há prémios para o mais certeiro, o mais longe da realidade e quem melhor leu os outros.</li>
@@ -61,6 +62,7 @@
           <span>Número de perguntas <output id="out-rounds"></output></span>
           <input type="range" id="set-rounds" min="3" max="30" step="1">
         </label>
+        <p id="rounds-note" class="hint" hidden></p>
         <label class="slider">
           <span>Tempo para responder <output id="out-answer"></output></span>
           <input type="range" id="set-answer" min="0" max="180" step="15">
@@ -93,6 +95,8 @@
         <div class="row">
           <label class="field">Resposta certa
             <input id="custom-answer" inputmode="decimal" placeholder="Ex.: 23">
+            <span id="custom-preview" class="hint"></span>
+            <span id="custom-error" class="field-error" role="alert"></span>
           </label>
           <label class="field">Unidade (opcional)
             <input id="custom-unit" maxlength="20" placeholder="Ex.: anos">
@@ -161,9 +165,11 @@
       <!-- 1. Palpites, um a um (reta numérica ou mapa) -->
       <div id="rev-line" class="numline" hidden>
         <div class="numline-marks"></div>
-        <div class="numline-axis"></div>
+        <div class="numline-axis">
+          <span class="numline-cut cut-lo" aria-hidden="true" hidden>≪</span>
+          <span class="numline-cut cut-hi" aria-hidden="true" hidden>≫</span>
+        </div>
         <div class="numline-correct"></div>
-        <div class="numline-ends"><span class="lo"></span><span class="hi"></span></div>
       </div>
       <div id="rev-map" class="map-wrap" hidden>
         <div class="map-box"><div class="map-inner"><svg class="lines" viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div class="pins"></div></div></div>
@@ -173,6 +179,7 @@
         </div>
       </div>
       <p id="rev-progress" class="hint center"></p>
+      <p id="rev-novote" class="note" hidden>Poucas respostas: sem votação nesta ronda.</p>
 
       <!-- 2. Resposta certa -->
       <div id="rev-answer" class="answer-box reveal-in" hidden>
@@ -233,6 +240,7 @@
   <div id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="numero.js"></script>
   <script src="client.js"></script>
 </body>
 </html>

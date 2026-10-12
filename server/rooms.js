@@ -3,7 +3,15 @@
 const crypto = require('crypto');
 const { scoreRound, shuffle, distance } = require('./game');
 const { distanceToCountry, centerOf } = require('./geo');
-const QUESTIONS = require('./questions.json');
+// Perguntas de mapa: o texto é montado com o artigo guardado de cada país
+// ("os Camarões", "as Filipinas" → "Onde ficam…"; "Angola", sem artigo → "Onde fica Angola?").
+function mapQuestionText(q) {
+  const verb = q.article === 'os' || q.article === 'as' ? 'ficam' : 'fica';
+  const name = q.article ? `${q.article} ${q.label}` : q.label;
+  return `Onde ${verb} ${name}${q.note ? ` (${q.note})` : ''}?`;
+}
+
+const QUESTIONS = require('./questions.json').map((q) => (q.type === 'map' ? { ...q, text: mapQuestionText(q) } : q));
 
 const MAP_SHARE = 0.25; // cerca de 1 em cada 4 perguntas é de mapa (quando há Geografia)
 
@@ -25,6 +33,7 @@ function cleanCategories(list) {
 }
 
 const MIN_PLAYERS = 3;
+const MIN_ANSWERS_TO_VOTE = 3;
 // Com perguntas dos jogadores, quem escreveu não responde: com 3 jogadores sobravam só 2
 // a responder e cada um só podia votar no outro. Por isso são precisos 4.
 const MIN_PLAYERS_WITH_CUSTOM = 4;
@@ -119,6 +128,10 @@ function relativeError(question, dist) {
   return Math.min(10, dist / scale);
 }
 
+function goodForTiebreak(q) {
+  return q.type !== 'map' && (Math.abs(q.answer) >= 100 || !Number.isInteger(q.answer));
+}
+
 // O que se mostra como resposta certa e como se mede a distância de cada palpite.
 function correctOf(question) {
   return question.type === 'map' ? question.label : question.answer;
@@ -145,6 +158,7 @@ class Room {
     this.standings = null; // classificação final: [{ ids, settled }], do 1.º lugar para baixo
     this.tiebreak = null;
     this.tiebreakCount = 0;
+    this.tiebreakWinner = null; // quem ganhou o desempate do 1.º lugar
     this.timer = null;
     this.deadline = null;
     this.hostTimer = null;
@@ -277,9 +291,20 @@ class Room {
     return cats.length ? QUESTIONS.filter((q) => cats.includes(q.category)) : QUESTIONS;
   }
 
-  // Quantas perguntas o jogo vai mesmo ter (menos do que o pedido se as categorias não chegarem).
+  // Quantas perguntas dos jogadores vão entrar: as já guardadas e as que faltam aos jogadores
+  // ligados (o jogo só começa quando todos os ligados tiverem escrito a sua).
+  customNeeded() {
+    if (!this.settings.playerQuestions) return 0;
+    const ids = new Set(this.activeCustomQuestions().map((q) => q.author));
+    for (const p of this.connectedPlayers()) ids.add(p.id);
+    return ids.size;
+  }
+
+  // Quantas perguntas o jogo vai mesmo ter: pelo menos uma por cada pergunta dos jogadores
+  // (para saírem todas), e menos do que o pedido se as categorias não chegarem.
   plannedRounds() {
-    return Math.min(this.settings.rounds, this.questionPool().length + this.activeCustomQuestions().length);
+    const wanted = Math.min(MAX_ROUNDS, Math.max(this.settings.rounds, this.customNeeded()));
+    return Math.min(wanted, this.questionPool().length + this.activeCustomQuestions().length);
   }
 
   // --- Fluxo do jogo -----------------------------------------------------
@@ -304,6 +329,7 @@ class Room {
     this.standings = null;
     this.tiebreak = null;
     this.tiebreakCount = 0;
+    this.tiebreakWinner = null;
     this.nextRound();
   }
 
@@ -338,10 +364,12 @@ class Room {
     return picked;
   }
 
-  // Pergunta extra para desempate (sempre de números, das categorias escolhidas se houver).
+  // Pergunta extra para desempate: só de números com resposta grande (≥ 100) ou com casas
+  // decimais (anos, alturas, distâncias…), para não haver empates repetidos em respostas
+  // pequenas e exatas. Das categorias escolhidas, se houver; senão de todo o banco.
   pickTiebreakQuestion() {
-    const numbers = this.questionPool().filter((q) => q.type !== 'map');
-    return this.pickFrom(numbers.length ? numbers : QUESTIONS.filter((q) => q.type !== 'map'), 1)[0];
+    const fromPool = this.questionPool().filter(goodForTiebreak);
+    return this.pickFrom(fromPool.length ? fromPool : QUESTIONS.filter(goodForTiebreak), 1)[0];
   }
 
   nextRound() {
@@ -428,11 +456,13 @@ class Room {
 
   endAnswering() {
     if (this.phase !== 'answering') return;
-    // Com menos de 2 respostas não há em quem votar: revela logo.
-    if (this.current.answers.size < 2) {
+    // Com menos de 3 respostas a votação não faz sentido (com 2, cada um só podia votar
+    // no outro): revela logo, sem pontos de voto nesta ronda.
+    if (this.current.answers.size < MIN_ANSWERS_TO_VOTE) {
       this.reveal();
       return;
     }
+    this.current.voting = true;
     this.setPhase('voting', this.settings.voteTime, () => this.reveal());
     this.checkProgress();
   }
@@ -440,6 +470,7 @@ class Room {
   reveal() {
     if (this.phase !== 'answering' && this.phase !== 'voting') return;
     const { question, answers, votes } = this.current;
+    if (!this.current.voting) votes.clear();
     this.current.result = scoreRound(correctOf(question), answers, votes, measureFor(question));
     for (const [id, pts] of Object.entries(this.current.result.points)) {
       const player = this.players.get(id);
@@ -447,9 +478,10 @@ class Room {
     }
     this.recordStats(question, this.current.result, answers.size);
     // Revelação em passos, avançada pelo anfitrião: um palpite de cada vez (do mais longe
-    // para o mais perto), depois a resposta certa, os votos e por fim os pontos.
-    this.current.step = 1;
-    this.current.steps = answers.size + 3;
+    // para o mais perto), depois a resposta certa, os votos (se houve votação) e por fim
+    // os pontos. Sem respostas, vai direto ao fim da ronda.
+    this.current.steps = answers.size + (this.current.voting ? 3 : 2);
+    this.current.step = answers.size === 0 ? this.current.steps : 1;
     this.setPhase('reveal');
   }
 
@@ -527,9 +559,10 @@ class Room {
     this.nextTiebreak();
   }
 
-  // --- Desempates no fim do jogo ----------------------------------------
-  // Cada grupo de jogadores com os mesmos pontos responde a uma pergunta extra,
-  // sem votação: quem fica mais perto fica à frente. Repete enquanto houver empate.
+  // --- Desempate do 1.º lugar no fim do jogo ----------------------------
+  // Se houver empate no 1.º lugar, os empatados respondem a uma pergunta extra, sem
+  // votação: quem fica mais perto ganha. Repete enquanto houver empate no 1.º lugar.
+  // Os empates mais abaixo ficam como empate na classificação final.
 
   buildStandings() {
     const sorted = [...this.players.values()].sort((a, b) => b.score - a.score);
@@ -539,7 +572,7 @@ class Room {
       if (last && last.score === p.score) last.ids.push(p.id);
       else tiers.push({ score: p.score, ids: [p.id] });
     }
-    return tiers.map((t) => ({ ids: t.ids, settled: t.ids.length === 1 }));
+    return tiers.map((t, i) => ({ ids: t.ids, settled: i > 0 || t.ids.length === 1 }));
   }
 
   nextTiebreak() {
@@ -587,8 +620,10 @@ class Room {
       else groups.push([id]);
     }
     const unanswered = tb.ids.filter((id) => !tb.answers.has(id));
-    const tiers = groups.map((ids) => ({ ids, settled: ids.length === 1 }));
+    // Só o grupo da frente pode continuar empatado (e ir a nova pergunta).
+    const tiers = groups.map((ids, i) => ({ ids, settled: i > 0 || ids.length === 1 }));
     if (unanswered.length) tiers.push({ ids: unanswered, settled: true });
+    if (groups.length && groups[0].length === 1) this.tiebreakWinner = groups[0][0];
 
     const index = this.standings.findIndex((t) => t.ids === tb.ids);
     this.standings.splice(index, 1, ...tiers);
@@ -604,6 +639,7 @@ class Room {
     this.questions = [];
     this.standings = null;
     this.tiebreak = null;
+    this.tiebreakWinner = null;
     this.customQuestions.clear(); // no jogo seguinte cada um escreve uma pergunta nova
     for (const p of this.players.values()) p.score = 0;
     // Quem saiu durante o jogo não fica a ocupar lugar na sala nova.
@@ -630,8 +666,11 @@ class Room {
       hostId: this.hostId,
       round: this.round,
       totalRounds: this.questions.length || this.settings.rounds,
-      minRounds: MIN_ROUNDS,
+      // Com perguntas dos jogadores, o mínimo sobe para caberem as de todos.
+      minRounds: Math.min(MAX_ROUNDS, Math.max(MIN_ROUNDS, this.customNeeded())),
+      customNeeded: this.customNeeded(),
       maxRounds: Math.min(MAX_ROUNDS, QUESTIONS.length),
+      tiebreakWinner: this.tiebreakWinner,
       minPlayers: this.minPlayers(),
       // Perguntas dos jogadores: só se diz quem já escreveu; o texto fica com o autor.
       customReady: [...this.customQuestions.keys()],
@@ -672,6 +711,7 @@ class Room {
           votes: Object.fromEntries(cur.votes),
           step: cur.step,
           steps: cur.steps,
+          voting: Boolean(cur.voting),
           ...cur.result,
         };
       }
@@ -723,6 +763,8 @@ function sweepIdleRooms(now = Date.now()) {
 
 module.exports = {
   Room,
+  QUESTIONS,
+  goodForTiebreak,
   GameError,
   createRoom,
   getRoom,

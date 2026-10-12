@@ -38,7 +38,6 @@
   { "text": "Qual a velocidade máxima do comboio Alfa Pendular?", "answer": 220, "unit": "km/h" },
   { "text": "Qual a lotação do Estádio da Luz?", "answer": 64642, "unit": "lugares" },
   { "text": "Quantos castelos tem a bandeira de Portugal?", "answer": 7 },
-  { "text": "Quantos besantes (pontos brancos) há, no total, nas quinas da bandeira de Portugal?", "answer": 25 },
   { "text": "Quantos países integram a CPLP (Comunidade dos Países de Língua Portuguesa)?", "answer": 9 },
 
   { "text": "Em que ano foi o 25 de Abril, a Revolução dos Cravos?", "answer": 1974 },
@@ -66,7 +65,6 @@
   { "text": "Em que ano foi fundado o Sport Lisboa e Benfica?", "answer": 1904 },
   { "text": "Em que ano foi fundado o Sporting Clube de Portugal?", "answer": 1906 },
   { "text": "Durante quantos anos foi Salazar Presidente do Conselho de Ministros?", "answer": 36, "unit": "anos" },
-  { "text": "Quantos anos durou o Estado Novo (de 1933 a 1974)?", "answer": 41, "unit": "anos" },
   { "text": "Quantos cantos tem \"Os Lusíadas\"?", "answer": 10 },
   { "text": "Quantas estrofes tem \"Os Lusíadas\"?", "answer": 1102 },
 
@@ -113,17 +111,13 @@
   { "text": "Quantos elementos tem a tabela periódica?", "answer": 118 },
   { "text": "Qual o número atómico do ouro?", "answer": 79 },
   { "text": "Qual a temperatura de fusão do ferro?", "answer": 1538, "unit": "°C" },
-  { "text": "A quantos graus Fahrenheit ferve a água ao nível do mar?", "answer": 212, "unit": "°F" },
   { "text": "Qual a velocidade mínima do vento num furacão de categoria 5?", "answer": 252, "unit": "km/h" },
   { "text": "Qual a velocidade de cruzeiro aproximada de um avião comercial?", "answer": 900, "unit": "km/h" },
 
   { "text": "Quantos zeros tem um bilião (em português de Portugal)?", "answer": 12 },
-  { "text": "Qual é a soma de todas as faces de um dado de seis faces?", "answer": 21 },
   { "text": "Quantos números tem uma roleta europeia, contando com o zero?", "answer": 37 },
   { "text": "Quantas peças tem um jogo de dominó tradicional?", "answer": 28 },
   { "text": "Quantas faces tem um icosaedro?", "answer": 20 },
-  { "text": "Quantas casas tem um tabuleiro de xadrez?", "answer": 64 },
-  { "text": "Quantas cartas tem um baralho, sem contar com os jokers?", "answer": 52 },
   { "text": "Quantas letras tem o alfabeto português?", "answer": 26 },
   { "text": "Quantos versos tem um soneto?", "answer": 14 },
   { "text": "Quantas sílabas tem um haiku tradicional?", "answer": 17 },

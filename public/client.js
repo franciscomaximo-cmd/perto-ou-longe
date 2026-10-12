@@ -132,11 +132,17 @@
 
   // --- Configuração da sala (só o anfitrião mexe) --------------------------
 
-  for (const [id, out] of [['#set-answer', '#out-answer'], ['#set-vote', '#out-vote']]) {
-    const input = $(id);
-    input.addEventListener('input', () => { $(out).textContent = formatTime(Number(input.value)); });
+  const SETTINGS = [
+    { input: '#set-rounds', out: '#out-rounds', key: 'rounds', format: (n) => String(n) },
+    { input: '#set-answer', out: '#out-answer', key: 'answerTime', format: formatTime },
+    { input: '#set-vote', out: '#out-vote', key: 'voteTime', format: formatTime },
+  ];
+
+  for (const s of SETTINGS) {
+    const input = $(s.input);
+    input.addEventListener('input', () => { $(s.out).textContent = s.format(Number(input.value)); });
     input.addEventListener('change', () => {
-      act('settings:update', { answerTime: Number($('#set-answer').value), voteTime: Number($('#set-vote').value) });
+      act('settings:update', Object.fromEntries(SETTINGS.map((x) => [x.key, Number($(x.input).value)])));
     });
   }
 
@@ -246,17 +252,19 @@
     $('#lobby-players').replaceChildren(...state.players.map((p) => playerRow(p)));
 
     const host = isHost();
-    for (const [id, out, key] of [['#set-answer', '#out-answer', 'answerTime'], ['#set-vote', '#out-vote', 'voteTime']]) {
-      const input = $(id);
+    $('#set-rounds').min = state.minRounds;
+    $('#set-rounds').max = state.maxRounds;
+    for (const s of SETTINGS) {
+      const input = $(s.input);
       input.disabled = !host;
       // Não mexe no regulador enquanto o anfitrião o está a arrastar.
       if (document.activeElement !== input) {
-        input.value = state.settings[key];
-        $(out).textContent = formatTime(state.settings[key]);
+        input.value = state.settings[s.key];
+        $(s.out).textContent = s.format(state.settings[s.key]);
       }
     }
     $('#settings-hint').textContent = host
-      ? 'Arrasta até ao início para jogar sem limite de tempo.'
+      ? 'Nos tempos, arrasta até ao início para jogar sem limite.'
       : 'Só o anfitrião pode mudar a configuração.';
 
     const missing = state.minPlayers - online;

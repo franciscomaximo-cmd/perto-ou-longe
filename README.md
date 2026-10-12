@@ -5,8 +5,9 @@ Jogo multijogador para telemóveis. Todos respondem com um número à mesma perg
 - Quem fica **mais perto** ganha 1 ponto.
 - Quem vota no **mais longe** ganha 1 ponto.
 - Empates dão ponto a todos. Ninguém pode votar em si próprio.
-- 10 perguntas por jogo, de 3 a 12 jogadores.
-- O anfitrião (quem cria a sala) pode definir, na configuração da sala, o tempo para responder e para votar (de 15 a 180 s, ou sem limite).
+- De 3 a 12 jogadores.
+- O anfitrião (quem cria a sala) define, na configuração da sala, o número de perguntas (de 3 a 30, 10 por defeito) e o tempo para responder e para votar (de 15 a 180 s, ou sem limite).
+- As perguntas são de conhecimento: nenhuma se resolve com contas.
 
 ## Correr localmente
 

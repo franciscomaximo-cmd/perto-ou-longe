@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { Room, GameError, clampTime, TOTAL_ROUNDS } = require('../server/rooms');
+const { Room, GameError, clampTime, clampRounds, DEFAULT_ROUNDS } = require('../server/rooms');
 
 function setup(names = ['Ana', 'Rui', 'Eva']) {
   const room = new Room('TEST', () => {});
@@ -30,7 +30,14 @@ test('só o anfitrião começa e configura', () => {
   assert.throws(() => room.startGame(ids[1]), /anfitrião/);
   assert.throws(() => room.updateSettings(ids[1], { answerTime: 30 }), /anfitrião/);
   room.updateSettings(ids[0], { answerTime: 30, voteTime: 5 });
-  assert.deepEqual(room.settings, { answerTime: 30, voteTime: 10 });
+  assert.deepEqual(room.settings, { rounds: DEFAULT_ROUNDS, answerTime: 30, voteTime: 10 });
+});
+
+test('clampRounds: entre 3 e 30, 10 por defeito', () => {
+  assert.equal(clampRounds('abc'), 10);
+  assert.equal(clampRounds(1), 3);
+  assert.equal(clampRounds(15), 15);
+  assert.equal(clampRounds(500), 30);
 });
 
 test('clampTime: 0 desliga, limites entre 10 e 180', () => {
@@ -83,17 +90,28 @@ test('um jogador desligado não bloqueia a ronda', () => {
   assert.equal(room.phase, 'voting');
 });
 
-test('o jogo termina ao fim de 10 perguntas', () => {
-  const { room, ids } = setup();
-  room.startGame(ids[0]);
-  for (let i = 1; i <= TOTAL_ROUNDS; i++) {
-    assert.equal(room.round, i);
-    room.forceAdvance(ids[0]);
-    room.nextQuestion(ids[0]);
+for (const rounds of [DEFAULT_ROUNDS, 5, 30]) {
+  test(`o jogo termina ao fim de ${rounds} perguntas, sem repetir`, () => {
+    const { room, ids } = setup();
+    room.updateSettings(ids[0], { rounds });
+    room.startGame(ids[0]);
+    assert.equal(room.stateFor(ids[1]).totalRounds, rounds);
+    for (let i = 1; i <= rounds; i++) {
+      assert.equal(room.round, i);
+      room.forceAdvance(ids[0]);
+      room.nextQuestion(ids[0]);
+    }
+    assert.equal(room.phase, 'end');
+    const asked = new Set(room.questions.map((q) => q.text));
+    assert.equal(asked.size, rounds);
+  });
+}
+
+test('nenhuma pergunta pede contas', () => {
+  const questions = require('../server/questions.json');
+  for (const q of questions) {
+    assert.doesNotMatch(q.text, /×|elevado|\bsoma\b|Quanto é|segundos tem|horas tem/, q.text);
   }
-  assert.equal(room.phase, 'end');
-  const asked = new Set(room.questions.map((q) => q.text));
-  assert.equal(asked.size, TOTAL_ROUNDS);
 });
 
 test('o temporizador fecha a fase de respostas', async () => {

@@ -38,7 +38,7 @@
           <li>Todos respondem com um número à mesma pergunta.</li>
           <li>Sem ver os palpites, cada um vota em quem acha que ficou <strong>mais longe</strong> (não vale votar em si próprio).</li>
           <li>Quem ficou <strong>mais perto</strong> ganha 1 ponto. Quem acertou no <strong>mais longe</strong> ganha 1 ponto.</li>
-          <li>Empates dão ponto a todos. São 10 perguntas por jogo, com pelo menos 3 jogadores.</li>
+          <li>Empates dão ponto a todos. O anfitrião escolhe quantas perguntas tem o jogo (10 por defeito). São precisos pelo menos 3 jogadores.</li>
         </ol>
       </details>
     </section>
@@ -54,6 +54,10 @@
 
       <div class="card">
         <h2>Configuração</h2>
+        <label class="slider">
+          <span>Número de perguntas <output id="out-rounds"></output></span>
+          <input type="range" id="set-rounds" min="3" max="30" step="1">
+        </label>
         <label class="slider">
           <span>Tempo para responder <output id="out-answer"></output></span>
           <input type="range" id="set-answer" min="0" max="180" step="15">

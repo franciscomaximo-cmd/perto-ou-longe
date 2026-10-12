@@ -6,7 +6,9 @@ const QUESTIONS = require('./questions.json');
 
 const MIN_PLAYERS = 3;
 const MAX_PLAYERS = 12;
-const TOTAL_ROUNDS = 10;
+const DEFAULT_ROUNDS = 10;
+const MIN_ROUNDS = 3;
+const MAX_ROUNDS = 30;
 const MAX_NAME_LENGTH = 16;
 const MAX_TIME_SECONDS = 180;
 const MIN_TIME_SECONDS = 10;
@@ -44,13 +46,19 @@ function clampTime(value) {
   return Math.min(MAX_TIME_SECONDS, Math.max(MIN_TIME_SECONDS, n));
 }
 
+function clampRounds(value) {
+  const n = Math.round(Number(value));
+  if (!Number.isFinite(n)) return DEFAULT_ROUNDS;
+  return Math.min(MAX_ROUNDS, QUESTIONS.length, Math.max(MIN_ROUNDS, n));
+}
+
 class Room {
   constructor(code, notify) {
     this.code = code;
     this.notify = notify; // chamado quando o estado muda fora de um pedido de um jogador (temporizadores)
     this.players = new Map();
     this.hostId = null;
-    this.settings = { answerTime: 0, voteTime: 0 };
+    this.settings = { rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0 };
     this.phase = 'lobby'; // lobby | answering | voting | reveal | end
     this.round = 0;
     this.questions = [];
@@ -154,6 +162,7 @@ class Room {
   updateSettings(playerId, settings) {
     this.requireHost(playerId);
     if (this.phase !== 'lobby') throw new GameError('Só podes mudar a configuração antes de começar.');
+    if (settings.rounds !== undefined) this.settings.rounds = clampRounds(settings.rounds);
     if (settings.answerTime !== undefined) this.settings.answerTime = clampTime(settings.answerTime);
     if (settings.voteTime !== undefined) this.settings.voteTime = clampTime(settings.voteTime);
     this.touch();
@@ -175,12 +184,13 @@ class Room {
 
   // Evita repetir perguntas entre jogos na mesma sala, enquanto houver perguntas novas.
   pickQuestions() {
+    const rounds = this.settings.rounds;
     let available = QUESTIONS.filter((_, i) => !this.usedQuestions.has(i));
-    if (available.length < TOTAL_ROUNDS) {
+    if (available.length < rounds) {
       this.usedQuestions.clear();
       available = QUESTIONS;
     }
-    const picked = shuffle(available).slice(0, TOTAL_ROUNDS);
+    const picked = shuffle(available).slice(0, rounds);
     for (const q of picked) this.usedQuestions.add(QUESTIONS.indexOf(q));
     return picked;
   }
@@ -291,7 +301,7 @@ class Room {
   nextQuestion(playerId) {
     this.requireHost(playerId);
     if (this.phase !== 'reveal') throw new GameError('Ainda não é altura de avançar.');
-    if (this.round >= TOTAL_ROUNDS) this.setPhase('end');
+    if (this.round >= this.questions.length) this.setPhase('end');
     else this.nextRound();
   }
 
@@ -300,6 +310,7 @@ class Room {
     if (this.phase !== 'end') throw new GameError('O jogo ainda não terminou.');
     this.current = null;
     this.round = 0;
+    this.questions = [];
     for (const p of this.players.values()) p.score = 0;
     // Quem saiu durante o jogo não fica a ocupar lugar na sala nova.
     for (const p of [...this.players.values()]) {
@@ -324,7 +335,9 @@ class Room {
       me: playerId,
       hostId: this.hostId,
       round: this.round,
-      totalRounds: TOTAL_ROUNDS,
+      totalRounds: this.questions.length || this.settings.rounds,
+      minRounds: MIN_ROUNDS,
+      maxRounds: Math.min(MAX_ROUNDS, QUESTIONS.length),
       minPlayers: MIN_PLAYERS,
       maxPlayers: MAX_PLAYERS,
       settings: { ...this.settings },
@@ -390,7 +403,8 @@ module.exports = {
   deleteRoom,
   sweepIdleRooms,
   clampTime,
+  clampRounds,
   MIN_PLAYERS,
   MAX_PLAYERS,
-  TOTAL_ROUNDS,
+  DEFAULT_ROUNDS,
 };

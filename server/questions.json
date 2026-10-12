@@ -120,8 +120,6 @@
   { "text": "Quantas horas tem um ano que não seja bissexto?", "answer": 8760, "unit": "horas" },
   { "text": "Quantos segundos tem um dia?", "answer": 86400, "unit": "segundos" },
   { "text": "Quantos segundos tem uma semana?", "answer": 604800, "unit": "segundos" },
-  { "text": "Quanto é 17 × 23?", "answer": 391 },
-  { "text": "Quanto é 2 elevado a 16?", "answer": 65536 },
   { "text": "Quantos zeros tem um bilião (em português de Portugal)?", "answer": 12 },
   { "text": "Qual é a soma de todas as faces de um dado de seis faces?", "answer": 21 },
   { "text": "Quantos números tem uma roleta europeia, contando com o zero?", "answer": 37 },

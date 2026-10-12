@@ -117,9 +117,6 @@
   { "text": "Qual a velocidade mínima do vento num furacão de categoria 5?", "answer": 252, "unit": "km/h" },
   { "text": "Qual a velocidade de cruzeiro aproximada de um avião comercial?", "answer": 900, "unit": "km/h" },
 
-  { "text": "Quantas horas tem um ano que não seja bissexto?", "answer": 8760, "unit": "horas" },
-  { "text": "Quantos segundos tem um dia?", "answer": 86400, "unit": "segundos" },
-  { "text": "Quantos segundos tem uma semana?", "answer": 604800, "unit": "segundos" },
   { "text": "Quantos zeros tem um bilião (em português de Portugal)?", "answer": 12 },
   { "text": "Qual é a soma de todas as faces de um dado de seis faces?", "answer": 21 },
   { "text": "Quantos números tem uma roleta europeia, contando com o zero?", "answer": 37 },

@@ -349,17 +349,18 @@
     const answered = Object.keys(r.answers).sort((a, b) => r.distances[a] - r.distances[b]);
     const rows = answered.map((id) => {
       const near = r.closest.includes(id);
+      const exact = (r.exact || []).includes(id);
       const far = r.farthest.includes(id);
       const votes = votesFor(id);
       const gain = r.points[id] || 0;
       return el('li', { class: near ? 'near' : far ? 'far' : '' }, [
         el('span', { class: 'name' }, [
           nameOf(id),
-          near ? el('span', { class: 'badge near', text: 'mais perto' }) : null,
+          near ? el('span', { class: 'badge near', text: exact ? 'em cheio!' : 'mais perto' }) : null,
           far ? el('span', { class: 'badge far', text: 'mais longe' }) : null,
         ]),
         el('span', { class: 'value', text: fmt(r.answers[id]) }),
-        el('span', { class: 'meta', text: `falhou por ${fmt(r.distances[id])} · ${votes} voto${votes === 1 ? '' : 's'}` }),
+        el('span', { class: 'meta', text: `${exact ? 'acertou no número' : `falhou por ${fmt(r.distances[id])}`} · ${votes} voto${votes === 1 ? '' : 's'}` }),
         el('span', { class: 'gain', text: gain ? `+${gain}` : '' }),
       ]);
     });

@@ -20,7 +20,7 @@ function scoreRound(correct, answers, votes) {
 
   const ids = Object.keys(distances);
   if (ids.length === 0) {
-    return { distances, closest: [], farthest: [], correctVoters: [], points: {} };
+    return { distances, closest: [], exact: [], farthest: [], correctVoters: [], points: {} };
   }
 
   const values = Object.values(distances);
@@ -30,10 +30,11 @@ function scoreRound(correct, answers, votes) {
   const farthest = ids.filter((id) => distances[id] === max);
 
   const points = {};
-  const give = (id) => { points[id] = (points[id] || 0) + 1; };
+  const give = (id, n = 1) => { points[id] = (points[id] || 0) + n; };
 
-  // Empate no mais perto: todos ganham.
-  closest.forEach(give);
+  // Empate no mais perto: todos ganham. Quem acerta no número exato ganha 2 em vez de 1.
+  const exact = min === 0 ? closest : [];
+  closest.forEach((id) => give(id, min === 0 ? 2 : 1));
 
   // Empate no mais longe: votar em qualquer um dos empatados conta como acerto.
   const correctVoters = [];
@@ -44,7 +45,7 @@ function scoreRound(correct, answers, votes) {
     }
   }
 
-  return { distances, closest, farthest, correctVoters, points };
+  return { distances, closest, exact, farthest, correctVoters, points };
 }
 
 function shuffle(list) {

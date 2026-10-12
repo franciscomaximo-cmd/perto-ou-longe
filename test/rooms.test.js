@@ -77,7 +77,8 @@ test('uma ronda completa: responder, votar, revelar e pontuar', () => {
   assert.equal(room.phase, 'reveal');
 
   const scores = Object.fromEntries([...room.players.values()].map((p) => [p.id, p.score]));
-  assert.deepEqual(scores, { [ana]: 2, [rui]: 1, [eva]: 0 });
+  // Ana acertou no número exato (2) e no mais longe (1).
+  assert.deepEqual(scores, { [ana]: 3, [rui]: 1, [eva]: 0 });
   assert.equal(room.stateFor(rui).result.answers[eva], correct + 1000);
 });
 

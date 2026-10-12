@@ -2,7 +2,7 @@
 
 Jogo multijogador para telemóveis. Todos respondem com um número à mesma pergunta e depois votam em quem acham que ficou **mais longe** da resposta certa.
 
-- Quem fica **mais perto** ganha 1 ponto.
+- Quem fica **mais perto** ganha 1 ponto. Se acertar no número exato, ganha 2.
 - Quem vota no **mais longe** ganha 1 ponto.
 - Empates dão ponto a todos. Ninguém pode votar em si próprio.
 - De 3 a 12 jogadores.

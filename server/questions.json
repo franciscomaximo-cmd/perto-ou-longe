@@ -363,7 +363,7 @@
   { "text": "Quantas teclas pretas tem um piano?", "answer": 36, "category": "ciencia" },
   { "text": "Quantos livros tem a saga principal de Harry Potter?", "answer": 7, "category": "ciencia" },
   { "text": "Quantas peças visíveis tem um cubo de Rubik clássico?", "answer": 26, "category": "ciencia" },
-  { "text": "Quantas vértebras tem a coluna humana?", "answer": 33, "category": "ciencia" },
+  { "text": "Quantas vértebras tem a coluna humana à nascença?", "answer": 33, "category": "ciencia" },
   { "text": "Quantos pares de costelas tem o ser humano?", "answer": 12, "category": "ciencia" },
   { "text": "Quantos ossos tem o crânio humano?", "answer": 22, "category": "ciencia" },
   { "text": "Quantas horas por dia dorme, aproximadamente, um coala?", "answer": 20, "unit": "horas", "category": "ciencia" },

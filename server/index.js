@@ -11,6 +11,8 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/health', (req, res) => res.send('ok'));
+// Gerador de QR codes (MIT, sem dependências), servido daqui como o socket.io.js.
+app.get('/vendor/qrcode.js', (req, res) => res.sendFile(require.resolve('qrcode-generator')));
 
 const server = http.createServer(app);
 const io = new Server(server);
@@ -98,7 +100,8 @@ io.on('connection', (socket) => {
     'vote:submit': (room, id, p) => room.submitVote(id, p.targetId),
     'round:force': (room, id) => room.forceAdvance(id),
     'round:next': (room, id) => room.nextQuestion(id),
-    'reveal:step': (room, id) => room.revealStep(id),
+    'reveal:skip': (room, id) => room.revealSkip(id),
+    'player:emoji': (room, id, p) => room.setEmoji(id, p.emoji),
     'game:lobby': (room, id) => room.backToLobby(id),
   };
   for (const [event, action] of Object.entries(actions)) {

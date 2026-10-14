@@ -7,29 +7,37 @@
 
   const SESSION_KEY = 'pertoOuLonge.session';
   const NAME_KEY = 'pertoOuLonge.name';
+  const SOUND_KEY = 'pertoOuLonge.sound';
   const numberFormat = new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 3 });
-
-  let state = null; // último estado recebido do servidor
-  let session = load(SESSION_KEY); // { code, playerId, name } para voltar à sala
-  let deadline = null;
-  let lastRound = null;
-  let selectedVote = null;
+  const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // --- Utilitários --------------------------------------------------------
 
-  function load(key) {
-    try { return JSON.parse(localStorage.getItem(key)); } catch { return null; }
+  // O nome e o som ficam no localStorage (comuns a todos os separadores); a sessão fica no
+  // sessionStorage, para cada separador ser um jogador diferente. Recarregar a página no
+  // mesmo separador mantém a sessão, por isso volta-se à sala na mesma.
+  function load(key, storage = localStorage) {
+    try { return JSON.parse(storage.getItem(key)); } catch { return null; }
   }
-  function store(key, value) {
+  function store(key, value, storage = localStorage) {
     try {
-      if (value == null) localStorage.removeItem(key);
-      else localStorage.setItem(key, JSON.stringify(value));
+      if (value == null) storage.removeItem(key);
+      else storage.setItem(key, JSON.stringify(value));
     } catch { /* modo privado: segue sem guardar */ }
   }
   function saveSession(value) {
     session = value;
-    store(SESSION_KEY, value);
+    store(SESSION_KEY, value, sessionStorage);
   }
+  // Versões antigas guardavam a sessão no localStorage, partilhada entre separadores.
+  store(SESSION_KEY, null);
+
+  let state = null; // último estado recebido do servidor
+  let session = load(SESSION_KEY, sessionStorage); // { code, playerId, name } para voltar à sala
+  let deadline = null;
+  let lastRound = null;
+  let lastView = null;
+  let selectedVote = null;
 
   function el(tag, props = {}, children = []) {
     const node = document.createElement(tag);
@@ -61,6 +69,13 @@
 
   const player = (id) => (state && state.players.find((p) => p.id === id)) || null;
   const nameOf = (id) => (player(id) ? player(id).name : '?');
+  const colorOf = (id) => (player(id) ? player(id).color : 'var(--muted)');
+  // Emoji do jogador num círculo da sua cor; who() devolve [avatar, nome] para pôr em listas.
+  const avatar = (p) => el('span', { class: 'avatar', style: `--c:${p.color}`, 'aria-hidden': 'true', text: p.emoji || '' });
+  const who = (id) => {
+    const p = player(id);
+    return p ? [avatar(p), p.name] : ['?'];
+  };
   const isHost = () => state && state.hostId === state.me;
 
   // Envia uma ação e mostra o erro, se houver.
@@ -114,7 +129,7 @@
   }));
 
   $('#btn-share').addEventListener('click', async () => {
-    const url = `${location.origin}/?sala=${state.code}`;
+    const url = inviteUrl();
     const text = `Junta-te ao Perto ou Longe! Código da sala: ${state.code}`;
     try {
       if (navigator.share) await navigator.share({ title: 'Perto ou Longe', text, url });
@@ -164,7 +179,7 @@
   $('#btn-start').addEventListener('click', () => act('game:start'));
   $$('.btn-force').forEach((btn) => btn.addEventListener('click', () => act('round:force')));
   $('#btn-next').addEventListener('click', () => act('round:next'));
-  $('#btn-step').addEventListener('click', () => act('reveal:step'));
+  $('#btn-step').addEventListener('click', () => act('reveal:skip'));
   $('#btn-tb-next').addEventListener('click', () => act('round:next'));
   $('#btn-again').addEventListener('click', () => act('game:lobby'));
 
@@ -206,11 +221,24 @@
     y: ((MAP_TOP - lat) / (MAP_TOP - MAP_BOTTOM)) * 100,
   });
 
-  function pin(point, cls = '', label = '') {
+  function pin(point, cls = '', label = '', color = null) {
     const { x, y } = toPercent(point);
-    return el('span', { class: `pin ${cls}`, style: `left:${x}%;top:${y}%` },
+    return el('span', { class: `pin ${cls}`, style: `left:${x}%;top:${y}%${color ? `;--c:${color}` : ''}` },
       label ? el('span', { class: 'pin-label', text: label }) : null);
   }
+
+  // Muda o zoom e põe o ponto (cx, cy), em frações do mapa, no centro da vista.
+  function setZoom(wrap, level, cx, cy) {
+    const box = wrap.querySelector('.map-box');
+    const inner = wrap.querySelector('.map-inner');
+    wrap.dataset.zoom = String(level);
+    inner.style.width = `${ZOOMS[level] * 100}%`;
+    box.scrollLeft = cx * inner.offsetWidth - box.clientWidth / 2;
+    box.scrollTop = cy * inner.offsetHeight - box.clientHeight / 2;
+    if (wrap.relayout) wrap.relayout(); // com outro zoom, as etiquetas chocam de outra maneira
+  }
+
+  const narrowScreen = () => window.innerWidth < 600;
 
   // Põe o SVG no mapa (quando já chegou) e liga os botões de zoom uma vez.
   function setupMap(wrap) {
@@ -226,12 +254,42 @@
       // Mantém o centro da vista ao aproximar ou afastar.
       const cx = (box.scrollLeft + box.clientWidth / 2) / inner.offsetWidth;
       const cy = (box.scrollTop + box.clientHeight / 2) / inner.offsetHeight;
-      wrap.dataset.zoom = String(level);
-      inner.style.width = `${ZOOMS[level] * 100}%`;
-      box.scrollLeft = cx * inner.offsetWidth - box.clientWidth / 2;
-      box.scrollTop = cy * inner.offsetHeight - box.clientHeight / 2;
-      if (wrap.relayout) wrap.relayout(); // com outro zoom, as etiquetas chocam de outra maneira
+      setZoom(wrap, level, cx, cy);
     }));
+  }
+
+  // No telemóvel o mapa inteiro fica muito baixo: cada pergunta de mapa começa já ampliada
+  // (2×), centrada no meio do mapa; o jogador arrasta para os lados para procurar.
+  function resetAnswerMap(wrap) {
+    if (wrap.dataset.round === lastRound) return;
+    const inner = wrap.querySelector('.map-inner');
+    if (!inner.querySelector('svg:not(.lines)') || !inner.offsetWidth) return; // ainda sem mapa ou escondido
+    wrap.dataset.round = lastRound;
+    setZoom(wrap, narrowScreen() ? 1 : 0, 0.5, 0.45);
+  }
+
+  // Revelação: enquadra a zona com todos os palpites e o país certo, com alguma margem,
+  // escolhendo o maior zoom em que tudo cabe na vista.
+  function frameMap(wrap, points) {
+    const box = wrap.querySelector('.map-box');
+    const inner = wrap.querySelector('.map-inner');
+    const ps = points.map(toPercent);
+    const minX = Math.min(...ps.map((p) => p.x));
+    const maxX = Math.max(...ps.map((p) => p.x));
+    const minY = Math.min(...ps.map((p) => p.y));
+    const maxY = Math.max(...ps.map((p) => p.y));
+    // Folga mínima, para um só ponto (ou pontos muito juntos) não dar um zoom exagerado.
+    const spanX = Math.max(maxX - minX, 8) * 1.3;
+    const spanY = Math.max(maxY - minY, 14) * 1.3;
+    const maxH = parseFloat(getComputedStyle(box).maxHeight) || Infinity;
+    let level = 0;
+    for (let z = ZOOMS.length - 1; z > 0; z--) {
+      const w = box.clientWidth * ZOOMS[z];
+      const h = (w * (MAP_TOP - MAP_BOTTOM)) / 360;
+      if ((spanX / 100) * w <= box.clientWidth && (spanY / 100) * h <= Math.min(h, maxH)) { level = z; break; }
+    }
+    setZoom(wrap, level, (minX + maxX) / 200, (minY + maxY) / 200);
+    return inner.offsetWidth > 0;
   }
 
   $('#ans-map .map-inner').addEventListener('click', (e) => {
@@ -287,6 +345,12 @@
       selectedVote = null;
       mapPick = null;
     }
+    // Nova fase ou nova pergunta: volta ao topo, para a pergunta não abrir a meio da página.
+    const view = `${phase}|${questionKey}`;
+    if (view !== lastView) {
+      lastView = view;
+      window.scrollTo(0, 0);
+    }
 
     if (phase === 'home') renderHome();
     if (phase === 'lobby') renderLobby();
@@ -330,7 +394,7 @@
     if (p.id === state.me) tags.push('tu');
     if (!p.connected) tags.push('desligado');
     return el('li', { class: p.connected ? '' : 'off' }, [
-      el('span', {}, [p.name, tags.length ? el('span', { class: 'tag', text: tags.join(' · ') }) : null]),
+      el('span', { class: 'who' }, [avatar(p), p.name, tags.length ? el('span', { class: 'tag', text: tags.join(' · ') }) : null]),
       extra || null,
     ]);
   }
@@ -343,6 +407,9 @@
     $('#lobby-players').replaceChildren(...state.players.map((p) => playerRow(p, custom
       ? el('span', { class: 'state', text: state.customReady.includes(p.id) ? 'pergunta ✓' : 'a escrever…' })
       : null)));
+
+    renderEmojiPicker();
+    renderQr();
 
     const host = isHost();
     $('#set-custom').checked = custom;
@@ -382,6 +449,33 @@
       ? `${missing === 1 ? 'Falta 1 jogador' : `Faltam ${missing} jogadores`} para começar (mínimo ${state.minPlayers}).`
       : noQuestion.length ? `Falta a pergunta de: ${noQuestion.join(', ')}.`
       : host ? '' : 'À espera que o anfitrião comece o jogo…';
+  }
+
+  // Emojis: o meu fica marcado; os dos outros jogadores ficam indisponíveis.
+  function renderEmojiPicker() {
+    const me = player(state.me);
+    const taken = new Set(state.players.filter((p) => p.id !== state.me).map((p) => p.emoji));
+    $('#emoji-picker').style.setProperty('--c', me ? me.color : 'var(--accent)');
+    $('#emoji-picker').replaceChildren(...(state.emojis || []).map((e) => el('button', {
+      type: 'button',
+      class: me && me.emoji === e ? 'on' : '',
+      text: e,
+      'aria-label': `Escolher ${e}`,
+      ...(taken.has(e) ? { disabled: '' } : {}),
+      onclick: () => act('player:emoji', { emoji: e }),
+    })));
+  }
+
+  // QR code com o convite (gerado aqui, só quando muda o código da sala).
+  const inviteUrl = () => `${location.origin}/?sala=${state.code}`;
+  function renderQr() {
+    const box = $('#lobby-qr');
+    if (box.dataset.code === state.code || typeof window.qrcode !== 'function') return;
+    const qr = window.qrcode(0, 'M');
+    qr.addData(inviteUrl());
+    qr.make();
+    box.innerHTML = qr.createSvgTag({ cellSize: 4, margin: 2, scalable: true });
+    box.dataset.code = state.code;
   }
 
   // Formulário da pergunta de cada jogador. Só preenche os campos com o que está guardado
@@ -461,8 +555,9 @@
     $('#ans-map').hidden = !isMap;
     if (isMap) {
       setupMap($('#ans-map'));
+      resetAnswerMap($('#ans-map'));
       const point = answered ? state.myAnswer : mapPick;
-      $('#ans-map .pins').replaceChildren(...(point ? [pin(point)] : []));
+      $('#ans-map .pins').replaceChildren(...(point ? [pin(point, '', '', colorOf(state.me))] : []));
       $('#btn-map-answer').hidden = answered;
       $('#btn-map-answer').disabled = !mapPick;
       $('#btn-map-answer').textContent = mapPick ? 'Responder' : 'Toca no mapa para escolher';
@@ -500,9 +595,8 @@
     $('#vote-options').replaceChildren(...candidates.map((id) => el('button', {
       type: 'button',
       class: id === selectedVote ? 'selected' : '',
-      text: nameOf(id),
       onclick: () => { selectedVote = id; renderVote(); },
-    })));
+    }, who(id))));
     progressList('#vote-progress', state.voted);
   }
 
@@ -520,7 +614,19 @@
     return groups;
   }
 
-  function renderScores(sel) {
+  // Posição de cada jogador (empatados partilham a posição) para uns pontos dados.
+  function positionsBy(scoreOf) {
+    const sorted = [...state.players].sort((a, b) => scoreOf(b) - scoreOf(a) || a.name.localeCompare(b.name, 'pt'));
+    const pos = {};
+    sorted.forEach((p, i) => {
+      pos[p.id] = i > 0 && scoreOf(p) === scoreOf(sorted[i - 1]) ? pos[sorted[i - 1].id] : i + 1;
+    });
+    return { pos, order: sorted.map((p) => p.id) };
+  }
+
+  // Classificação. Com `gained` (pontos desta ronda), mostra quantos lugares cada um subiu
+  // ou desceu e, uma vez por `animKey`, faz os jogadores deslizarem da posição antiga.
+  function renderScores(sel, { gained = null, animKey = null } = {}) {
     const groups = standingGroups();
     const top = groups.length ? groups[0][0].score : 0;
     const rows = [];
@@ -530,18 +636,47 @@
       count += group.length;
       for (const p of group) rows.push({ p, position, first: g === 0 && top > 0 });
     }
-    $(sel).replaceChildren(...rows.map(({ p, position, first }) => {
+    // Sem setas quando antes da ronda estavam todos empatados (ex.: na 1.ª ronda):
+    // "desceram" todos do 1.º lugar partilhado, o que não diz nada.
+    const prevScores = gained ? state.players.map((p) => p.score - (gained[p.id] || 0)) : [];
+    const before = gained && new Set(prevScores).size > 1 ? positionsBy((p) => p.score - (gained[p.id] || 0)) : null;
+    const list = $(sel);
+    list.replaceChildren(...rows.map(({ p, position, first }) => {
       const classes = [p.id === state.me ? 'me' : '', first ? 'first' : ''].join(' ');
-      return el('li', { class: classes }, [
+      const moved = before ? before.pos[p.id] - position : 0;
+      return el('li', { class: classes, 'data-id': p.id }, [
         el('span', { class: 'pos', text: `${position}.º` }),
         el('span', { class: 'name' }, [
+          avatar(p),
           p.name,
           // Explica porque está à frente de quem tem os mesmos pontos.
           state.standings && p.id === state.tiebreakWinner ? el('span', { class: 'won-tb', text: '(venceu o desempate)' }) : null,
         ]),
+        moved ? el('span', {
+          class: `move ${moved > 0 ? 'up' : 'down'}`,
+          text: `${moved > 0 ? '↑' : '↓'}${Math.abs(moved)}`,
+          'aria-label': `${moved > 0 ? 'subiu' : 'desceu'} ${plural(Math.abs(moved), 'lugar', 'lugares')}`,
+        }) : null,
         el('span', { class: 'pts', text: `${p.score} pt${p.score === 1 ? '' : 's'}` }),
       ]);
     }));
+
+    // Deslize (técnica FLIP): cada linha começa onde estava antes desta ronda e vai para o sítio novo.
+    if (!before || !animKey || list.dataset.anim === animKey || reducedMotion()) return;
+    list.dataset.anim = animKey;
+    const items = [...list.children];
+    const step = items.length > 1 ? items[1].offsetTop - items[0].offsetTop : 0;
+    if (!step) return;
+    for (const [i, li] of items.entries()) {
+      const from = before.order.indexOf(li.dataset.id);
+      li.style.transition = 'none';
+      li.style.transform = `translateY(${(from - i) * step}px)`;
+    }
+    void list.offsetHeight; // aplica a posição inicial antes de animar
+    for (const li of items) {
+      li.style.transition = 'transform .7s cubic-bezier(.2, .9, .3, 1)';
+      li.style.transform = '';
+    }
   }
 
   // --- Revelação em passos -------------------------------------------------
@@ -554,8 +689,17 @@
     return sorted.length % 2 ? sorted[m] : (sorted[m - 1] + sorted[m]) / 2;
   };
 
-  // Escala da reta: segue os valores visíveis, mas corta os muito afastados (desenhados
-  // na ponta, a tracejado, com uma seta). A resposta certa fica sempre dentro da escala.
+  // Passo "redondo" (1, 2 ou 5 × 10ⁿ) para as pontas da reta terem números legíveis.
+  function niceStep(range) {
+    const raw = range / 10;
+    const pow = 10 ** Math.floor(Math.log10(raw));
+    return [1, 2, 5, 10].map((m) => m * pow).find((s) => s >= raw);
+  }
+
+  // Escala da reta, fixa durante toda a revelação: calculada logo no início com todos os
+  // palpites e a resposta certa, com ~10% de margem e pontas arredondadas. Os palpites muito
+  // afastados ficam de fora (desenhados na ponta, a tracejado, depois de um corte ≪ ≫);
+  // a resposta certa fica sempre dentro.
   function lineScale(values, correct) {
     const sorted = [...values].sort((a, b) => a - b);
     let lo = sorted[0];
@@ -567,11 +711,17 @@
       lo = inside[0];
       hi = inside[inside.length - 1];
     }
-    if (correct != null) { lo = Math.min(lo, correct); hi = Math.max(hi, correct); }
+    lo = Math.min(lo, correct);
+    hi = Math.max(hi, correct);
     if (lo === hi) { lo -= Math.abs(lo) * 0.1 || 1; hi += Math.abs(hi) * 0.1 || 1; }
-    const pad = (hi - lo) * 0.06;
+    const nonNegative = sorted[0] >= 0 && correct >= 0;
+    const pad = (hi - lo) * 0.1;
     lo -= pad;
     hi += pad;
+    const step = niceStep(hi - lo);
+    lo = Math.floor(lo / step) * step;
+    hi = Math.ceil(hi / step) * step;
+    if (nonNegative) lo = Math.max(0, lo); // sem pontas negativas em contagens, anos, alturas…
     return {
       lo, hi,
       pos: (v) => Math.min(100, Math.max(0, ((v - lo) / (hi - lo)) * 100)),
@@ -612,14 +762,14 @@
       box.dataset.round = String(state.round);
     }
     const ids = order.slice(0, shown);
-    const values = ids.map((id) => r.answers[id]);
-    if (showCorrect || !values.length) values.push(r.correct);
-    const scale = lineScale(values, showCorrect ? r.correct : null);
+    const all = order.map((id) => r.answers[id]);
+    const scale = lineScale(all.length ? all : [r.correct], r.correct);
     const unit = state.question.unit;
 
     // Os palpites fora da escala ficam numa zona própria na ponta, depois de um corte (≫),
-    // para não parecerem perto da resposta certa.
-    const cuts = ids.map((id) => scale.clipped(r.answers[id]));
+    // para não parecerem perto da resposta certa. Conta com todos os palpites (não só os
+    // já mostrados), para a reta não mudar a meio da revelação.
+    const cuts = order.map((id) => scale.clipped(r.answers[id]));
     const hasLo = cuts.includes('lo');
     const hasHi = cuts.includes('hi');
     const left = hasLo ? 22 : 4;
@@ -632,6 +782,12 @@
     };
     box.querySelector('.cut-lo').hidden = !hasLo;
     box.querySelector('.cut-hi').hidden = !hasHi;
+    // Valores nas pontas da escala, desde o primeiro palpite.
+    for (const [cls, value, x] of [['.end-lo', scale.lo, left], ['.end-hi', scale.hi, right]]) {
+      const end = box.querySelector(cls);
+      end.textContent = fmt(value);
+      end.style.left = `${x}%`;
+    }
 
     const keep = new Set();
     for (const id of ids) {
@@ -644,10 +800,11 @@
       ].join(' ');
       const valueText = `${cut === 'lo' ? '≪ ' : ''}${fmt(value)}${cut === 'hi' ? ' ≫' : ''}`;
       const mark = upsertMark(marks, id, cls, [
-        el('span', { class: 'tag-box' }, [nameOf(id), el('b', { text: valueText })]),
+        el('span', { class: 'tag-box' }, [...who(id), el('b', { text: valueText })]),
         el('span', { class: 'stem' }),
       ]);
       mark.style.left = `${xOf(value)}%`;
+      mark.style.setProperty('--c', colorOf(id));
       keep.add(id);
     }
     for (const m of marks.querySelectorAll('.mark')) if (!keep.has(m.dataset.key)) m.remove();
@@ -685,20 +842,25 @@
     }
   }
 
-  // Etiquetas dos pinos no mapa: se chocarem com outra já posta, passam para baixo do pino
-  // ou afastam-se uma fila de cada vez.
+  // Etiquetas dos pinos no mapa (deteção de colisões): cada etiqueta tenta, por ordem, ficar
+  // por cima do pino, por baixo, e depois cada vez mais afastada (uma fila de cada vez), até
+  // não tapar nenhuma das já postas nem sair do mapa. Quando fica afastada, uma linha fina
+  // liga-a ao seu pino. A lista por baixo do mapa garante que nada fica ilegível.
   function layoutPinLabels(wrap) {
     const inner = wrap.querySelector('.map-inner').getBoundingClientRect();
-    const placed = [];
-    // Quanto pior é uma posição: choques com outras etiquetas e, pior ainda, ficar fora do
-    // mapa (a etiqueta deixava de se ver).
-    const badness = (a) => placed.filter((b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top).length
+    const placed = [...wrap.querySelectorAll('.pins .pin')].map((p) => p.getBoundingClientRect());
+    const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
+    // Quanto pior é uma posição: choques com etiquetas e pinos e, pior ainda, ficar fora do mapa.
+    const badness = (a) => placed.filter((b) => overlaps(a, b)).length
       + (a.top < inner.top || a.bottom > inner.bottom ? 3 : 0);
     const ROW = 22; // um pouco mais do que a altura de uma etiqueta
-    const options = [0, 1, 2, 3].flatMap((row) => [['above', row], ['below', row]]);
+    const options = [0, 1, 2, 3, 4].flatMap((row) => [['above', row], ['below', row]]);
     const apply = ([side, row], label) => {
       label.style.top = side === 'below' ? `${14 + row * ROW}px` : 'auto';
       label.style.bottom = side === 'above' ? `${14 + row * ROW}px` : 'auto';
+      label.classList.toggle('lead', row > 0);
+      label.classList.toggle('below', side === 'below');
+      label.style.setProperty('--lead', `${row * ROW + 7}px`);
     };
     for (const label of wrap.querySelectorAll('.pins .pin-label')) {
       let best = null;
@@ -735,10 +897,25 @@
     wrap.querySelector('.pins').replaceChildren(
       center ? pin(r.center, 'target') : null,
       ...ids.map((id, i) => pin(r.answers[id], `${clsOf(id)} ${i >= before ? 'appear' : ''}`,
-        `${nameOf(id)} · ${fmt(r.distances[id])} km`)),
+        `${nameOf(id)} · ${fmt(r.distances[id])} km`, colorOf(id))),
     );
     wrap.relayout = () => layoutPinLabels(wrap);
+
+    // Enquadra uma vez por ronda, logo no início, com todos os palpites e o país certo
+    // (depois o jogador pode mexer no zoom à vontade).
+    if (wrap.dataset.framed !== String(state.round) && mapSvg) {
+      const points = Object.values(r.answers).concat(r.center ? [r.center] : []);
+      if (points.length && frameMap(wrap, points)) wrap.dataset.framed = String(state.round);
+    }
     wrap.relayout();
+
+    // Lista por baixo do mapa, do mais perto para o mais longe: lê-se sempre, mesmo com
+    // pinos colados uns aos outros.
+    const byDistance = [...ids].sort((a, b) => r.distances[a] - r.distances[b]);
+    $('#rev-map-list').replaceChildren(...byDistance.map((id) => el('li', { class: clsOf(id) }, [
+      ...who(id),
+      el('span', { class: 'km', text: `— ${fmt(r.distances[id])} km` }),
+    ])));
   }
 
   function renderVotes(r) {
@@ -746,15 +923,142 @@
       ? `Quem ficou mais longe: ${listNames(r.farthest)}.`
       : '';
     const entries = Object.entries(r.votes);
+    const hits = r.correctVoters.length;
+    $('#rev-votes-summary').textContent = entries.length ? `(${plural(hits, 'acertou', 'acertaram')})` : '';
     $('#rev-votes').replaceChildren(...(entries.length ? entries.map(([voter, target], i) => {
       const hit = r.correctVoters.includes(voter);
       return el('li', { class: `reveal-in ${hit ? 'hit' : ''}`, style: `--i:${i}` }, [
-        el('b', { text: nameOf(voter) }),
+        el('b', { class: 'who' }, who(voter)),
         el('span', { class: 'arrow', text: '→' }),
-        el('span', { text: nameOf(target) }),
+        el('span', { class: 'who' }, who(target)),
         el('span', { class: 'ok', text: hit ? '✓ acertou' : '' }),
       ]);
     }) : [el('li', { text: 'Ninguém votou nesta ronda.' })]));
+  }
+
+  // --- Efeitos: contador, confetti e sons ---------------------------------
+
+  // A resposta certa "rola" do zero até ao valor final (~1 s), com as mesmas casas decimais.
+  function countUp(node, value, unit) {
+    if (reducedMotion() || !Number.isFinite(value)) { node.textContent = withUnit(value, unit); return; }
+    const decimals = (String(value).split('.')[1] || '').length;
+    const start = performance.now();
+    const DURATION = 1000;
+    const frame = (now) => {
+      const t = Math.min(1, (now - start) / DURATION);
+      const eased = 1 - (1 - t) ** 3;
+      const v = t < 1 ? Number((value * eased).toFixed(decimals)) : value;
+      node.textContent = withUnit(v, unit);
+      if (t < 1) node.counting = requestAnimationFrame(frame);
+    };
+    cancelAnimationFrame(node.counting);
+    node.counting = requestAnimationFrame(frame);
+  }
+
+  // Confetti leve, desenhado num <canvas> por cima de tudo durante ~2 s.
+  function confetti() {
+    if (reducedMotion()) return;
+    const canvas = el('canvas', { class: 'confetti', 'aria-hidden': 'true' });
+    document.body.append(canvas);
+    const ctx = canvas.getContext('2d');
+    const W = (canvas.width = window.innerWidth);
+    const H = (canvas.height = window.innerHeight);
+    const colors = ['#ffcb47', '#3ddc97', '#f4f1ff', '#4dabf7', '#f783ac', '#9775fa'];
+    const parts = Array.from({ length: 90 }, () => ({
+      x: W / 2 + (Math.random() - 0.5) * W * 0.3,
+      y: H * 0.35,
+      vx: (Math.random() - 0.5) * 9,
+      vy: -Math.random() * 9 - 4,
+      size: 5 + Math.random() * 5,
+      rot: Math.random() * Math.PI,
+      spin: (Math.random() - 0.5) * 0.3,
+      color: colors[Math.floor(Math.random() * colors.length)],
+    }));
+    const start = performance.now();
+    const frame = (now) => {
+      ctx.clearRect(0, 0, W, H);
+      for (const p of parts) {
+        p.vy += 0.25;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.rot += p.spin;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
+        ctx.restore();
+      }
+      if (now - start < 2200) requestAnimationFrame(frame);
+      else canvas.remove();
+    };
+    requestAnimationFrame(frame);
+  }
+
+  // Sons curtos gerados com a Web Audio API (sem ficheiros). Ligados por defeito; a
+  // preferência fica no localStorage. O áudio só arranca depois de um toque no ecrã
+  // (regra dos browsers).
+  let soundOn = load(SOUND_KEY) !== false;
+  let audioCtx = null;
+  function audio() {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) return null;
+    if (!audioCtx) audioCtx = new AC();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  function tone(ctx, freq, at, dur, { type = 'sine', gain = 0.12, to = null } = {}) {
+    const t0 = ctx.currentTime + at;
+    const osc = ctx.createOscillator();
+    const g = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t0);
+    if (to) osc.frequency.exponentialRampToValueAtTime(to, t0 + dur);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(gain, t0 + 0.02);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    osc.connect(g).connect(ctx.destination);
+    osc.start(t0);
+    osc.stop(t0 + dur + 0.05);
+  }
+  const SOUNDS = {
+    tick: (c) => tone(c, 700, 0, 0.09, { type: 'triangle', gain: 0.07 }),
+    reveal: (c) => { tone(c, 523, 0, 0.14); tone(c, 784, 0.12, 0.25); },
+    exact: (c) => [523, 659, 784, 1047].forEach((f, i) => tone(c, f, i * 0.09, 0.22, { type: 'triangle', gain: 0.13 })),
+    far: (c) => tone(c, 330, 0, 0.55, { type: 'sawtooth', gain: 0.05, to: 110 }),
+  };
+  function play(name) {
+    if (!soundOn) return;
+    const c = audio();
+    if (c && c.state === 'running') SOUNDS[name](c);
+  }
+  document.addEventListener('pointerdown', () => { if (soundOn) audio(); }, { once: true });
+
+  function renderSoundButton() {
+    const btn = $('#tb-sound');
+    btn.textContent = soundOn ? '🔊' : '🔇';
+    btn.setAttribute('aria-pressed', String(soundOn));
+    btn.setAttribute('aria-label', soundOn ? 'Som ligado' : 'Som desligado');
+  }
+  $('#tb-sound').addEventListener('click', () => {
+    soundOn = !soundOn;
+    store(SOUND_KEY, soundOn);
+    renderSoundButton();
+    if (soundOn) play('tick');
+  });
+  renderSoundButton();
+
+  // Efeitos de cada passo da revelação: corre uma vez por passo (não a cada atualização).
+  let lastEffect = null;
+  function revealEffects(r, shown, showCorrect) {
+    const key = `${state.round}|${shown}|${showCorrect}`;
+    if (key === lastEffect) return;
+    const fresh = !lastEffect || !lastEffect.startsWith(`${state.round}|`);
+    lastEffect = key;
+    if (fresh && shown > 1) return; // entrou a meio (ex.: recarregou a página): sem repetir efeitos
+    if (!showCorrect) { if (shown > 0) play('tick'); return; }
+    if ((r.exact || []).length) { play('exact'); confetti(); } else play('reveal');
+    if (r.farthest.length && Object.keys(r.answers).length > 1) setTimeout(() => play('far'), 700);
   }
 
   function renderReveal() {
@@ -762,7 +1066,6 @@
     const unit = state.question.unit;
     const isMap = state.question.type === 'map';
     $('#rev-question').textContent = state.question.text;
-    $('#rev-correct').textContent = isMap ? r.correct : withUnit(r.correct, unit);
 
     // Ordem da revelação: do mais longe para o mais perto.
     const order = Object.keys(r.answers).sort((a, b) => r.distances[b] - r.distances[a]);
@@ -783,16 +1086,28 @@
       : shown < n ? `Palpite ${shown} de ${n} (do mais longe para o mais perto)` : '';
 
     // Nas perguntas de mapa o país já aparece pintado desde o início.
-    $('#rev-answer').hidden = !(showCorrect || isMap);
+    const answerBox = $('#rev-answer');
+    const answerWasHidden = answerBox.hidden || answerBox.dataset.round !== String(state.round);
+    answerBox.hidden = !(showCorrect || isMap);
+    if (!answerBox.hidden && answerWasHidden) {
+      answerBox.dataset.round = String(state.round);
+      if (isMap) $('#rev-correct').textContent = r.correct;
+      else countUp($('#rev-correct'), r.correct, unit);
+    }
+    $('#rev-curiosity').hidden = !(showCorrect && r.curiosity);
+    $('#rev-curiosity').textContent = r.curiosity ? `💡 ${r.curiosity}` : '';
+    revealEffects(r, shown, showCorrect);
+
     $('#rev-votes-box').hidden = !showVotes;
     if (showVotes) renderVotes(r);
+    else $('#rev-votes-box').open = false;
     $('#rev-points-box').hidden = !showPoints;
 
+    // A revelação corre sozinha; o anfitrião pode saltar para o fim e depois só avança.
     const host = isHost();
     $('#btn-step').hidden = !host || showPoints;
-    $('#btn-step').textContent = shown < n ? 'Seguinte palpite' : 'Seguinte';
     $('#btn-next').hidden = !host || !showPoints;
-    $('#rev-hint').textContent = host ? '' : 'O anfitrião vai mostrando a revelação…';
+    $('#rev-hint').textContent = host || showPoints ? '' : 'A revelar os palpites…';
     if (!showPoints) return;
 
     const myGain = r.points[state.me] || 0;
@@ -806,9 +1121,9 @@
       const far = r.farthest.includes(id);
       const votes = votesFor(id);
       const gain = r.points[id] || 0;
-      return el('li', { class: near ? 'near' : far ? 'far' : '' }, [
+      return el('li', { class: near ? 'near' : far ? 'far shake' : '' }, [
         el('span', { class: 'name' }, [
-          nameOf(id),
+          ...who(id),
           near ? el('span', { class: 'badge near', text: exact ? 'em cheio!' : 'mais perto' }) : null,
           far ? el('span', { class: 'badge far', text: 'mais longe' }) : null,
         ]),
@@ -822,16 +1137,21 @@
       if (!(p.id in r.answers)) {
         const author = p.id === state.question.author;
         rows.push(el('li', {}, [
-          el('span', { class: 'name', text: p.name }),
+          el('span', { class: 'name' }, who(p.id)),
           el('span', { class: 'value', text: author ? '✍️' : '—' }),
           el('span', { class: 'meta', text: author ? 'autor da pergunta' : 'sem resposta' }),
           el('span', { class: 'gain', text: r.points[p.id] ? `+${r.points[p.id]}` : '' }),
         ]));
       }
     }
-    $('#rev-list').replaceChildren(...rows);
+    // O cartão de quem ficou mais longe abana só quando a lista aparece.
+    const list = $('#rev-list');
+    const listKey = String(state.round);
+    list.replaceChildren(...rows);
+    if (list.dataset.round === listKey) list.querySelectorAll('.shake').forEach((li) => li.classList.remove('shake'));
+    list.dataset.round = listKey;
 
-    renderScores('#rev-scores');
+    renderScores('#rev-scores', { gained: r.points, animKey: `${state.round}` });
     const last = state.round >= state.totalRounds;
     // Só há desempate para o 1.º lugar.
     const tied = standingGroups()[0].length > 1;
@@ -844,13 +1164,15 @@
     const unit = state.question.unit;
     $('#tbr-question').textContent = state.question.text;
     $('#tbr-correct').textContent = withUnit(r.correct, unit);
+    $('#tbr-curiosity').hidden = !r.curiosity;
+    $('#tbr-curiosity').textContent = r.curiosity ? `💡 ${r.curiosity}` : '';
 
     const answered = Object.keys(r.answers).sort((a, b) => r.distances[a] - r.distances[b]);
     const best = answered.length ? r.distances[answered[0]] : null;
     const rows = answered.map((id) => {
       const near = r.distances[id] === best;
       return el('li', { class: near ? 'near' : '' }, [
-        el('span', { class: 'name' }, [nameOf(id), near ? el('span', { class: 'badge near', text: 'mais perto' }) : null]),
+        el('span', { class: 'name' }, [...who(id), near ? el('span', { class: 'badge near', text: 'mais perto' }) : null]),
         el('span', { class: 'value', text: fmt(r.answers[id]) }),
         el('span', { class: 'meta', text: r.distances[id] === 0 ? 'acertou no número' : `falhou por ${fmt(r.distances[id])}` }),
         el('span', { class: 'gain', text: '' }),
@@ -858,7 +1180,7 @@
     });
     for (const id of r.unanswered) {
       rows.push(el('li', {}, [
-        el('span', { class: 'name', text: nameOf(id) }),
+        el('span', { class: 'name' }, who(id)),
         el('span', { class: 'value', text: '—' }),
         el('span', { class: 'meta', text: 'sem resposta' }),
         el('span', { class: 'gain', text: '' }),

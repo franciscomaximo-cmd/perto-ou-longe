@@ -193,13 +193,14 @@ textarea:focus { border-color: var(--accent); }
 .map-zoom { display: flex; justify-content: flex-end; gap: 6px; margin-top: -4px; }
 .map-zoom button { width: 38px; height: 38px; padding: 0; font-size: 1.3rem; line-height: 1; }
 .pins { position: absolute; inset: 0; pointer-events: none; }
+/* Cada pino tem a cor do jogador; o anel diz se ficou mais perto (verde) ou mais longe (vermelho). */
 .pin {
   position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px;
-  border-radius: 50%; background: var(--accent); border: 2px solid var(--bg);
+  border-radius: 50%; background: var(--c, var(--accent)); border: 2px solid var(--bg);
   box-shadow: 0 1px 4px rgba(0, 0, 0, .4);
 }
-.pin.near { background: var(--near); }
-.pin.far { background: var(--far); }
+.pin.near { box-shadow: 0 0 0 3px var(--near), 0 1px 4px rgba(0, 0, 0, .4); }
+.pin.far { box-shadow: 0 0 0 3px var(--far), 0 1px 4px rgba(0, 0, 0, .4); }
 /* Anel à volta do país certo, para se ver mesmo quando o país é pequeno. */
 .pin.target {
   width: 30px; height: 30px; margin: -15px 0 0 -15px;
@@ -248,7 +249,8 @@ textarea:focus { border-color: var(--accent); }
   background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 2px 7px; text-align: center;
 }
 .mark .tag-box b { display: block; font-size: .85rem; }
-.mark .stem { position: absolute; left: -1px; width: 2px; top: 34px; bottom: 0; background: var(--muted); }
+.mark .stem { position: absolute; left: -1px; width: 2px; top: 34px; bottom: 0; background: var(--c, var(--muted)); }
+.mark .tag-box .avatar { width: 1.35em; height: 1.35em; font-size: .85em; margin-right: 4px; }
 .mark.near .tag-box { border-color: var(--near); }
 .mark.far .tag-box { border-color: var(--far); }
 .mark.clipped .tag-box { border-style: dashed; }
@@ -352,6 +354,99 @@ textarea:focus { border-color: var(--accent); }
 .award.me { border-color: var(--accent); }
 @keyframes award-in { from { opacity: 0; transform: translateY(14px) scale(.92); } }
 @media (prefers-reduced-motion: reduce) { .award { animation: none; } }
+
+/* --- Jogadores: cor e emoji ------------------------------------------- */
+.avatar {
+  display: inline-grid; place-items: center; flex: none;
+  width: 1.7em; height: 1.7em; margin-right: 8px; border-radius: 50%;
+  background: var(--c, var(--card)); font-size: .95em; line-height: 1;
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, .25);
+}
+.who { display: inline-flex; align-items: center; min-width: 0; }
+.options button { display: flex; align-items: center; justify-content: center; }
+.emoji-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; margin-top: 10px; }
+.emoji-picker button { padding: 6px 0; font-size: 1.4rem; line-height: 1.2; border-radius: 12px; }
+.emoji-picker button.on { background: var(--c); border-color: var(--c); }
+.emoji-picker button:disabled { opacity: .25; }
+
+/* Cabeçalho: tempo e botão de som */
+.tb-right { display: flex; align-items: center; gap: 8px; }
+.icon-btn { padding: 4px 9px; font-size: 1.05rem; line-height: 1.3; border-radius: 999px; border: 0; background: var(--card); }
+
+/* QR code do convite */
+.qr { width: 168px; margin: -4px auto 0; padding: 8px; background: #fff; border-radius: 14px; }
+.qr:empty { display: none; }
+.qr svg { display: block; width: 100%; height: auto; }
+
+/* Pontas da reta: valores mínimo e máximo da escala */
+.numline-ends { position: relative; height: 20px; margin: 6px 12px 0; }
+.numline-end { position: absolute; top: 0; font-size: .75rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
+.numline-end.end-lo { transform: translateX(-4px); }
+.numline-end.end-hi { transform: translateX(calc(-100% + 4px)); }
+.numline-end::before { content: ""; position: absolute; top: -8px; width: 2px; height: 6px; background: var(--line); }
+.end-lo::before { left: 3px; }
+.end-hi::before { right: 3px; }
+
+/* Mapa: tocar e arrastar mexe só no mapa (não faz scroll da página); no telemóvel ocupa a
+   largura toda e fica mais alto. */
+.map-box { overscroll-behavior: contain; touch-action: pan-x pan-y; }
+@media (max-width: 599px) {
+  .map-box { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; max-height: 72vh; }
+}
+/* Etiqueta afastada do pino: uma linha fina liga-a ao pino. */
+.pin-label.lead::after {
+  content: ""; position: absolute; left: 50%; top: 100%;
+  width: 1px; height: var(--lead); background: var(--text); opacity: .85;
+}
+.pin-label.lead.below::after { top: auto; bottom: 100%; }
+.map-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: .92rem; }
+.map-list li {
+  display: flex; align-items: center; background: var(--card); border-radius: 10px; padding: 6px 12px;
+  border-left: 4px solid transparent; font-weight: 600;
+}
+.map-list li.near { border-left-color: var(--near); }
+.map-list li.far { border-left-color: var(--far); }
+.map-list .km { margin-left: 6px; color: var(--muted); font-weight: 400; }
+
+/* Curiosidade por baixo da resposta certa */
+.curiosity {
+  margin: 0; padding: 10px 14px; font-size: .95rem;
+  background: rgba(255, 203, 71, .1); border: 1px solid rgba(255, 203, 71, .35); border-radius: var(--radius);
+}
+
+/* Quem votou em quem: bloco recolhível */
+.votes-box { background: var(--card); border-radius: var(--radius); padding: 10px 14px; }
+.votes-box summary { cursor: pointer; font-weight: 700; }
+.votes-box[open] summary { margin-bottom: 8px; }
+.votes-box .votes li { background: var(--bg); }
+
+/* Classificação: lugares ganhos ou perdidos na ronda */
+.scores .name { display: flex; align-items: center; }
+.scores .move { font-size: .8rem; font-weight: 800; }
+.scores .move.up { color: var(--near); }
+.scores .move.down { color: var(--far); }
+.results .name { display: flex; align-items: center; flex-wrap: wrap; }
+
+/* Abanão em quem ficou mais longe */
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20%, 60% { transform: translateX(-6px); }
+  40%, 80% { transform: translateX(6px); }
+}
+.results li.shake { animation: shake .55s .25s ease-in-out; }
+.mark.far .tag-box { animation: shake-tag .55s ease-in-out; }
+@keyframes shake-tag {
+  0%, 100% { translate: 0; }
+  20%, 60% { translate: -5px; }
+  40%, 80% { translate: 5px; }
+}
+
+.confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
+
+@media (prefers-reduced-motion: reduce) {
+  .results li.shake, .mark.far .tag-box { animation: none; }
+  .scores li { transition: none !important; }
+}
 
 /* Aviso */
 #toast {

@@ -48,6 +48,16 @@ const MAX_NAME_LENGTH = 16;
 const MAX_TIME_SECONDS = 180;
 const MIN_TIME_SECONDS = 10;
 const HOST_GRACE_MS = 20_000;
+const REVEAL_STEP_MS = 1500; // revelação automática: um palpite (ou passo) a cada 1,5 s
+// Cada jogador recebe uma cor fixa (a primeira livre) e um emoji, que pode trocar na sala de espera.
+const PLAYER_COLORS = [
+  '#4dabf7', '#f783ac', '#ff922b', '#9775fa', '#3bc9db', '#a9e34b',
+  '#e599f7', '#ffd43b', '#c49a6c', '#f1f3f5', '#5c7cfa', '#adb5bd',
+];
+const PLAYER_EMOJIS = [
+  '🦊', '🐼', '🐸', '🐙', '🦉', '🐢', '🦁', '🐧', '🐨', '🦄', '🐝', '🐳',
+  '🦖', '🐯', '🐰', '🦜', '🐌', '🦀', '🐷', '🐶', '🐱', '🦒', '🐞', '🦦',
+];
 const ROOM_IDLE_MS = 10 * 60_000;
 const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // sem I nem O, para não confundir com 1 e 0
 
@@ -161,6 +171,8 @@ class Room {
     this.tiebreakWinner = null; // quem ganhou o desempate do 1.º lugar
     this.timer = null;
     this.deadline = null;
+    this.revealTimer = null;
+    this.revealStepMs = REVEAL_STEP_MS;
     this.hostTimer = null;
     this.lastActivity = Date.now();
   }
@@ -186,7 +198,11 @@ class Room {
     const taken = [...this.players.values()].some((p) => p.name.toLowerCase() === name.toLowerCase());
     if (taken) throw new GameError('Já existe um jogador com esse nome nesta sala.');
 
-    const player = { id: crypto.randomUUID(), name, score: 0, connected: false, socketId: null };
+    const used = [...this.players.values()];
+    const color = PLAYER_COLORS.find((c) => !used.some((p) => p.color === c)) || PLAYER_COLORS[used.length % PLAYER_COLORS.length];
+    const freeEmojis = PLAYER_EMOJIS.filter((e) => !used.some((p) => p.emoji === e));
+    const emoji = freeEmojis[crypto.randomInt(freeEmojis.length)];
+    const player = { id: crypto.randomUUID(), name, score: 0, connected: false, socketId: null, color, emoji };
     this.players.set(player.id, player);
     if (!this.hostId) this.hostId = player.id;
     this.touch();
@@ -263,6 +279,19 @@ class Room {
     if (settings.voteTime !== undefined) this.settings.voteTime = clampTime(settings.voteTime);
     if (settings.categories !== undefined) this.settings.categories = cleanCategories(settings.categories);
     if (settings.playerQuestions !== undefined) this.settings.playerQuestions = Boolean(settings.playerQuestions);
+    this.touch();
+  }
+
+  // Troca de emoji na sala de espera (cada emoji só pode ser de um jogador).
+  setEmoji(playerId, emoji) {
+    if (this.phase !== 'lobby') throw new GameError('Só podes trocar de emoji antes de começar.');
+    const player = this.players.get(playerId);
+    if (!player) throw new GameError('Não estás nesta sala.');
+    if (!PLAYER_EMOJIS.includes(emoji)) throw new GameError('Esse emoji não está disponível.');
+    if ([...this.players.values()].some((p) => p.id !== playerId && p.emoji === emoji)) {
+      throw new GameError('Esse emoji já é de outro jogador.');
+    }
+    player.emoji = emoji;
     this.touch();
   }
 
@@ -385,6 +414,7 @@ class Room {
 
   setPhase(phase, seconds = 0, onTimeout = null) {
     this.clearTimer();
+    this.clearRevealTimer();
     this.phase = phase;
     if (seconds > 0 && onTimeout) {
       this.deadline = Date.now() + seconds * 1000;
@@ -477,12 +507,32 @@ class Room {
       if (player) player.score += pts;
     }
     this.recordStats(question, this.current.result, answers.size);
-    // Revelação em passos, avançada pelo anfitrião: um palpite de cada vez (do mais longe
-    // para o mais perto), depois a resposta certa, os votos (se houve votação) e por fim
-    // os pontos. Sem respostas, vai direto ao fim da ronda.
+    // Revelação em passos, automática: um palpite de cada vez (do mais longe para o mais
+    // perto), depois a resposta certa, os votos (se houve votação) e por fim os pontos.
+    // O anfitrião pode saltar para o fim. Sem respostas, vai direto ao fim da ronda.
     this.current.steps = answers.size + (this.current.voting ? 3 : 2);
     this.current.step = answers.size === 0 ? this.current.steps : 1;
     this.setPhase('reveal');
+    this.scheduleRevealStep();
+  }
+
+  scheduleRevealStep() {
+    this.clearRevealTimer();
+    if (this.phase !== 'reveal' || this.current.step >= this.current.steps) return;
+    this.revealTimer = setTimeout(() => {
+      this.revealTimer = null;
+      if (this.phase !== 'reveal') return;
+      this.current.step += 1;
+      this.notify(this);
+      this.scheduleRevealStep();
+    }, this.revealStepMs);
+    // Não segura o processo (testes, encerramento) só por causa da animação.
+    if (this.revealTimer.unref) this.revealTimer.unref();
+  }
+
+  clearRevealTimer() {
+    if (this.revealTimer) clearTimeout(this.revealTimer);
+    this.revealTimer = null;
   }
 
   // --- Estatísticas e prémios ---------------------------------------------
@@ -535,10 +585,12 @@ class Room {
     ].filter((a) => a.winners.length);
   }
 
-  revealStep(playerId) {
+  // O anfitrião salta a animação e mostra a revelação toda de uma vez.
+  revealSkip(playerId) {
     this.requireHost(playerId);
     if (this.phase !== 'reveal') throw new GameError('Não há nada para revelar agora.');
-    if (this.current.step < this.current.steps) this.current.step += 1;
+    this.clearRevealTimer();
+    this.current.step = this.current.steps;
     this.touch();
   }
 
@@ -627,7 +679,7 @@ class Room {
 
     const index = this.standings.findIndex((t) => t.ids === tb.ids);
     this.standings.splice(index, 1, ...tiers);
-    tb.result = { correct, answers: Object.fromEntries(tb.answers), distances, unanswered };
+    tb.result = { correct, answers: Object.fromEntries(tb.answers), distances, unanswered, curiosity: tb.question.curiosity || null };
     this.setPhase('tiebreak-reveal');
   }
 
@@ -651,6 +703,7 @@ class Room {
 
   destroy() {
     this.clearTimer();
+    this.clearRevealTimer();
     this.clearHostTimer();
   }
 
@@ -685,8 +738,11 @@ class Room {
         name: p.name,
         score: p.score,
         connected: p.connected,
+        color: p.color,
+        emoji: p.emoji,
       })),
     };
+    if (this.phase === 'lobby') state.emojis = PLAYER_EMOJIS;
 
     if (cur && this.phase !== 'lobby') {
       state.question = {
@@ -712,6 +768,7 @@ class Room {
           step: cur.step,
           steps: cur.steps,
           voting: Boolean(cur.voting),
+          curiosity: cur.question.curiosity || null,
           ...cur.result,
         };
       }

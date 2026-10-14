@@ -5,13 +5,17 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#1d1846">
   <title>Perto ou Longe</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎯%3C/text%3E%3C/svg%3E">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <header id="topbar" hidden>
     <span id="tb-code" class="pill"></span>
     <span id="tb-round"></span>
-    <span id="tb-timer" class="pill timer" hidden></span>
+    <span class="tb-right">
+      <span id="tb-timer" class="pill timer" hidden></span>
+      <button id="tb-sound" type="button" class="icon-btn" aria-pressed="true" aria-label="Som ligado">🔊</button>
+    </span>
   </header>
 
   <main>
@@ -51,10 +55,17 @@
     <section id="screen-lobby" class="screen" hidden>
       <p class="label center">Código da sala</p>
       <div id="lobby-code" class="big-code"></div>
+      <div id="lobby-qr" class="qr" role="img" aria-label="QR code com o convite para a sala"></div>
+      <p class="hint center">Aponta a câmara do telemóvel para entrar.</p>
       <button id="btn-share" class="ghost">Partilhar convite</button>
 
       <h2>Jogadores <span id="lobby-count" class="muted"></span></h2>
       <ul id="lobby-players" class="players"></ul>
+
+      <div class="card">
+        <h2>O teu emoji</h2>
+        <div id="emoji-picker" class="emoji-picker"></div>
+      </div>
 
       <div class="card">
         <h2>Configuração</h2>
@@ -170,6 +181,10 @@
           <span class="numline-cut cut-hi" aria-hidden="true" hidden>≫</span>
         </div>
         <div class="numline-correct"></div>
+        <div class="numline-ends">
+          <span class="numline-end end-lo"></span>
+          <span class="numline-end end-hi"></span>
+        </div>
       </div>
       <div id="rev-map" class="map-wrap" hidden>
         <div class="map-box"><div class="map-inner"><svg class="lines" viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div class="pins"></div></div></div>
@@ -177,32 +192,35 @@
           <button type="button" data-zoom="-1" aria-label="Afastar">−</button>
           <button type="button" data-zoom="1" aria-label="Aproximar">+</button>
         </div>
+        <ol id="rev-map-list" class="map-list"></ol>
       </div>
       <p id="rev-progress" class="hint center"></p>
       <p id="rev-novote" class="note" hidden>Poucas respostas: sem votação nesta ronda.</p>
 
-      <!-- 2. Resposta certa -->
+      <!-- 2. Resposta certa (e uma curiosidade, se houver) -->
       <div id="rev-answer" class="answer-box reveal-in" hidden>
         <span class="label">Resposta certa</span>
         <strong id="rev-correct"></strong>
       </div>
+      <p id="rev-curiosity" class="curiosity reveal-in" hidden></p>
 
-      <!-- 3. Quem votou em quem -->
-      <div id="rev-votes-box" class="reveal-in" hidden>
-        <h3>Quem votou em quem</h3>
-        <p id="rev-farthest" class="hint"></p>
-        <ul id="rev-votes" class="votes"></ul>
-      </div>
-
-      <!-- 4. Pontos da ronda e classificação -->
+      <!-- 3. Pontos e classificação, no topo dos resultados -->
       <div id="rev-points-box" class="reveal-in stack" hidden>
         <p id="rev-mine" class="mine"></p>
-        <ul id="rev-list" class="results"></ul>
         <h3>Classificação</h3>
         <ol id="rev-scores" class="scores"></ol>
+        <h3>Esta ronda</h3>
+        <ul id="rev-list" class="results"></ul>
       </div>
 
-      <button id="btn-step" class="primary" hidden>Seguinte</button>
+      <!-- 4. Quem votou em quem (recolhível) -->
+      <details id="rev-votes-box" class="votes-box reveal-in" hidden>
+        <summary>Quem votou em quem <span id="rev-votes-summary" class="muted"></span></summary>
+        <p id="rev-farthest" class="hint"></p>
+        <ul id="rev-votes" class="votes"></ul>
+      </details>
+
+      <button id="btn-step" class="primary" hidden>Saltar</button>
       <button id="btn-next" class="primary" hidden></button>
       <p id="rev-hint" class="hint center"></p>
     </section>
@@ -215,6 +233,7 @@
         <span class="label">Resposta certa</span>
         <strong id="tbr-correct"></strong>
       </div>
+      <p id="tbr-curiosity" class="curiosity" hidden></p>
       <ul id="tbr-list" class="results"></ul>
       <p id="tbr-status" class="hint"></p>
 
@@ -240,6 +259,7 @@
   <div id="toast" role="status" aria-live="polite" hidden></div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/vendor/qrcode.js"></script>
   <script src="numero.js"></script>
   <script src="client.js"></script>
 </body>

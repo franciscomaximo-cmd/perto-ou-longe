@@ -305,9 +305,10 @@ test('perguntas de desempate têm resposta grande ou com casas decimais', () => 
   for (let i = 0; i < 40; i++) assert.ok(goodForTiebreak(room.pickTiebreakQuestion()));
 });
 
-test('a revelação avança em passos, só pelo anfitrião', () => {
+test('a revelação avança sozinha e o anfitrião pode saltar para o fim', async () => {
   const { room, ids } = setup();
   const [ana, rui, eva] = ids;
+  room.revealStepMs = 5; // para o teste não demorar
   startWithNumber(room, ana);
   room.submitAnswer(ana, 200);
   room.submitAnswer(rui, 100);
@@ -316,12 +317,40 @@ test('a revelação avança em passos, só pelo anfitrião', () => {
   assert.equal(room.phase, 'reveal');
   // 3 palpites + resposta certa + votos + pontos
   assert.deepEqual([room.stateFor(rui).result.step, room.stateFor(rui).result.steps], [1, 6]);
-  assert.throws(() => room.revealStep(rui), /anfitrião/);
-  for (let i = 0; i < 10; i++) room.revealStep(ana);
-  assert.equal(room.stateFor(eva).result.step, 6, 'não passa do último passo');
+  await new Promise((r) => setTimeout(r, 120));
+  assert.equal(room.stateFor(eva).result.step, 6, 'chega sozinha ao último passo e para aí');
   room.nextQuestion(ana);
   assert.equal(room.phase, 'answering');
-  assert.throws(() => room.revealStep(ana), /revelar/);
+  room.destroy();
+});
+
+test('saltar a revelação: só o anfitrião, e mostra tudo de uma vez', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  startWithNumber(room, ana);
+  for (const [id, v] of [[ana, 200], [rui, 100], [eva, 50]]) room.submitAnswer(id, v);
+  room.forceAdvance(ana);
+  assert.throws(() => room.revealSkip(rui), /anfitrião/);
+  room.revealSkip(ana);
+  assert.equal(room.stateFor(eva).result.step, 6);
+  assert.equal(room.revealTimer, null, 'a animação parou');
+  room.nextQuestion(ana);
+  assert.throws(() => room.revealSkip(ana), /revelar/);
+  room.destroy();
+});
+
+test('cada jogador tem uma cor diferente e um emoji que pode trocar na sala de espera', () => {
+  const { room, ids } = setup();
+  const players = ids.map((id) => room.players.get(id));
+  assert.equal(new Set(players.map((p) => p.color)).size, 3);
+  assert.equal(new Set(players.map((p) => p.emoji)).size, 3);
+  const free = room.stateFor(ids[0]).emojis.find((e) => !players.some((p) => p.emoji === e));
+  room.setEmoji(ids[0], free);
+  assert.equal(room.players.get(ids[0]).emoji, free);
+  assert.throws(() => room.setEmoji(ids[1], free), /outro jogador/);
+  assert.throws(() => room.setEmoji(ids[1], 'x'), /disponível/);
+  startWithNumber(room, ids[0]);
+  assert.throws(() => room.setEmoji(ids[1], free), /antes de começar/);
 });
 
 test('pergunta de mapa: dentro do país conta como acerto em cheio', () => {
@@ -406,6 +435,9 @@ test('escolher todas as categorias é o mesmo que "Todas"', () => {
 test('se a categoria não chega para as rondas, o jogo fica mais curto e avisa', () => {
   const { room, ids } = setup();
   room.updateSettings(ids[0], { categories: ['precos'], rounds: 30 });
+  // Todas as categorias reais já têm mais de 30 perguntas: simula uma com só 16.
+  const small = room.questionPool().slice(0, 16);
+  room.questionPool = () => small;
   const state = room.stateFor(ids[0]);
   assert.equal(state.plannedRounds, 16);
   room.startGame(ids[0]);

@@ -255,6 +255,37 @@ textarea:focus { border-color: var(--accent); }
   .arco-hit, .arco-miss { display: none; }
 }
 
+/* --- Tema "bowling" ------------------------------------------------------------------------ */
+/* Tamanho fixo: largura disponível, no máximo ~45% da altura do ecrã (cena 300 × 300). */
+.bowl-scene { display: block; width: min(100%, 45vh); width: min(100%, 45svh); aspect-ratio: 1; }
+.bowl-pin { transform-box: fill-box; transform-origin: 50% 100%; }
+.bowl-pin.falling { transition: transform .3s cubic-bezier(.5, 0, .7, 1), opacity .3s; }
+.bowl-pin.down { transform: rotate(var(--dir, 60deg)) translateY(2px); opacity: .35; }
+.bowl-ball.gone { opacity: 0; transition: opacity .2s; }
+.bowl-emoji, .bowl-cell text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Apple Color Emoji", "Segoe UI Emoji", sans-serif; }
+.bowl-plaque { fill: var(--accent); stroke: #c98a00; stroke-width: 1; }
+.bowl-plaque-label { fill: var(--accent-ink); font-size: 6.5px; font-weight: 800; letter-spacing: .08em; opacity: .7; }
+.bowl-answer { fill: var(--accent-ink); font-size: 14px; font-weight: 800; }
+.bowl-cell-bg { fill: var(--card); stroke: var(--line); stroke-width: 1; }
+.bowl-name { fill: var(--text); font-size: 9px; font-weight: 700; }
+.bowl-score { fill: var(--muted); font-size: 15px; font-weight: 800; }
+.bowl-cell.done .bowl-score { fill: var(--text); }
+.bowl-cell.strike .bowl-score { fill: var(--accent); }
+.bowl-cell.gutter .bowl-score { fill: #ffa8a8; font-size: 9px; }
+.bowl-cell.near .bowl-cell-bg { stroke: var(--near); stroke-width: 2.5; fill: rgba(61, 220, 151, .16); }
+.bowl-cell.far .bowl-cell-bg { stroke: var(--far); stroke-width: 2.5; fill: rgba(255, 107, 107, .12); }
+.bowl-cell.far { animation: bowl-shake .55s .2s ease-in-out; transform-box: fill-box; }
+@keyframes bowl-shake { 0%, 100% { transform: translateX(0); } 25%, 75% { transform: translateX(-3px); } 50% { transform: translateX(3px); } }
+/* Strike: "STRIKE!" com estrelinhas, uma só vez. */
+.bowl-strike { animation: bowl-pop 1.25s ease-out forwards; }
+.bowl-strike-text { fill: var(--accent); font-size: 18px; font-weight: 900; stroke: #8a1c1c; stroke-width: 3px; paint-order: stroke; }
+@keyframes bowl-pop { 0% { opacity: 0; } 12% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .bowl-pin.falling, .bowl-ball.gone { transition: none; }
+  .bowl-cell.far, .bowl-strike { animation: none; }
+  .bowl-strike { display: none; }
+}
+
 /* Mostrado sem animação (entrou a meio, "Saltar" ou movimento reduzido). */
 .tgt-player.instant, .tgt-center.instant { animation: none; }
 .tgt-board {

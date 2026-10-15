@@ -2,11 +2,13 @@
 
 // Tema "karts" (corrida de karts): pista reta com uma faixa por jogador, linha de partida à
 // esquerda e meta em xadrez à direita. Cada jogador tem um kart da sua cor com o boneco na pose
-// "a conduzir kart". Na vez de cada um, o kart arranca e avança até uma distância que depende
-// da precisão: 0 = chega à meta (e a bandeira agita), 1 = fica perto da partida. Com precisão
-// acima de 1 o kart despista-se cedo (pião e fumo).
+// "a conduzir kart". Na vez de cada um, o kart arranca e avança até uma distância que vem da
+// posição de apresentação (player.show), relativa à ronda: o vencedor corta sempre a meta
+// primeiro (a bandeira agita; no "em cheio", foto-finish com confetti); os outros param pelo
+// caminho; quem errou mais de 100% despista-se (pião e fumo), e o "mais longe" logo à saída.
 //
-// Cena SVG de tamanho fixo (viewBox 300 × 300), por zonas:
+// Cena SVG de tamanho fixo (viewBox 300 × 300; com mais de 9 jogadores mais alta, para cada
+// faixa ter pelo menos 30), por zonas:
 //   - faixa de cima: placa da resposta certa junto à meta e a bandeira (nenhum kart passa lá);
 //   - pista: uma faixa por jogador. No início de cada faixa, uma "box" com o emoji do jogador
 //     num círculo da sua cor, para se ler bem de quem é cada faixa mesmo com 12 jogadores.
@@ -16,6 +18,7 @@
   const VH = 300;
   const TOP = 26; // a pista começa aqui
   const BOTTOM = 296;
+  const MANY_LANE_H = 30; // altura de cada faixa com mais de 6 jogadores (a cena cresce)
   const START_X = 38; // linha de partida
   const FINISH_X = 262; // meta
   const DRIVE_MS = 700;
@@ -33,14 +36,15 @@
   const text = (attrs, str) => s('text', attrs, [document.createTextNode(str)]);
 
   // Até onde chega a frente do kart, a partir de onde está estacionado (`parked`, logo a seguir
-  // à linha de partida). "Em cheio": passa a meta. Até 1: proporcional (1 = perto da partida).
-  // Acima de 1: despiste a 15–30% da pista (mais cedo quanto maior o erro).
-  function finalX(precision, parked) {
+  // à linha de partida), pela posição de apresentação (relativa à ronda): o vencedor corta
+  // sempre a meta (e é o único); os outros param pelo nível (0,15 → perto da meta … 0,85 →
+  // perto da partida); quem errou mais de 100% chega aí e despista-se; o "mais longe"
+  // despista-se logo à saída, atrás de todos. Palpites iguais: o mesmo sítio, cada um na faixa.
+  function finalX(show, parked) {
     const len = FINISH_X - parked;
-    if (precision === 0) return { x: FINISH_X + 14, spin: false };
-    if (precision <= 1) return { x: parked + 8 + (len - 14) * (1 - precision), spin: false };
-    const worse = Math.min(1, (precision - 1) / 0.33);
-    return { x: parked + len * (0.3 - 0.15 * worse), spin: true };
+    if (show.winner) return { x: FINISH_X + 14, spin: false };
+    if (show.farthest) return { x: parked + 4 + len * 0.05, spin: true };
+    return { x: parked + 8 + (len - 22) * (1 - show.level), spin: show.miss };
   }
 
   // Bandeira de xadrez (4 × 3 quadrados) num mastro.
@@ -61,6 +65,7 @@
     let flagNode = null;
     let fxLayer = null;
     let answerText = null;
+    let sceneH = VH;
     let lanes = {}; // id → { g, kart, y, h, w, player, to }
     const runs = new Map(); // id → { frame, finish }
     const timers = new Set();
@@ -100,28 +105,53 @@
       flagNode.classList.add('waving');
     }
 
+    // "Em cheio": foto-finish, com o flash da câmara, "FOTO-FINISH!" e confetti a cair sobre a
+    // meta (tudo uma só vez).
+    function photoFinish(id) {
+      const l = lanes[id];
+      const cy = l.y + l.h / 2;
+      const colors = ['#ffd43b', '#3ddc97', '#f783ac', '#4dabf7', '#ff922b'];
+      const g = s('g', { class: 'kart-photo' }, [
+        s('rect', { x: 0, y: 0, width: VW, height: sceneH, rx: 10, class: 'kart-flash' }),
+        ...Array.from({ length: 18 }, (_, i) => s('rect', {
+          x: FINISH_X - 40 + ((i * 37) % 76), y: Math.max(TOP, cy - 34 + ((i * 23) % 20)), width: 3.5, height: 3.5,
+          fill: colors[i % colors.length], class: 'kart-confetti', style: `--d:${(i % 5) * 60}ms`,
+        })),
+        text({ x: VW / 2, y: Math.min(sceneH - 20, Math.max(TOP + 30, cy)), 'text-anchor': 'middle', class: 'kart-photo-text' }, 'FOTO-FINISH!'),
+      ]);
+      fxLayer.append(g);
+      later(() => g.remove(), 1500);
+    }
+
     return {
       mount(container, { players, kit: k }) {
         kit = k;
         lanes = {};
-        scene = s('svg', { viewBox: `0 0 ${VW} ${VH}`, class: 'kart-scene', role: 'img', 'aria-label': 'Corrida de karts: quanto mais longe chega o kart, mais perto da resposta certa' });
+        // Com mais de 6 jogadores a cena cresce para baixo o que for preciso para cada faixa ter
+        // pelo menos 30 (em vez de ~22 com 12 jogadores numa cena quadrada).
+        const n = players.length;
+        const many = n > 6;
+        const bottom = TOP + Math.max(BOTTOM - TOP, n * MANY_LANE_H);
+        const vh = bottom + 4;
+        scene = s('svg', { viewBox: `0 0 ${VW} ${vh}`, class: 'kart-scene', role: 'img', 'aria-label': 'Corrida de karts: quanto mais longe chega o kart, mais perto da resposta certa' });
+        kit.sizeScene(scene, VW, vh, vh > VH ? 62 : 45);
+        sceneH = vh;
 
         // Relva à volta, asfalto, faixas, partida e meta em xadrez.
-        const n = players.length;
-        const laneH = (BOTTOM - TOP) / n;
+        const laneH = (bottom - TOP) / n;
         scene.append(
-          s('rect', { x: 0, y: 0, width: VW, height: VH, rx: 10, fill: '#2b8a3e' }),
-          s('rect', { x: 0, y: TOP - 2, width: VW, height: BOTTOM - TOP + 4, fill: '#3b3b46' }),
+          s('rect', { x: 0, y: 0, width: VW, height: vh, rx: 10, fill: '#2b8a3e' }),
+          s('rect', { x: 0, y: TOP - 2, width: VW, height: bottom - TOP + 4, fill: '#3b3b46' }),
         );
         players.forEach((p, i) => {
           const y = TOP + i * laneH;
           scene.append(s('rect', { x: 0, y, width: VW, height: laneH, fill: i % 2 ? '#41414d' : '#383843' }));
           if (i > 0) scene.append(s('line', { x1: START_X, y1: y, x2: VW, y2: y, stroke: '#f1f3f5', 'stroke-width': 0.8, 'stroke-dasharray': '6 5', opacity: 0.55 }));
         });
-        scene.append(s('rect', { x: START_X - 2, y: TOP, width: 3, height: BOTTOM - TOP, fill: '#f8f9fa' }));
+        scene.append(s('rect', { x: START_X - 2, y: TOP, width: 3, height: bottom - TOP, fill: '#f8f9fa' }));
         const sq = 4;
-        for (let y = TOP, r = 0; y < BOTTOM; y += sq, r++) {
-          for (let c = 0; c < 2; c++) scene.append(s('rect', { x: FINISH_X - sq + c * sq, y, width: sq, height: Math.min(sq, BOTTOM - y), fill: (r + c) % 2 ? '#111' : '#fff' }));
+        for (let y = TOP, r = 0; y < bottom; y += sq, r++) {
+          for (let c = 0; c < 2; c++) scene.append(s('rect', { x: FINISH_X - sq + c * sq, y, width: sq, height: Math.min(sq, bottom - y), fill: (r + c) % 2 ? '#111' : '#fff' }));
         }
 
         // Faixa de cima: resposta certa junto à meta, e a bandeira (nenhum kart passa aqui).
@@ -140,7 +170,9 @@
         fxLayer = s('g', { class: 'kart-fx' });
         players.forEach((p, i) => {
           const laneTop = TOP + i * laneH;
-          const h = Math.min(62, laneH * 1.12);
+          // Com muitos jogadores o kart passa um pouco para a faixa de cima (estão desencontrados
+          // na horizontal), para o boneco se ver maior.
+          const h = Math.min(62, laneH * (many ? 1.32 : 1.12));
           const w = h * (100 / 130);
           const r = Math.min(12, laneH / 2 - 1.5);
           // "Box" de partida: círculo da cor do jogador com o emoji.
@@ -154,7 +186,7 @@
           karts.append(g);
           // Estacionado logo a seguir à linha de partida (não tapa a "box" com o emoji).
           const parked = START_X + w * 0.92 + 2;
-          lanes[p.id] = { g, kart, player: p, h, w, small: laneH < 30, y: laneTop + laneH - h * 0.97, parked, to: finalX(p.precision, parked) };
+          lanes[p.id] = { g, kart, player: p, h, w, small: many, y: laneTop + laneH - h * 0.97, parked, to: finalX(p.show, parked) };
           drawKart(p.id, 'kart');
           place(p.id, parked);
         });
@@ -189,7 +221,8 @@
           place(player.id, fromX + (toX - fromX) * e);
           if (t < 1) { runs.get(player.id).frame = requestAnimationFrame(frame); return; }
           if (!spin) {
-            if (precision === 0) waveFlag();
+            if (player.show.winner) waveFlag();
+            if (player.show.exact) photoFinish(player.id);
             finish();
             return;
           }
@@ -208,8 +241,9 @@
         runs.set(player.id, { frame: requestAnimationFrame(frame), finish });
       },
 
-      // Resposta certa junto à meta (a rolar até ao valor). O mais perto sai do kart e festeja;
-      // o mais longe fica triste (se não empatou toda a gente).
+      // Resposta certa junto à meta (a rolar até ao valor). O mais perto festeja sentado no seu
+      // kart, de braços no ar; o mais longe fica triste no kart (se não empatou toda a gente).
+      // Os karts ficam onde pararam.
       revealAnswer(answer, { closest, farthest, instant }) {
         for (const r of [...runs.values()]) r.finish();
         if (instant) answerText.textContent = kit.fmt(answer);
@@ -218,14 +252,11 @@
           const near = closest.includes(id);
           const far = farthest.includes(id) && !near;
           const l = lanes[id];
-          if (near || far) {
-            drawKart(id, near ? 'festejar' : 'triste');
-            place(id, Math.min(l.to.x, VW - 2 - l.w * 0.08)); // de pé, sem rodar
-          }
+          if (near || far) drawKart(id, near ? 'kart_festejar' : 'kart_triste');
           l.g.classList.toggle('near', near);
           l.g.classList.toggle('far', far);
         }
-        if (!instant && closest.some((id) => lanes[id] && lanes[id].player.precision === 0)) waveFlag();
+        if (!instant && closest.length) waveFlag();
       },
 
       skipToEnd() {
@@ -233,6 +264,7 @@
         for (const t of timers) clearTimeout(t);
         timers.clear();
         for (const puff of fxLayer.querySelectorAll('.puff')) puff.classList.remove('puff');
+        for (const photo of fxLayer.querySelectorAll('.kart-photo')) photo.remove();
         flagNode.classList.remove('waving');
       },
 

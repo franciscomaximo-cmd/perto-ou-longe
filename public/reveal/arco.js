@@ -2,10 +2,12 @@
 
 // Tema "arco" (tiro com arco): um alvo com os anéis clássicos e, em baixo, a fila de arqueiros
 // (os bonecos dos jogadores na pose "a disparar arco"). Na vez de cada jogador, o seu boneco
-// dispara e a seta voa até ao alvo: a precisão define onde acerta (0 = centro, 1 = borda de
-// fora). Com precisão acima de 1 a seta falha e fica espetada na parede ou na relva.
+// dispara e a seta voa até ao alvo. Onde acerta vem da posição de apresentação (player.show),
+// relativa à ronda: o vencedor acerta sempre no centro (o "em cheio" com uma seta dourada);
+// os outros pelos anéis; o "mais longe" e quem errou mais de 100% falham (parede ou relva).
 //
-// Cena SVG de tamanho fixo (viewBox 300 × 270), por zonas, para nada tapar o que importa:
+// Cena SVG de tamanho fixo (viewBox 300 × 270; 300 × 330 com mais de 6 jogadores, com duas
+// filas de arqueiros), por zonas, para nada tapar o que importa:
 //   - placa da resposta certa, no topo (nenhuma seta cai lá);
 //   - alvo, a meio, com a parede à volta (falhanços nas laterais);
 //   - relva por baixo do alvo (falhanços no chão);
@@ -14,6 +16,7 @@
   const NS = 'http://www.w3.org/2000/svg';
   const VW = 300;
   const VH = 270;
+  const VH_TALL = 330; // com mais de 6 jogadores (duas filas de arqueiros)
   const TARGET = { x: 150, y: 106, r: 70 };
   const GRASS_Y = 182;
   const ARCHER_BOTTOM = 266;
@@ -29,25 +32,34 @@
     return node;
   }
 
-  // Onde acerta cada seta (coordenadas da cena). Acertos: ângulos espalhados, raio = precisão;
-  // os "em cheio" ficam todos no centro, ligeiramente desviados. Falhanços: alternam entre a
-  // parede (laterais do alvo) e a relva. Pontos demasiado juntos afastam-se no ângulo.
-  function aimPoints(players) {
-    const hits = [];
-    const misses = [];
-    let exactCount = 0;
-    players.forEach((p, i) => {
-      if (p.precision > 1) misses.push({ p, i });
-      else hits.push({ p, i, exact: p.precision === 0, k: p.precision === 0 ? exactCount++ : i });
-    });
+  // Onde acerta cada seta (coordenadas da cena), a partir da posição de apresentação (show):
+  //   - vencedor(es) do "mais perto": no centro (o "em cheio" mesmo no meio); se forem vários,
+  //     à volta do centro, todos no dourado;
+  //   - os outros: raio pelo nível (0,15 → anel vermelho … 0,85 → anel branco) e ângulo
+  //     variado pela semente da ronda (palpites iguais: mesmo anel, sítios diferentes);
+  //   - falhanços (o "mais longe" e quem errou mais de 100%): alternam entre a parede (laterais
+  //     do alvo) e a relva; o "mais longe" é o mais afastado.
+  // Pontos demasiado juntos afastam-se no ângulo.
+  function aimPoints(players, seed) {
+    const hits = players.filter((p) => !p.show.miss);
+    const misses = players.filter((p) => p.show.miss);
+    const winners = hits.filter((p) => p.show.winner);
 
     const points = {};
-    const items = hits.map(({ p, exact, k }) => ({
-      id: p.id,
-      exact,
-      rad: exact ? 0.1 : 0.16 + 0.84 * p.precision,
-      ang: exact ? -Math.PI / 2 + k * ((2 * Math.PI) / Math.max(3, exactCount)) : k * GOLDEN,
-    }));
+    const items = hits.map((p, i) => {
+      const rnd = window.RevealSeeded.seeded(`${seed}|${p.id}|arco`);
+      if (p.show.winner) {
+        const k = winners.indexOf(p);
+        const alone = winners.length === 1;
+        return {
+          id: p.id,
+          exact: p.show.exact,
+          rad: alone ? (p.show.exact ? 0 : 0.06) : (p.show.exact ? 0.09 : 0.13),
+          ang: -Math.PI / 2 + k * ((2 * Math.PI) / Math.max(3, winners.length)) + (rnd() - 0.5) * 0.4,
+        };
+      }
+      return { id: p.id, exact: false, rad: 0.12 + 0.9 * p.show.level, ang: rnd() * 2 * Math.PI + i * GOLDEN };
+    });
     const pos = (it) => ({ x: TARGET.x + it.rad * TARGET.r * Math.cos(it.ang), y: TARGET.y + it.rad * TARGET.r * Math.sin(it.ang) });
     const MIN = 11; // distância mínima entre pontas de setas (cauda com emoji ~12)
     for (let iter = 0; iter < 200; iter++) {
@@ -70,9 +82,9 @@
     }
     for (const it of items) points[it.id] = { ...pos(it), where: 'alvo', exact: it.exact };
 
-    misses.forEach(({ p }, k) => {
-      // Mais longe = mais afastado do alvo. 1 (borda) … 1,33 (erro de 1000%) ou mais.
-      const far = Math.min(1, (p.precision - 1) / 0.33);
+    misses.forEach((p, k) => {
+      // O "mais longe" fica o mais afastado do alvo; os outros falhanços, mais perto da borda.
+      const far = p.show.farthest ? 1 : Math.min(0.8, p.show.level);
       if (k % 2 === 0) {
         const side = k % 4 === 0 ? 1 : -1;
         const x = TARGET.x + side * (TARGET.r + 16 + far * 44);
@@ -102,27 +114,28 @@
       const a = archers[id];
       const svg = kit.drawCharacter(a.player, pose, { size: a.h, small: a.small });
       svg.setAttribute('x', a.x);
-      svg.setAttribute('y', ARCHER_BOTTOM - a.h);
+      svg.setAttribute('y', a.bottom - a.h);
       a.g.replaceChildren(svg);
     }
 
     function bowPoint(id) {
       const a = archers[id];
-      return { x: a.x + a.w * 0.86, y: ARCHER_BOTTOM - a.h + a.h * (50 / 130) };
+      return { x: a.x + a.w * 0.86, y: a.bottom - a.h + a.h * (50 / 130) };
     }
 
     // Seta: haste na cor do jogador, penas e, na cauda, um círculo com o emoji do jogador.
     // `len` = distância da ponta ao centro da cauda (30 por omissão; mais comprida para afastar
-    // caudas que ficariam juntas).
+    // caudas que ficariam juntas). O desenho fica num grupo interior (.arco-arrow-body), para a
+    // vibração do "em cheio" (CSS) não apagar a posição (atributo transform do grupo de fora).
     function arrowShape(player, len = 30) {
       const f = len - 6; // onde começam as penas
-      return s('g', { class: 'arco-arrow' }, [
+      return s('g', { class: 'arco-arrow' }, [s('g', { class: 'arco-arrow-body' }, [
         s('line', { x1: -f, y1: 0, x2: 0, y2: 0, stroke: player.color, 'stroke-width': 2.4, 'stroke-linecap': 'round' }),
         s('path', { d: 'M0,0 L-5,-2.6 L-5,2.6 Z', fill: '#495057' }),
         s('path', { d: `M${-f},0 L${-f - 5},-4 L${-f - 2},0 L${-f - 5},4 Z`, fill: player.color, stroke: 'rgba(0,0,0,.35)', 'stroke-width': 0.6 }),
         s('circle', { cx: -len, cy: 0, r: 6.2, fill: player.color, stroke: '#fff', 'stroke-width': 1.2 }),
         s('text', { x: -len, y: 0.4, 'font-size': 7.5, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'arco-emoji' }, [document.createTextNode(player.emoji || '')]),
-      ]);
+      ])]);
     }
 
     // Curva do voo de cada seta: do arco do jogador até ao ponto onde acerta, a passar por cima.
@@ -162,11 +175,31 @@
       timers.add(t);
     }
 
+    // "Em cheio": a seta dourada vibra (umas vezes, não para sempre), dois anéis dourados e
+    // "EM CHEIO!" por baixo do alvo (nunca em cima da placa da resposta).
+    function exactFx(node, to) {
+      node.classList.add('quiver');
+      const g = s('g', { class: 'arco-exact' }, [
+        s('circle', { cx: to.x, cy: to.y, r: 5, class: 'arco-hit gold' }),
+        s('circle', { cx: to.x, cy: to.y, r: 9, class: 'arco-hit gold' }),
+        s('text', { x: TARGET.x, y: TARGET.y + TARGET.r + 3, 'text-anchor': 'middle', class: 'arco-exact-text' }, [document.createTextNode('EM CHEIO!')]),
+      ]);
+      fxLayer.append(g);
+      const t = setTimeout(() => { g.remove(); timers.delete(t); }, 1400);
+      timers.add(t);
+    }
+
     return {
-      mount(container, { players, kit: k }) {
+      mount(container, { players, kit: k, seed }) {
         kit = k;
         archers = {};
-        scene = s('svg', { viewBox: `0 0 ${VW} ${VH}`, class: 'arco-scene', role: 'img', 'aria-label': 'Tiro com arco: quanto mais perto do centro do alvo, mais perto da resposta certa' });
+        // Com mais de 6 jogadores a cena é mais alta: os arqueiros ficam em duas filas
+        // desencontradas, maiores (senão, com 12, ficavam minúsculos).
+        const n = players.length;
+        const twoRows = n > 6;
+        const vh = twoRows ? VH_TALL : VH;
+        scene = s('svg', { viewBox: `0 0 ${VW} ${vh}`, class: 'arco-scene', role: 'img', 'aria-label': 'Tiro com arco: quanto mais perto do centro do alvo, mais perto da resposta certa' });
+        kit.sizeScene(scene, VW, vh, twoRows ? 60 : 45);
 
         // Parede, relva e chão.
         scene.append(
@@ -177,7 +210,7 @@
               s('stop', { offset: '1', 'stop-color': '#3b3380' }),
             ]),
           ]),
-          s('path', { d: `M0,${GRASS_Y} L${VW},${GRASS_Y} L${VW},${VH} L0,${VH} Z`, fill: '#2b8a3e' }),
+          s('path', { d: `M0,${GRASS_Y} L${VW},${GRASS_Y} L${VW},${vh} L0,${vh} Z`, fill: '#2b8a3e' }),
           s('path', { d: `M0,${GRASS_Y} L${VW},${GRASS_Y}`, stroke: '#51cf66', 'stroke-width': 3 }),
           s('path', { d: `M0,${GRASS_Y + 22} L${VW},${GRASS_Y + 22}`, stroke: '#237032', 'stroke-width': 1, opacity: 0.6 }),
         );
@@ -205,22 +238,42 @@
         fxLayer = s('g', { class: 'arco-fx' });
         const archersLayer = s('g', { class: 'arco-archers' });
 
-        // Fila de arqueiros: um lugar por jogador; com mais de 6, a versão pequena do boneco.
-        const n = players.length;
-        const slot = VW / n;
-        const small = n > 6;
-        const h = Math.min(74, Math.max(30, slot * 1.25));
-        const w = h * (100 / 130);
-        players.forEach((p, i) => {
-          const g = s('g', { class: 'arco-archer', 'data-id': p.id });
-          archers[p.id] = { g, player: p, x: i * slot + (slot - w) / 2, w, h, small };
-          archersLayer.append(g);
-          placeArcher(p.id, 'arco');
-        });
+        // Fila de arqueiros: um lugar por jogador. Com mais de 6, duas filas desencontradas (a de
+        // trás meio lugar ao lado), com a versão pequena do boneco mas maior do que numa só fila.
+        if (!twoRows) {
+          const slot = VW / n;
+          const h = Math.min(74, slot * 1.25);
+          const w = h * (100 / 130);
+          players.forEach((p, i) => {
+            const g = s('g', { class: 'arco-archer', 'data-id': p.id });
+            archers[p.id] = { g, player: p, x: i * slot + (slot - w) / 2, bottom: ARCHER_BOTTOM, w, h, small: false };
+            archersLayer.append(g);
+          });
+        } else {
+          const cols = Math.ceil(n / 2);
+          const slot = VW / (cols + 0.5);
+          const h = Math.min(64, slot * 1.3);
+          const w = h * (100 / 130);
+          const back = s('g');
+          const front = s('g');
+          players.forEach((p, i) => {
+            const row = i % 2; // 0 = à frente, 1 = atrás
+            const col = Math.floor(i / 2);
+            const g = s('g', { class: 'arco-archer', 'data-id': p.id });
+            archers[p.id] = {
+              g, player: p, w, h, small: true,
+              x: col * slot + (slot - w) / 2 + (row ? slot / 2 : 0),
+              bottom: row ? vh - 4 - h * 0.85 : vh - 4,
+            };
+            (row ? back : front).append(g);
+          });
+          archersLayer.append(back, front);
+        }
+        for (const p of players) placeArcher(p.id, 'arco');
 
         scene.append(archersLayer, arrowsLayer, fxLayer);
         container.append(scene);
-        points = aimPoints(players);
+        points = aimPoints(players, seed);
         // Inclinação final de cada seta: na direção de quem a disparou, por isso a cauda aponta
         // sempre para baixo, para os arqueiros, e nunca sobe até à placa da resposta. No chão
         // fica quase de pé.
@@ -265,6 +318,8 @@
         node.dataset.id = player.id;
         arrowsLayer.append(node);
         archers[player.id].g.classList.add('shot');
+        // "Em cheio": seta dourada, que vibra no centro ao cravar-se.
+        if (player.show.exact) node.classList.add('gold');
 
         if (instant || kit.reducedMotion()) {
           settle(node, player.id);
@@ -276,7 +331,8 @@
           cancelAnimationFrame(flights.get(player.id)?.frame);
           flights.delete(player.id);
           settle(node, player.id);
-          if (to.where === 'alvo') hitFx(to);
+          if (player.show.exact) exactFx(node, to);
+          else if (to.where === 'alvo') hitFx(to);
           else missFx(to);
         };
         const frame = (now) => {
@@ -296,7 +352,8 @@
       },
 
       // Resposta certa na placa (a rolar até ao valor). O mais perto festeja; o mais longe fica
-      // triste (se não empatou toda a gente). As setas do mais perto ganham um brilho.
+      // triste (se não empatou toda a gente); os outros baixam o arco (pose normal). As setas do
+      // mais perto ganham um brilho.
       revealAnswer(answer, { closest, farthest, instant }) {
         for (const f of [...flights.values()]) f.finish();
         if (instant) answerText.textContent = kit.fmt(answer);
@@ -304,8 +361,7 @@
         for (const id of Object.keys(archers)) {
           const near = closest.includes(id);
           const far = farthest.includes(id) && !near;
-          if (near) placeArcher(id, 'festejar');
-          else if (far) placeArcher(id, 'triste');
+          placeArcher(id, near ? 'festejar' : far ? 'triste' : 'parado');
           archers[id].g.classList.toggle('near', near);
           archers[id].g.classList.toggle('far', far);
         }

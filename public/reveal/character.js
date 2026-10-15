@@ -6,6 +6,7 @@
 //   drawCharacter(player, pose, { size, small, title })
 //     player: { emoji, color, character: { outfit, hat, extra } }
 //     pose:   'parado' | 'arco' | 'lancar' | 'kart' | 'rematar' | 'festejar' | 'triste'
+//             | 'kart_festejar' | 'kart_triste' (no kart, no fim da corrida)
 //     size:   altura em px (a largura é ~0,77 da altura)
 //     small:  versão simplificada (traços mais grossos, sem extras nem pormenores), para quando
 //             há muitos jogadores no ecrã
@@ -56,7 +57,20 @@
       head: [50, 34, 0],
       armL: [[40, 58], [52, 68], [66, 74]], armR: [[60, 58], [66, 68], [72, 74]],
       legL: [[45, 86], [56, 90], [64, 92]], legR: [[55, 86], [62, 90], [68, 92]],
-      seated: true,
+      seated: true, kart: true,
+    },
+    // No kart, no fim da corrida: a festejar de braços no ar, ou triste, sem sair do kart.
+    kart_festejar: {
+      head: [50, 32, 0],
+      armL: [[40, 58], [33, 44], [29, 30]], armR: [[60, 58], [67, 44], [71, 30]],
+      legL: [[45, 86], [56, 90], [64, 92]], legR: [[55, 86], [62, 90], [68, 92]],
+      seated: true, kart: true, mood: 'festejar',
+    },
+    kart_triste: {
+      head: [49, 37, -16],
+      armL: [[40, 59], [50, 70], [63, 78]], armR: [[60, 59], [65, 70], [69, 78]],
+      legL: [[45, 86], [56, 90], [64, 92]], legR: [[55, 86], [62, 90], [68, 92]],
+      seated: true, kart: true, mood: 'triste',
     },
     rematar: {
       head: [48, 30, -6],
@@ -129,8 +143,9 @@
   // Extras atrás do corpo (capa, mochila) e à frente (cachecol).
   function extraBehind(id, pose, outfit) {
     if (id === 'capa') {
-      const flow = pose === 'arco' || pose === 'lancar' || pose === 'rematar' || pose === 'kart' ? -10 : 0;
-      const bottom = pose === 'kart' ? 86 : 104;
+      const seated = POSES[pose].seated;
+      const flow = pose === 'arco' || pose === 'lancar' || pose === 'rematar' || seated ? -10 : 0;
+      const bottom = seated ? 86 : 104;
       return svgEl('path', { d: `M39,51 L61,51 L${70 + flow},${bottom} Q${50 + flow},${bottom + 6} ${28 + flow},${bottom} Z`, fill: '#c92a2a', stroke: '#8a1c1c', 'stroke-width': 1.5, 'stroke-linejoin': 'round' });
     }
     if (id === 'mochila') {
@@ -250,7 +265,7 @@
     if (!small) svg.append(svgEl('path', { d: `M44,${top + 3} Q50,${top + 8} 56,${top + 3}`, fill: 'none', stroke: outfitDark, 'stroke-width': 1.2, opacity: 0.7 }));
 
     // Kart à frente das pernas e do tronco; braços por cima (ao volante).
-    if (p === 'kart') svg.append(propsFront(p, outfit, small, kartColor));
+    if (g.kart) svg.append(propsFront('kart', outfit, small, kartColor));
 
     // Braços (mangas na cor da roupa) e mãos.
     for (const arm of [g.armL, g.armR]) {
@@ -259,10 +274,9 @@
       if (!small) svg.append(svgEl('circle', { cx: arm[2][0], cy: arm[2][1], r: 3.6, fill: SKIN, stroke: '#e0a96d', 'stroke-width': 0.8 }));
     }
 
-    if (p !== 'kart') {
-      const front = propsFront(p, outfit, small);
-      if (front) svg.append(front);
-    }
+    // Objetos da pose (no kart, só os da "emoção": confetti ou lágrima).
+    const front = g.kart ? (g.mood ? propsFront(g.mood, outfit, small) : null) : propsFront(p, outfit, small);
+    if (front) svg.append(front);
     const scarf = extraFront(extra, outfit);
     if (scarf) svg.append(scarf);
 

@@ -25,10 +25,11 @@
     { id: 'cachecol', label: 'Cachecol' },
     { id: 'mochila', label: 'Mochila' },
   ];
-  const POSES = ['parado', 'arco', 'lancar', 'kart', 'rematar', 'festejar', 'triste'];
+  const POSES = ['parado', 'arco', 'lancar', 'kart', 'rematar', 'festejar', 'triste', 'kart_festejar', 'kart_triste'];
   const POSE_LABELS = {
     parado: 'Parado', arco: 'A disparar arco', lancar: 'A lançar bola', kart: 'A conduzir kart',
     rematar: 'A rematar', festejar: 'A festejar', triste: 'Triste',
+    kart_festejar: 'A festejar no kart', kart_triste: 'Triste no kart',
   };
 
   // Boneco por omissão: roupa na cor do jogador (outfit null), sem acessórios.

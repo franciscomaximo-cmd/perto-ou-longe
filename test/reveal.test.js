@@ -55,6 +55,87 @@ test('gerador com semente: a mesma semente dá sempre os mesmos números', () =>
   assert.notDeepEqual(Array.from({ length: 5 }, seeded('ABCD|4|jogador-1')), seqA.slice(0, 5));
 });
 
+// --- Posição de apresentação (resultado visual relativo à ronda) --------------------------
+
+const { presentationOf, MIDDLE_MIN, MIDDLE_MAX } = require('../public/reveal/presentation');
+
+// Como o servidor: distâncias, mais perto, mais longe e "em cheio"; e a posição de cada um.
+function showsFor(answer, guesses) {
+  const ids = guesses.map((_, i) => `p${i}`);
+  const dist = Object.fromEntries(ids.map((id, i) => [id, Math.abs(guesses[i] - answer)]));
+  const min = Math.min(...Object.values(dist));
+  const max = Math.max(...Object.values(dist));
+  const result = {
+    closest: ids.filter((id) => dist[id] === min),
+    farthest: ids.filter((id) => dist[id] === max),
+    exact: min === 0 ? ids.filter((id) => dist[id] === 0) : [],
+  };
+  const players = ids.map((id, i) => ({ id, precision: precisionOf(guesses[i], answer) }));
+  return presentationOf(players, result);
+}
+
+test('apresentação: o vencedor fica sempre em cima (nível 0) e nunca falha, mesmo a errar 75%', () => {
+  // Pergunta difícil: todos falham por mais de 70%; p0 ganha a falhar por 75%.
+  const shows = showsFor(384400, [96100, 40000, 1000000, 2000000]);
+  assert.equal(shows.p0.level, 0);
+  assert.equal(shows.p0.winner, true);
+  assert.equal(shows.p0.miss, false, 'o vencedor nunca falha visualmente');
+  assert.equal(shows.p0.exact, false);
+  for (const id of ['p1', 'p2']) assert.ok(shows[id].level > 0 && shows[id].level < 1);
+  assert.equal(shows.p2.miss, true, 'quem erra mais de 100% (e não ganhou) continua a falhar');
+});
+
+test('apresentação: o "mais longe" fica sempre em baixo (nível 1) e falha', () => {
+  for (const [answer, guesses] of [[206, [150, 300, 210]], [50, [51, 52, 53, 54]], [10, [12, 9, 1247, 15]]]) {
+    const shows = showsFor(answer, guesses);
+    const far = Object.entries(shows).filter(([, s]) => s.farthest);
+    assert.ok(far.length >= 1);
+    for (const [, s] of far) {
+      assert.equal(s.level, 1);
+      assert.equal(s.miss, true);
+      assert.equal(s.winner, false);
+    }
+  }
+});
+
+test('apresentação: os do meio ficam entre o vencedor e o "mais longe", pela ordem dos palpites', () => {
+  const guesses = [8000, 9000, 8849, 7500, 10000, 6000, 8800, 12000, 8500, 5000, 20000, 8900];
+  const shows = showsFor(8849, guesses);
+  assert.equal(shows.p2.level, 0);
+  assert.equal(shows.p2.exact, true, '"em cheio" tem destaque extra');
+  assert.equal(shows.p10.level, 1);
+  const middle = Object.entries(shows).filter(([, s]) => !s.winner && !s.farthest);
+  for (const [, s] of middle) assert.ok(s.level >= MIDDLE_MIN && s.level <= MIDDLE_MAX);
+  // Mais perto da resposta → nível mais baixo (melhor).
+  const miss = (id) => Math.abs(guesses[Number(id.slice(1))] - 8849);
+  const byDistance = middle.map(([id]) => id).sort((a, b) => miss(a) - miss(b));
+  for (let i = 1; i < byDistance.length; i++) assert.ok(shows[byDistance[i]].level >= shows[byDistance[i - 1]].level);
+});
+
+test('apresentação: empate no mais perto — todos os empatados em cima', () => {
+  const shows = showsFor(206, [201, 211, 300, 150]);
+  for (const id of ['p0', 'p1']) {
+    assert.equal(shows[id].level, 0);
+    assert.equal(shows[id].winner, true);
+  }
+  assert.equal(shows.p2.farthest, true);
+  // Dois "em cheio": os dois em cima, com destaque.
+  const two = showsFor(1974, [1974, 1975, 1974, 1960]);
+  assert.ok(two.p0.winner && two.p0.exact && two.p2.winner && two.p2.exact);
+  // Todos iguais: todos ganham (nenhum aparece como o pior).
+  const all = showsFor(27, [30, 30, 30]);
+  for (const s of Object.values(all)) assert.ok(s.winner && s.level === 0 && !s.miss);
+});
+
+test('apresentação: palpites iguais (mesma precisão) têm exatamente o mesmo resultado', () => {
+  // 80 e 20 falham ambos por 30 (60%).
+  const shows = showsFor(50, [51, 80, 20, 150]);
+  assert.deepEqual(shows.p1, shows.p2);
+  const same = showsFor(27, [30, 30, 30, 25, 40]);
+  assert.deepEqual(same.p0, same.p1);
+  assert.deepEqual(same.p1, same.p2);
+});
+
 // --- Baralho de temas ---------------------------------------------------------------------
 
 // Gerador aleatório com semente, para o teste ser repetível.
@@ -130,4 +211,6 @@ test('cada tema do servidor tem o seu ficheiro em public/reveal/ e está carrega
     assert.match(fs.readFileSync(file, 'utf8'), new RegExp(`register\\('${id}'`), `${id}.js não se regista`);
     assert.match(html, new RegExp(`reveal/${id}\\.js`), `index.html não carrega reveal/${id}.js`);
   }
+  // A posição de apresentação carrega-se antes do código comum (index.js usa-a).
+  assert.ok(html.indexOf('reveal/presentation.js') > 0 && html.indexOf('reveal/presentation.js') < html.indexOf('reveal/index.js'));
 });

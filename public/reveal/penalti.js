@@ -3,18 +3,21 @@
 // Tema "penálti", com guarda-redes. Na vez de cada jogador, o seu boneco (pose "a rematar")
 // corre e remata; o guarda-redes atira-se.
 //
-// Quem marca e quem falha (tal como vem do SERVIDOR, sem recalcular):
-//   - golo: SÓ quem ficou mais perto nesta ronda (result.closest; se houver empate, todos);
-//   - defesa: os outros com precisão ≤ 1 (o guarda-redes agarra, soca ou desvia com a mão ou o pé);
-//   - precisão um pouco acima de 1: bate no poste ou na barra e sai;
-//   - precisão maior: por cima da barra ou ao lado do poste.
+// Quem marca e quem falha vem da posição de apresentação (player.show), relativa à ronda e
+// calculada a partir do resultado do SERVIDOR:
+//   - golo: SÓ quem ganhou o ponto de "mais perto" (se houver empate, todos), sempre no ângulo,
+//     com o guarda-redes atirado para o lado errado; no "em cheio", GOLAÇO e a rede rasga;
+//   - o "mais longe": a bola vai parar à bancada (cantos de cima);
+//   - defesa: os outros que não falharam por mais de 100% (agarra, soca ou desvia com a mão ou
+//     o pé); quanto pior o nível, mais ao centro;
+//   - erro um pouco acima de 100%: bate no poste ou na barra e sai; maior: por cima ou ao lado.
 //
-// Para onde vai o remate: a precisão dá a "margem" (0 = ângulo da baliza; quanto maior, mais
-// para o centro); o canto e o ponto exato vêm de um gerador com semente (ronda + id do
-// jogador), por isso são IGUAIS em todos os telemóveis e depois de recarregar. O mesmo para o
-// mergulho do guarda-redes. As marcas nunca ficam no mesmo sítio.
+// O canto e o ponto exato vêm de um gerador com semente (ronda + id do jogador), por isso são
+// IGUAIS em todos os telemóveis e depois de recarregar. O mesmo para o mergulho do
+// guarda-redes. As marcas nunca ficam no mesmo sítio.
 //
-// Cena SVG de tamanho fixo (viewBox 300 × 300), por zonas:
+// Cena SVG de tamanho fixo (viewBox 300 × 300; 300 × 340 com mais de 6 jogadores, com duas
+// filas em baixo), por zonas:
 //   - topo: placa da resposta certa (nenhuma bola vai lá);
 //   - baliza com rede, postes e barra;
 //   - relvado com a marca de penálti e o boneco de quem remata;
@@ -23,6 +26,7 @@
   const NS = 'http://www.w3.org/2000/svg';
   const VW = 300;
   const VH = 300;
+  const VH_TALL = 340; // com mais de 6 jogadores (duas filas em baixo)
   const GOAL = { l: 64, r: 236, t: 46, b: 134 }; // dentro dos postes e da barra
   const CENTER = { x: 150, y: 92 };
   const SPOT = { x: 150, y: 198 };
@@ -61,9 +65,9 @@
     ]);
   }
 
-  // Onde vai cada remate, como reage o guarda-redes e que tipo de defesa — tudo a partir da
-  // semente da ronda e do id do jogador (determinístico).
-  function plan(players, seed, closest) {
+  // Onde vai cada remate, como reage o guarda-redes e que tipo de defesa, a partir da posição
+  // de apresentação (player.show) e da semente da ronda + id do jogador (determinístico).
+  function plan(players, seed) {
     const placed = [];
     const out = {};
     const corners = [
@@ -71,20 +75,35 @@
       { x: GOAL.l + 9, y: GOAL.b - 9 }, { x: GOAL.r - 9, y: GOAL.b - 9 },
     ];
     const free = (pt) => (placed.length ? Math.min(...placed.map((q) => dist(pt, q))) : Infinity);
+    // Vencedores: cada um no seu ângulo (primeiro os de cima, a começar por um lado ao calhas).
+    const winners = players.filter((p) => p.show.winner);
+    const firstSide = Math.floor(window.RevealSeeded.seeded(`${seed}|golo`)() * 2);
+    const farthest = players.filter((p) => p.show.farthest);
 
     for (const p of players) {
       const rng = window.RevealSeeded.seeded(`${seed}|${p.id}`);
-      const goal = closest.includes(p.id);
-      let kind = goal ? 'golo' : p.precision <= 1 ? 'defesa' : p.precision <= 1.12 ? 'ferro' : 'fora';
+      const show = p.show;
+      const kind = show.winner ? 'golo' : show.farthest ? 'bancada' : !show.miss ? 'defesa' : p.precision <= 1.12 ? 'ferro' : 'fora';
       // Melhor de várias tentativas: o ponto mais afastado das marcas já postas.
       let best = null;
       for (let tries = 0; tries < 24; tries++) {
         let pt;
         let hit = null; // ferro: onde bate antes de sair
-        if (kind === 'golo' || kind === 'defesa') {
-          const m = clamp(p.precision, 0, 1);
+        if (kind === 'golo') {
+          // No ângulo (o "em cheio" mesmo no canto), longe do guarda-redes.
+          const k = winners.indexOf(p);
+          const c = tries < 8
+            ? corners[k < 2 ? (firstSide + k) % 2 : 2 + ((firstSide + k) % 2)]
+            : corners[Math.floor(rng() * 4)];
+          const f = (show.exact ? 0.02 : 0.07) + (tries < 8 ? 0 : rng() * 0.15);
+          pt = {
+            x: clamp(c.x + (CENTER.x - c.x) * f + (rng() - 0.5) * 6, GOAL.l + 8, GOAL.r - 8),
+            y: clamp(c.y + (CENTER.y - c.y) * f + (rng() - 0.5) * 4, GOAL.t + 8, GOAL.b - 8),
+          };
+        } else if (kind === 'defesa') {
+          // Defendido: quanto pior o nível, mais para o centro (mais fácil para o guarda-redes).
           const c = corners[Math.floor(rng() * 4)];
-          const f = 0.06 + 0.82 * m; // 0 = no ângulo; 1 = quase no centro
+          const f = 0.12 + 0.8 * show.level;
           const jitter = (rng() - 0.5) * 22;
           pt = {
             x: c.x + (CENTER.x - c.x) * f + jitter * 0.6,
@@ -102,6 +121,11 @@
             hit = { x: left ? GOAL.l - 1 : GOAL.r + 1, y: GOAL.t + 14 + rng() * (GOAL.b - GOAL.t - 30), where: 'poste' };
             pt = { x: left ? GOAL.l - 20 : GOAL.r + 20, y: hit.y + (rng() - 0.5) * 24 };
           }
+        } else if (kind === 'bancada') {
+          // O "mais longe": a bola vai parar à bancada, num dos cantos de cima (longe da placa
+          // da resposta, ao meio). Se forem vários, alternam os lados.
+          const left = (farthest.indexOf(p) + (rng() < 0.5 ? 0 : 1)) % 2 === 0;
+          pt = { x: left ? 12 + rng() * 52 : 236 + rng() * 52, y: 9 + rng() * 22, where: 'bancada' };
         } else {
           const over = rng() < 0.5;
           pt = over
@@ -115,14 +139,13 @@
       const pt = best.pt;
       placed.push(pt);
 
-      // Guarda-redes: nas defesas chega à bola; nos golos atira-se para o lado errado (ou não
-      // chega); nos remates para fora atira-se para um dos lados.
+      // Guarda-redes: nas defesas chega à bola; nos golos atira-se SEMPRE para o lado errado;
+      // nos remates para fora atira-se para um dos lados.
       let dive;
       if (kind === 'defesa') dive = { to: pt, reach: 1 };
       else if (kind === 'golo') {
-        dive = rng() < 0.6
-          ? { to: { x: 2 * CENTER.x - pt.x, y: clamp(pt.y + (rng() - 0.5) * 30, GOAL.t + 10, GOAL.b - 6) }, reach: 0.9 } // lado errado
-          : { to: pt, reach: 0.45 }; // não chega
+        const wrongX = pt.x < CENTER.x ? GOAL.r - 22 : GOAL.l + 22;
+        dive = { to: { x: wrongX, y: clamp(GOAL.b - pt.y + GOAL.t + (rng() - 0.5) * 16, GOAL.t + 14, GOAL.b - 10) }, reach: 0.9 };
       } else dive = { to: { x: rng() < 0.5 ? GOAL.l + 20 : GOAL.r - 20, y: GOAL.t + 20 + rng() * 50 }, reach: 0.8 };
 
       // Tipo de defesa: em baixo, pé ou agarra; em cima, soco ou desvio com a mão; a meio, qualquer.
@@ -133,7 +156,7 @@
         const options = low ? ['pé', 'agarra'] : high ? ['soco', 'mão'] : ['agarra', 'mão', 'soco'];
         save = options[Math.floor(rng() * options.length)];
       }
-      out[p.id] = { kind, pt, hit: best.hit, dive, save, where: pt.where || (best.hit && best.hit.where) };
+      out[p.id] = { kind, pt, hit: best.hit, dive, save, exact: show.exact, where: pt.where || (best.hit && best.hit.where) };
     }
     return out;
   }
@@ -172,7 +195,7 @@
       const r = row[id];
       const svg = kit.drawCharacter(r.player, pose, { size: r.h, small: r.small });
       svg.setAttribute('x', r.x);
-      svg.setAttribute('y', VH - 2 - r.h);
+      svg.setAttribute('y', r.bottom - r.h);
       r.g.replaceChildren(svg);
     }
 
@@ -187,6 +210,7 @@
     }
 
     function addMark(player, plan) {
+      if (plan.kind === 'golo' && plan.exact) tearNet(plan.pt);
       const g = s('g', { class: `pen-mark ${plan.kind}`, 'data-id': player.id, transform: `translate(${plan.pt.x.toFixed(1)} ${plan.pt.y.toFixed(1)})` }, [
         s('circle', { r: MARK_R, fill: player.color }),
         text({ y: 0.5, 'font-size': 8.5, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'pen-emoji' }, player.emoji || ''),
@@ -200,22 +224,51 @@
       later(() => t.remove(), FX_MS);
     }
 
-    const resultText = (pl) => (pl.kind === 'golo' ? ['GOLO!', 'golo']
+    const resultText = (pl) => (pl.kind === 'golo' ? [pl.exact ? 'GOLAÇO!' : 'GOLO!', 'golo']
       : pl.kind === 'defesa' ? [{ agarra: 'AGARRA!', soco: 'SOCO!', mão: 'DEFESA!', pé: 'COM O PÉ!' }[pl.save], 'defesa']
       : pl.kind === 'ferro' ? [pl.hit.where === 'barra' ? 'BARRA!' : 'POSTE!', 'fora']
+      : pl.kind === 'bancada' ? ['PARA A BANCADA!', 'fora']
       : [pl.pt.where === 'por cima' ? 'POR CIMA!' : 'AO LADO!', 'fora']);
 
+    // "Em cheio": a bola rasga a rede no ângulo (um buraco com fios soltos, que fica).
+    function tearNet(pt) {
+      const r = 9;
+      const jag = Array.from({ length: 10 }, (_, i) => {
+        const a = (i / 10) * 2 * Math.PI;
+        const rr = r * (i % 2 ? 0.6 : 1);
+        return `${(pt.x + rr * Math.cos(a)).toFixed(1)},${(pt.y + rr * Math.sin(a)).toFixed(1)}`;
+      }).join(' ');
+      net.append(s('g', { class: 'pen-tear' }, [
+        s('polygon', { points: jag, fill: '#0c0a24', stroke: '#dee2e6', 'stroke-width': 0.7 }),
+        s('path', { d: `M${pt.x - r},${pt.y - 3} l-5,-4 M${pt.x + r},${pt.y + 2} l6,3 M${pt.x - 2},${pt.y + r} l-2,6 M${pt.x + 3},${pt.y - r} l3,-5`, stroke: '#dee2e6', 'stroke-width': 0.7, opacity: 0.8 }),
+      ]));
+    }
+
     return {
-      mount(container, { players, kit: k, result, seed }) {
+      mount(container, { players, kit: k, seed }) {
         kit = k;
         row = {};
-        scene = s('svg', { viewBox: `0 0 ${VW} ${VH}`, class: 'pen-scene', role: 'img', 'aria-label': 'Penálti: só quem ficou mais perto marca golo' });
+        // Com mais de 6 jogadores a cena é mais alta: a fila de baixo passa a duas filas
+        // desencontradas, com bonecos maiores.
+        const n = players.length;
+        const twoRows = n > 6;
+        const vh = twoRows ? VH_TALL : VH;
+        scene = s('svg', { viewBox: `0 0 ${VW} ${vh}`, class: 'pen-scene', role: 'img', 'aria-label': 'Penálti: só quem ficou mais perto marca golo' });
+        kit.sizeScene(scene, VW, vh, twoRows ? 60 : 45);
 
-        // Bancada, relvado com riscas, grande área e marca de penálti.
+        // Bancada (com público nos cantos de cima), relvado com riscas, grande área e marca.
         scene.append(s('rect', { x: 0, y: 0, width: VW, height: GOAL.b, rx: 10, fill: '#241e55' }));
+        const crowd = s('g', { class: 'pen-crowd', opacity: 0.55 });
+        for (let r = 0; r < 3; r++) {
+          for (let x = 10 + (r % 2) * 5; x < VW - 6; x += 10) {
+            if (x > 80 && x < 220) continue; // a placa da resposta fica ao meio
+            crowd.append(s('circle', { cx: x, cy: 10 + r * 10, r: 3, fill: ['#f783ac', '#4dabf7', '#ffd43b', '#3ddc97', '#ff922b'][(x / 5 + r * 2) % 5 | 0] }));
+          }
+        }
+        scene.append(crowd);
         for (let i = 0; i < 6; i++) {
-          const y = GOAL.b + i * ((VH - GOAL.b) / 6);
-          scene.append(s('rect', { x: 0, y, width: VW, height: (VH - GOAL.b) / 6 + 0.5, fill: i % 2 ? '#2f9e44' : '#37b24d' }));
+          const y = GOAL.b + i * ((vh - GOAL.b) / 6);
+          scene.append(s('rect', { x: 0, y, width: VW, height: (vh - GOAL.b) / 6 + 0.5, fill: i % 2 ? '#2f9e44' : '#37b24d' }));
         }
         scene.append(
           s('path', { d: `M20,${GOAL.b} L20,${GOAL.b + 52} L280,${GOAL.b + 52} L280,${GOAL.b}`, fill: 'none', stroke: '#e9fbe9', 'stroke-width': 1.5, opacity: 0.85 }),
@@ -248,22 +301,42 @@
         marksLayer = s('g', { class: 'pen-marks' });
         fxLayer = s('g', { class: 'pen-fx' });
 
-        // Fila em baixo: o boneco de cada jogador (pela ordem dos remates).
-        const n = players.length;
-        const slot = VW / n;
-        const h = Math.min(60, Math.max(30, slot * 1.25));
-        const w = h * (100 / 130);
+        // Fila em baixo: o boneco de cada jogador (pela ordem dos remates). Com mais de 6, duas
+        // filas desencontradas (a de trás meio lugar ao lado).
         const rowLayer = s('g', { class: 'pen-row' });
-        players.forEach((p, i) => {
-          const g = s('g', { class: 'pen-row-player', 'data-id': p.id });
-          row[p.id] = { g, player: p, x: i * slot + (slot - w) / 2, h, w, small: n > 6 };
-          rowLayer.append(g);
-          drawRow(p.id, 'parado');
-        });
+        if (!twoRows) {
+          const slot = VW / n;
+          const h = Math.min(60, slot * 1.25);
+          const w = h * (100 / 130);
+          players.forEach((p, i) => {
+            const g = s('g', { class: 'pen-row-player', 'data-id': p.id });
+            row[p.id] = { g, player: p, x: i * slot + (slot - w) / 2, bottom: vh - 2, h, w, small: false };
+            rowLayer.append(g);
+          });
+        } else {
+          const cols = Math.ceil(n / 2);
+          const slot = VW / (cols + 0.5);
+          const h = Math.min(60, slot * 1.3);
+          const w = h * (100 / 130);
+          const back = s('g');
+          const front = s('g');
+          players.forEach((p, i) => {
+            const behind = i % 2 === 1;
+            const g = s('g', { class: 'pen-row-player', 'data-id': p.id });
+            row[p.id] = {
+              g, player: p, h, w, small: true,
+              x: Math.floor(i / 2) * slot + (slot - w) / 2 + (behind ? slot / 2 : 0),
+              bottom: behind ? vh - 2 - h * 0.8 : vh - 2,
+            };
+            (behind ? back : front).append(g);
+          });
+          rowLayer.append(back, front);
+        }
+        for (const p of players) drawRow(p.id, 'parado');
 
         scene.append(rowLayer, shooterLayer, marksLayer, ballLayer, fxLayer);
         container.append(scene);
-        plans = plan(players, seed, result.closest);
+        plans = plan(players, seed);
       },
 
       revealPlayer(player, precision, { instant }) {

@@ -15,6 +15,10 @@
  *       closest, avatar(size) }, para o tema poder planear o espaço de todos desde o início.
  *       `result` = { closest, farthest, exact } (listas de ids) é o que o SERVIDOR calculou:
  *       os temas usam-no tal como vem (ex.: quem marca golo), nunca o recalculam.
+ *       `show` = { level, winner, exact, farthest, miss } é a POSIÇÃO DE APRESENTAÇÃO do
+ *       jogador (public/reveal/presentation.js), relativa à ronda: os temas desenham o
+ *       resultado a partir dela, não da precisão absoluta. O vencedor tem sempre o melhor
+ *       resultado (e nunca falha); o "mais longe" sempre o pior; o "em cheio" um destaque extra.
  *       `seed` identifica a ronda: para variar a animação, os temas usam
  *       RevealSeeded.seeded(`${seed}|${id}`) (public/reveal/seeded.js), nunca Math.random(),
  *       para todos os telemóveis (e quem recarrega) verem exatamente o mesmo.
@@ -22,7 +26,7 @@
  *       (public/reveal/character.js); os temas só escolhem a pose. Para um som, o tema pede-o
  *       ao código comum com kit.sound(nome) (ex.: 'golo').
  *   revealPlayer(player, precision, info)
- *       Anima a vez de UM jogador. info = { value, distance, exact, index, total, instant }.
+ *       Anima a vez de UM jogador. info = { value, distance, exact, show, index, total, instant }.
  *       Com instant = true mostra o resultado final sem animação.
  *   revealAnswer(answer, info)
  *       Mostra a resposta certa. info = { closest, farthest, exact, instant } (listas de ids).
@@ -37,13 +41,17 @@
  *
  * REGRAS que todos os temas têm de cumprir:
  *   1. Tamanho fixo desde o início, sem saltos de layout. No telemóvel ocupa a largura e no
- *      máximo ~45% da altura do ecrã.
+ *      máximo ~45% da altura do ecrã (com mais de 6 jogadores pode ser mais alto, para os
+ *      bonecos e os nomes continuarem legíveis).
  *   2. A resposta certa e os "em cheio" nunca ficam tapados; palpites iguais não se sobrepõem.
  *   3. Funciona com 3 a 12 jogadores.
  *   4. Com prefers-reduced-motion mostra logo o resultado final (o código comum passa
  *      instant = true em todas as chamadas).
  *   5. Só SVG, CSS ou canvas desenhados no código, sem imagens externas pesadas; bom
  *      desempenho no iPhone (animar transform/opacity, nada de animações a correr para sempre).
+ *   6. O resultado visual é RELATIVO à ronda (player.show): quem ganhou o ponto de "mais
+ *      perto" tem sempre o melhor resultado do tema e nunca falha; o "em cheio" tem um destaque
+ *      extra; o "mais longe" tem sempre o pior; palpites iguais, o mesmo resultado.
  */
 (function (root) {
   const { precisionOf } = root.RevealPrecision;
@@ -92,8 +100,17 @@
   }
   const stopCount = (node) => cancelAnimationFrame(node.counting);
 
+  // Tamanho da cena SVG (vw × vh): ocupa a largura e, no máximo, `maxVh`% da altura do ecrã.
+  // 45% por omissão; com mais de 6 jogadores os temas pedem mais (cena mais alta), para os
+  // bonecos e os nomes continuarem legíveis num iPhone. (svh onde existir; senão, vh.)
+  function sizeScene(svg, vw, vh, maxVh = 45) {
+    svg.style.aspectRatio = `${vw} / ${vh}`;
+    svg.style.width = `min(100%, calc(${maxVh}vh * ${vw} / ${vh}))`;
+    svg.style.width = `min(100%, calc(${maxVh}svh * ${vw} / ${vh}))`;
+  }
+
   // drawCharacter(player, pose, opções) vem de character.js: os temas só escolhem a pose.
-  const kit = { el, fmt, withUnit, avatar, countUp, stopCount, reducedMotion, precisionOf, drawCharacter: root.drawCharacter };
+  const kit = { el, fmt, withUnit, avatar, countUp, stopCount, reducedMotion, precisionOf, sizeScene, drawCharacter: root.drawCharacter };
 
   // --- Registo de temas -------------------------------------------------------------------
 
@@ -117,6 +134,7 @@
     let key = null;
     let revealed = 0;
     let answerShown = false;
+    let shows = {}; // posição de apresentação de cada jogador nesta ronda
 
     function destroy() {
       if (theme) theme.destroy();
@@ -140,12 +158,19 @@
         revealed = 0;
         answerShown = false;
         theme = create(r.theme);
+        const result = { closest: [...r.closest], farthest: [...r.farthest], exact: [...(r.exact || [])] };
+        // Posição de apresentação (relativa à ronda), calculada só aqui para todos os temas.
+        shows = root.RevealPresentation.presentationOf(
+          r.order.map((id) => ({ id, precision: precisionOf(r.answers[id], r.correct) })),
+          result,
+        );
         const players = r.order.map((id) => ({
           ...r.players[id],
           id,
           value: r.answers[id],
           precision: precisionOf(r.answers[id], r.correct),
           closest: r.closest.includes(id),
+          show: shows[id],
           avatar: (size) => avatarOf(id, size),
         }));
         theme.mount(stage, {
@@ -153,7 +178,7 @@
           answer: r.correct,
           unit: r.unit,
           kit: themeKit,
-          result: { closest: [...r.closest], farthest: [...r.farthest], exact: [...(r.exact || [])] },
+          result,
           seed: String(r.seed ?? r.key),
         });
         // Lista com uma linha por palpite desde o início (escondida), para não empurrar a página.
@@ -171,11 +196,12 @@
       const instant = reducedMotion() || (fresh && r.shown > 1) || jumped;
       for (let i = revealed; i < r.shown; i++) {
         const id = r.order[i];
-        const p = { ...r.players[id], id, value: r.answers[id], avatar: (size) => avatarOf(id, size) };
+        const p = { ...r.players[id], id, value: r.answers[id], show: shows[id], avatar: (size) => avatarOf(id, size) };
         theme.revealPlayer(p, precisionOf(r.answers[id], r.correct), {
           value: r.answers[id],
           distance: r.distances[id],
           exact: r.distances[id] === 0,
+          show: shows[id],
           index: i,
           total: r.order.length,
           instant,

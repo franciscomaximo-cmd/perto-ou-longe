@@ -5,14 +5,15 @@
 // resultado de cada um. Com 12 jogadores, 12 pistas lado a lado ficariam com ~25 px no iPhone
 // (pinos ilegíveis); assim cada lançamento vê-se em grande e cada resultado tem a sua célula.
 //
-// A precisão define quantos pinos caem: 0 = strike (os 10); quanto maior, menos caem; acima de
-// 1 a bola vai para a caleira (0 pinos).
+// Os pinos que caem vêm da posição de apresentação (player.show), relativa à ronda: o
+// vencedor faz sempre strike ("STRIKE PERFEITO!" no "em cheio"); o "mais longe" e quem errou
+// mais de 100% vão para a caleira; os outros, de 9 a 3 pinos.
 //
 // Cena SVG de tamanho fixo (viewBox 300 × 300, quadrada para ocupar a largura do iPhone dentro
-// dos 45% da altura do ecrã), por zonas:
+// dos 45% da altura do ecrã; com mais de 6 jogadores mais alta, para o placar), por zonas:
 //   - pista com os pinos, em cima;
 //   - faixa da resposta certa a meio (nada se mexe lá, nunca fica tapada);
-//   - placar em baixo (3 colunas; 2 com até 4 jogadores).
+//   - placar em baixo (3 colunas com 5-6 jogadores; senão 2, com nomes maiores).
 (function () {
   const NS = 'http://www.w3.org/2000/svg';
   const VW = 300;
@@ -21,6 +22,7 @@
   const LANE = { topY: 8, botY: 126, topL: 116, topR: 184, botL: 74, botR: 226 };
   const ANSWER_Y = 130; // faixa da resposta: 130..152
   const BOARD_Y = 156;
+  const MANY_CELL_H = 34; // altura de cada célula do placar com mais de 6 jogadores
   const ROLL_MS = 520;
   const FALL_MS = 320;
 
@@ -45,13 +47,13 @@
     return { left, right, mid: (left + right) / 2, width: right - left, scale: 0.35 + 0.65 * t };
   }
 
-  // Pinos derrubados: 10 só no "em cheio"; 0 com precisão 1 (a bola passa ao lado de todos);
-  // caleira (null) acima de 1. Entre 0 e 1 a curva dá ~7 pinos para 1% de erro, ~5 para 10%
-  // e ~2 para 50%.
-  function pinsDown(precision) {
-    if (precision > 1) return null;
-    if (precision === 0) return 10;
-    return Math.min(9, Math.round(10 * (1 - precision) ** 0.6));
+  // Pinos derrubados, a partir da posição de apresentação (relativa à ronda): o vencedor faz
+  // sempre strike (10); o "mais longe" e quem errou mais de 100% vão para a caleira (null); os
+  // outros, de 9 (nível 0,15) a 3 (nível 0,85). Palpites iguais: os mesmos pinos.
+  function pinsDown(show) {
+    if (show.winner) return 10;
+    if (show.miss) return null;
+    return Math.max(1, Math.min(9, Math.round(10.2 - 9 * show.level)));
   }
   const scoreText = (n) => (n === null ? 'caleira' : n === 10 ? 'X' : String(n));
 
@@ -83,22 +85,27 @@
       });
     }
 
-    function strikeFx() {
-      const g = s('g', { class: 'bowl-strike', transform: `translate(${VW / 2} 46)` }, [
-        ...[0, 1, 2, 3, 4, 5, 6, 7].map((i) => s('circle', {
-          cx: Math.cos((i * Math.PI) / 4) * 26, cy: Math.sin((i * Math.PI) / 4) * 14, r: 2.5,
+    // "STRIKE!" com estrelinhas; no "em cheio", "STRIKE PERFEITO!" maior, com o dobro das
+    // estrelinhas, numa coroa mais larga.
+    function strikeFx(perfect) {
+      const count = perfect ? 16 : 8;
+      const rx = perfect ? 62 : 26;
+      const g = s('g', { class: `bowl-strike${perfect ? ' perfect' : ''}`, transform: `translate(${VW / 2} 46)` }, [
+        ...Array.from({ length: count }, (_, i) => s('circle', {
+          cx: Math.cos((i * 2 * Math.PI) / count) * rx, cy: Math.sin((i * 2 * Math.PI) / count) * (perfect ? 22 : 14), r: perfect ? 3 : 2.5,
           fill: ['#ffd43b', '#3ddc97', '#f783ac', '#4dabf7'][i % 4],
         })),
-        text({ x: 0, y: 5, 'text-anchor': 'middle', class: 'bowl-strike-text' }, 'STRIKE!'),
+        text({ x: 0, y: 5, 'text-anchor': 'middle', class: 'bowl-strike-text' }, perfect ? 'STRIKE PERFEITO!' : 'STRIKE!'),
       ]);
       fxLayer.append(g);
-      later(() => g.remove(), 1300);
+      later(() => g.remove(), perfect ? 1500 : 1300);
     }
 
     // O boneco de cada jogador desenha-se sempre com o drawCharacter (o tema só escolhe a pose).
+    // A versão pequena (sem capa) só com mais de 6 jogadores.
     function drawCellBoneco(id, pose) {
       const c = cells[id];
-      const svg = kit.drawCharacter(c.player, pose, { size: c.h, small: true });
+      const svg = kit.drawCharacter(c.player, pose, { size: c.h, small: c.small });
       svg.setAttribute('x', c.box.x + 3);
       svg.setAttribute('y', c.box.y + (c.box.h - c.h) / 2);
       c.boneco.replaceChildren(svg);
@@ -124,7 +131,16 @@
       mount(container, { players, kit: k }) {
         kit = k;
         cells = {};
-        scene = s('svg', { viewBox: `0 0 ${VW} ${VH}`, class: 'bowl-scene', role: 'img', 'aria-label': 'Bowling: quanto mais pinos caem, mais perto da resposta certa' });
+        // Placar: 2 colunas com até 4 jogadores, 3 com 5-6. Com mais de 6, 2 colunas outra vez
+        // (nomes maiores) e a cena cresce para baixo o que for preciso (células de 34).
+        const n = players.length;
+        const many = n > 6;
+        const cols = n <= 4 || many ? 2 : 3;
+        const rows = Math.ceil(n / cols);
+        const gap = 4;
+        const vh = many ? BOARD_Y + gap + rows * (MANY_CELL_H + gap) : VH;
+        scene = s('svg', { viewBox: `0 0 ${VW} ${vh}`, class: 'bowl-scene', role: 'img', 'aria-label': 'Bowling: quanto mais pinos caem, mais perto da resposta certa' });
+        kit.sizeScene(scene, VW, vh, many ? 62 : 45);
 
         // Fundo, pista (madeira com tábuas) e caleiras.
         scene.append(s('rect', { x: 0, y: 0, width: VW, height: BOARD_Y - 4, rx: 10, fill: '#241e55' }));
@@ -182,25 +198,23 @@
           answerText,
         );
 
-        // Placar: uma célula por jogador, pela ordem da revelação.
-        const n = players.length;
-        const cols = n <= 4 ? 2 : 3;
-        const rows = Math.ceil(n / cols);
-        const gap = 4;
+        // Placar: uma célula por jogador, pela ordem da revelação. Com 2 colunas há espaço para
+        // nomes maiores (classe "wide").
         const cw = (VW - gap * (cols + 1)) / cols;
-        const ch = Math.min(46, (VH - BOARD_Y - gap * (rows + 1)) / rows);
-        const board = s('g', { class: 'bowl-board' });
+        const ch = Math.min(46, (vh - BOARD_Y - gap * (rows + 1)) / rows);
+        const maxName = cols === 2 ? 12 : 9;
+        const board = s('g', { class: `bowl-board${cols === 2 ? ' wide' : ''}` });
         players.forEach((p, i) => {
           const box = { x: gap + (i % cols) * (cw + gap), y: BOARD_Y + gap + Math.floor(i / cols) * (ch + gap), w: cw, h: ch };
           const boneco = s('g');
           const score = text({ x: box.x + box.w - 6, y: box.y + box.h / 2 + 5.5, 'text-anchor': 'end', class: 'bowl-score' }, '·');
-          const name = text({ x: box.x + ch * 0.62 + 6, y: box.y + box.h / 2 + 3, class: 'bowl-name' }, p.name.length > 9 ? `${p.name.slice(0, 8)}…` : p.name);
+          const name = text({ x: box.x + ch * 0.62 + 6, y: box.y + box.h / 2 + 3.5, class: 'bowl-name' }, p.name.length > maxName ? `${p.name.slice(0, maxName - 1)}…` : p.name);
           const g = s('g', { class: 'bowl-cell', 'data-id': p.id }, [
             s('rect', { x: box.x, y: box.y, width: box.w, height: box.h, rx: 6, class: 'bowl-cell-bg', style: `--c:${p.color}` }),
             s('rect', { x: box.x, y: box.y, width: 3, height: box.h, rx: 1.5, fill: p.color }),
             boneco, name, score,
           ]);
-          cells[p.id] = { g, boneco, score, player: p, box, h: ch - 4 };
+          cells[p.id] = { g, boneco, score, player: p, box, h: ch - 4, small: many };
           board.append(g);
           drawCellBoneco(p.id, 'parado');
         });
@@ -210,7 +224,7 @@
 
       revealPlayer(player, precision, { instant }) {
         if (current) current.finish(); // o lançamento anterior acaba já
-        const n = pinsDown(precision);
+        const n = pinsDown(player.show);
         showThrower(player);
         resetPins();
         ballLayer.replaceChildren();
@@ -251,7 +265,7 @@
           // Chegou aos pinos: caem (ou nada, na caleira) e o resultado vai para o placar.
           ball.classList.add('gone');
           if (n) knock(n, true);
-          if (n === 10) strikeFx();
+          if (n === 10) strikeFx(player.show.exact);
           later(() => { if (!done) { done = true; current = null; ball.remove(); record(player.id, n); } }, FALL_MS);
         };
         current = { frame: requestAnimationFrame(frame), finish };

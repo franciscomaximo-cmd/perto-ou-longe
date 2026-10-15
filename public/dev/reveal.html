@@ -21,7 +21,7 @@
     <section class="screen">
       <h1 class="logo small">Revelações (dev)</h1>
       <p class="dev-note">Página de desenvolvimento, fora do jogo: escolhe um tema e um cenário. Usa o mesmo
-        controlador e os mesmos temas do jogo (public/reveal/), com jogadores falsos e 1,5 s por palpite.
+        controlador e os mesmos temas do jogo (public/reveal/), com jogadores falsos e o mesmo ritmo do jogo.
         Para testar o movimento reduzido, liga-o no sistema ou nas ferramentas do browser.</p>
 
       <div class="dev-bar">
@@ -62,6 +62,7 @@
   <script src="../reveal/character-options.js"></script>
   <script src="../reveal/character.js"></script>
   <script src="../reveal/presentation.js"></script>
+  <script src="../reveal/pace.js"></script>
   <script src="../reveal/index.js"></script>
   <script src="../reveal/alvo.js"></script>
   <script src="../reveal/arco.js"></script>
@@ -73,7 +74,6 @@
     (() => {
       const { kit, createController, ids } = window.RevealThemes;
       const $ = (s) => document.querySelector(s);
-      const STEP_MS = 1500;
 
       const COLORS = ['#4dabf7', '#f783ac', '#ff922b', '#9775fa', '#3bc9db', '#a9e34b', '#e599f7', '#ffd43b', '#c49a6c', '#f1f3f5', '#5c7cfa', '#adb5bd'];
       const EMOJIS = ['🦊', '🐼', '🐸', '🐙', '🦉', '🐢', '🦁', '🐧', '🐨', '🦄', '🐝', '🐳'];
@@ -165,13 +165,16 @@
         $('#answer').textContent = '?';
         document.querySelectorAll('#scenarios button').forEach((b) => b.classList.toggle('on', b.textContent === name));
         render();
+        // O mesmo ritmo do jogo (pace.js): rápido nos mais longe, devagar nos 3 mais perto.
+        const pace = window.RevealPace.revealPace(current.r.order.length);
+        const delay = () => (current.shown < current.r.order.length ? pace.before[current.shown] : pace.answer);
         const step = () => {
           if (current.shown < current.r.order.length) current.shown += 1;
           else current.showCorrect = true;
           render();
-          if (!current.showCorrect) timer = setTimeout(step, STEP_MS);
+          if (!current.showCorrect) timer = setTimeout(step, delay());
         };
-        timer = setTimeout(step, STEP_MS);
+        timer = setTimeout(step, delay());
       }
 
       for (const id of ids()) $('#theme').append(kit.el('option', { value: id, text: id }));

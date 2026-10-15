@@ -45,6 +45,8 @@ h3 { font-size: 0.95rem; color: var(--muted); font-weight: 600; text-transform: 
 .logo em { font-style: normal; color: var(--muted); font-size: .6em; }
 .logo.small { font-size: 2rem; color: var(--accent); }
 .tagline { text-align: center; color: var(--muted); margin: 0 0 8px; }
+/* Aviso no ecrã inicial quando a sala desapareceu (ex.: o servidor reiniciou). */
+.home-notice { margin: 0 0 8px; padding: 12px 14px; border-radius: 12px; background: var(--card); border-left: 4px solid var(--accent); text-align: center; font-weight: 600; }
 
 .center { text-align: center; }
 .muted { color: var(--muted); font-weight: 400; }
@@ -268,7 +270,7 @@ textarea:focus { border-color: var(--accent); }
 /* Tamanho fixo: largura disponível, no máximo ~45% da altura do ecrã (cena 300 × 300). */
 .bowl-scene { display: block; width: min(100%, 45vh); width: min(100%, 45svh); aspect-ratio: 1; }
 .bowl-pin { transform-box: fill-box; transform-origin: 50% 100%; }
-.bowl-pin.falling { transition: transform .3s cubic-bezier(.5, 0, .7, 1), opacity .3s; }
+.bowl-pin.falling { transition: transform var(--fall, .32s) cubic-bezier(.5, 0, .7, 1), opacity var(--fall, .32s); }
 .bowl-pin.down { transform: rotate(var(--dir, 60deg)) translateY(2px); opacity: .35; }
 .bowl-ball.gone { opacity: 0; transition: opacity .2s; }
 .bowl-emoji, .bowl-cell text { font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Apple Color Emoji", "Segoe UI Emoji", sans-serif; }

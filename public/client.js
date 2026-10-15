@@ -117,6 +117,7 @@
   // --- Entrar / sair ------------------------------------------------------
 
   function enterRoom(res) {
+    $('#home-notice').hidden = true;
     saveSession({ code: res.code, playerId: res.playerId, name: res.name });
     store(NAME_KEY, res.name);
     history.replaceState(null, '', location.pathname);
@@ -135,7 +136,12 @@
         saveSession(null);
         state = null;
         render();
-        if (res && res.error) toast('Já não foi possível voltar à sala.');
+        // A sala já não existe (o servidor reiniciou, ex.: num deploy, ou a sala fechou por
+        // inatividade): explica no ecrã inicial em vez de voltar ao início em silêncio.
+        if (res && res.reason === 'no-room') {
+          $('#home-notice').textContent = 'O jogo foi reiniciado. Cria uma sala nova para continuar.';
+          $('#home-notice').hidden = false;
+        } else if (res && res.error) toast('Já não foi possível voltar à sala.');
       }
     });
   }

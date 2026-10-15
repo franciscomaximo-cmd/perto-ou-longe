@@ -136,6 +136,27 @@ test('apresentação: palpites iguais (mesma precisão) têm exatamente o mesmo 
   assert.deepEqual(same.p1, same.p2);
 });
 
+// --- Ritmo da revelação -------------------------------------------------------------------
+
+const { revealPace, timeFor } = require('../public/reveal/pace');
+
+test('ritmo: nunca passa de 12 s até à resposta certa e com 3-4 jogadores fica perto do antigo', () => {
+  for (let n = 1; n <= 12; n++) assert.ok(revealPace(n).total <= 12000, `${n} jogadores: ${revealPace(n).total} ms`);
+  // Antes: 1,5 s por passo (n palpites + resposta = n passos depois do primeiro).
+  for (const n of [3, 4]) assert.ok(Math.abs(revealPace(n).total - 1500 * n) <= 900, `${n} jogadores: ${revealPace(n).total} ms`);
+});
+
+test('ritmo: os mais longe depressa, os 3 mais perto devagar e pausa antes do vencedor', () => {
+  const { before } = revealPace(12);
+  for (let i = 1; i <= 8; i++) assert.ok(before[i] >= 450 && before[i] <= 800, `palpite ${i + 1}: ${before[i]} ms`);
+  for (const i of [9, 10]) assert.ok(before[i] >= 1400 && before[i] <= 2000, `palpite ${i + 1}: ${before[i]} ms`);
+  assert.ok(before[11] > before[10], 'pausa dramática antes do último (o vencedor)');
+  assert.equal(timeFor(12, 0), before[1]);
+  assert.equal(timeFor(12, 11), revealPace(12).answer);
+  // A escala (testes do servidor) mantém as proporções.
+  assert.equal(revealPace(6, 0.01).before[5], Math.round(revealPace(6).before[5] * 0.01));
+});
+
 // --- Baralho de temas ---------------------------------------------------------------------
 
 // Gerador aleatório com semente, para o teste ser repetível.
@@ -154,6 +175,33 @@ test('baralho: sai cada tema uma vez por baralho e nunca o mesmo duas vezes segu
       assert.deepEqual([...drawn.slice(i, i + themes.length)].sort(), [...themes].sort(), 'cada baralho tem todos os temas');
     }
   }
+});
+
+test('baralho: 40 rondas sem temas seguidos repetidos e com baralhos em ordens novas', () => {
+  // Como no jogo: o baralho de cada sala, com Math.random (sem semente).
+  for (let run = 0; run < 25; run++) {
+    const room = new Room(`T${run}`, () => {});
+    const deck = room.themeDeck;
+    room.destroy();
+    const n = REVEAL_THEMES.length;
+    const drawn = Array.from({ length: 40 }, () => deck.next());
+    for (let i = 1; i < drawn.length; i++) assert.notEqual(drawn[i], drawn[i - 1], `tema repetido seguido na ronda ${i + 1}`);
+    const decks = [];
+    for (let i = 0; i < drawn.length; i += n) decks.push(drawn.slice(i, i + n).join(','));
+    for (const d of decks) assert.deepEqual(d.split(',').sort(), [...REVEAL_THEMES].sort(), 'cada baralho tem todos os temas');
+    for (let i = 1; i < decks.length; i++) assert.notEqual(decks[i], decks[i - 1], `baralho ${i + 1} na mesma ordem do anterior`);
+    assert.ok(new Set(decks).size > 1, 'os baralhos não saem sempre na mesma ordem');
+  }
+});
+
+test('baralho: cada sala tem o seu próprio baralho', () => {
+  const a = new Room('AAAA', () => {});
+  const b = new Room('BBBB', () => {});
+  assert.notEqual(a.themeDeck, b.themeDeck);
+  a.themeDeck.next();
+  assert.equal(b.themeDeck.pile.length, 0, 'tirar um tema numa sala não mexe no baralho da outra');
+  a.destroy();
+  b.destroy();
 });
 
 test('baralho: com 2 temas alterna sempre; com 1 tema repete esse', () => {

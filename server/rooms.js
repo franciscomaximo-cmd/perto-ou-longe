@@ -5,6 +5,7 @@ const { scoreRound, shuffle, distance } = require('./game');
 const { distanceToCountry, centerOf } = require('./geo');
 const { ThemeDeck } = require('./themes');
 const CharacterOptions = require('../public/reveal/character-options');
+const { revealPace } = require('../public/reveal/pace');
 // Perguntas de mapa: o texto é montado com o artigo guardado de cada país
 // ("os Camarões", "as Filipinas" → "Onde ficam…"; "Angola", sem artigo → "Onde fica Angola?").
 function mapQuestionText(q) {
@@ -50,7 +51,9 @@ const MAX_NAME_LENGTH = 16;
 const MAX_TIME_SECONDS = 180;
 const MIN_TIME_SECONDS = 10;
 const HOST_GRACE_MS = 20_000;
-const REVEAL_STEP_MS = 1500; // revelação automática: um palpite (ou passo) a cada 1,5 s
+// Revelação automática: ritmo base (o dos pontos, no fim); o dos palpites vem de
+// public/reveal/pace.js, à escala deste valor.
+const REVEAL_STEP_MS = 1500;
 // Cada jogador recebe uma cor fixa (a primeira livre) e um emoji, que pode trocar na sala de espera.
 // A paleta e as peças do boneco são partilhadas com o cliente (public/reveal/character-options.js).
 const PLAYER_COLORS = CharacterOptions.COLORS;
@@ -540,11 +543,13 @@ class Room {
   scheduleRevealStep() {
     this.clearRevealTimer();
     if (this.phase !== 'reveal' || this.current.step >= this.current.steps) return;
-    // Com muitos jogadores os palpites passam mais depressa (de 1,5 s até metade disso),
-    // para a revelação não se arrastar; a resposta certa e os pontos mantêm o tempo normal.
+    // Ritmo comum (public/reveal/pace.js): os mais longe depressa, os 3 mais perto devagar,
+    // pausa antes do vencedor, e nunca mais de ~12 s até à resposta certa. Os pontos (último
+    // passo) mantêm o tempo normal.
     const guesses = this.current.answers.size;
-    const perGuess = Math.round(this.revealStepMs * Math.min(1, Math.max(0.47, 6 / guesses)));
-    const delay = this.current.step < guesses ? perGuess : this.revealStepMs;
+    const pace = revealPace(guesses, this.revealStepMs / REVEAL_STEP_MS);
+    const { step } = this.current;
+    const delay = step < guesses ? pace.before[step] : step === guesses ? pace.answer : this.revealStepMs;
     this.revealTimer = setTimeout(() => {
       this.revealTimer = null;
       if (this.phase !== 'reveal') return;

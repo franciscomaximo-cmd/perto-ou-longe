@@ -23,6 +23,8 @@
     <section id="screen-home" class="screen">
       <h1 class="logo">Perto <em>ou</em> Longe</h1>
       <p class="tagline">Adivinha números e descobre quem falhou por mais.</p>
+      <!-- Ao voltar a ligar, se a sala já não existe (ex.: o servidor reiniciou num deploy). -->
+      <p id="home-notice" class="home-notice" role="status" hidden></p>
 
       <label class="field">O teu nome
         <input id="home-name" maxlength="16" autocomplete="nickname" enterkeyhint="next">
@@ -279,6 +281,7 @@
   <script src="reveal/character-options.js"></script>
   <script src="reveal/character.js"></script>
   <script src="reveal/presentation.js"></script>
+  <script src="reveal/pace.js"></script>
   <script src="reveal/index.js"></script>
   <script src="reveal/alvo.js"></script>
   <script src="reveal/arco.js"></script>

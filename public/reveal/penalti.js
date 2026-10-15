@@ -37,6 +37,8 @@
   const MIN_GAP = 17; // distância mínima entre marcas
   const RUN_MS = 220;
   const FLY_MS = 380;
+  const LANDED_MS = 260; // a bola fica à vista na baliza (ou nas luvas) antes da marca
+  const SHOT_MS = RUN_MS + FLY_MS + LANDED_MS;
   const FX_MS = 900;
 
   function s(tag, attrs = {}, children = []) {
@@ -339,8 +341,13 @@
         plans = plan(players, seed);
       },
 
-      revealPlayer(player, precision, { instant }) {
+      revealPlayer(player, precision, { instant, duration = SHOT_MS + 80 }) {
         if (current) current.finish();
+        // Com os palpites rápidos (os mais longe), o remate todo encurta para caber antes do
+        // seguinte, em vez de ser cortado a meio.
+        const speed = Math.min(1, Math.max(0.3, (duration - 80) / SHOT_MS));
+        const runMs = RUN_MS * speed;
+        const flyMs = FLY_MS * speed;
         const pl = plans[player.id];
         const others = row[player.id];
         if (others) others.g.classList.add('shot');
@@ -382,13 +389,13 @@
         let landed = false;
         const step = (now) => {
           const t = now - t0;
-          if (t < RUN_MS) {
-            showShooter(player, 'parado', -26 * (1 - t / RUN_MS)); // corrida até à bola
+          if (t < runMs) {
+            showShooter(player, 'parado', -26 * (1 - t / runMs)); // corrida até à bola
             frame = requestAnimationFrame(step);
             return;
           }
           if (shooterLayer.dataset.kicked !== player.id) { shooterLayer.dataset.kicked = player.id; showShooter(player, 'rematar'); }
-          const k = Math.min(1, (t - RUN_MS) / FLY_MS);
+          const k = Math.min(1, (t - runMs) / flyMs);
           // Guarda-redes a mergulhar.
           const e = 1 - (1 - k) ** 2;
           setKeeper({ x: KEEPER.x + (end.x - KEEPER.x) * e, y: KEEPER.y + (end.y - KEEPER.y) * e, deg: end.deg * e });
@@ -418,7 +425,7 @@
               inner.style.setProperty('--dy', `${pl.save === 'pé' ? 10 : -20}px`);
             }
           }
-          later(finish, 260);
+          later(finish, LANDED_MS * speed);
         };
         frame = requestAnimationFrame(step);
       },

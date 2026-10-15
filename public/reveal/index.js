@@ -26,7 +26,10 @@
  *       (public/reveal/character.js); os temas só escolhem a pose. Para um som, o tema pede-o
  *       ao código comum com kit.sound(nome) (ex.: 'golo').
  *   revealPlayer(player, precision, info)
- *       Anima a vez de UM jogador. info = { value, distance, exact, show, index, total, instant }.
+ *       Anima a vez de UM jogador. info = { value, distance, exact, show, index, total,
+ *       duration, instant }. `duration` = ms até ao passo seguinte (public/reveal/pace.js): os
+ *       mais longe passam depressa (~0,65 s) e os mais perto devagar; uma animação que acabe
+ *       quando chega o palpite seguinte tem de caber nesse tempo (encurta-se, não se corta).
  *       Com instant = true mostra o resultado final sem animação.
  *   revealAnswer(answer, info)
  *       Mostra a resposta certa. info = { closest, farthest, exact, instant } (listas de ids).
@@ -36,7 +39,7 @@
  *       Limpa animações, temporizadores e eventos.
  *
  * O código COMUM (não cada tema) controla: a ordem (do mais longe para o mais perto), o ritmo
- * (~1,5 s por palpite, dado pelo servidor), o botão "Saltar", os sons, o confetti, o cálculo
+ * (pace.js: rápido nos mais longe, devagar nos 3 mais perto, dado pelo servidor), o botão "Saltar", os sons, o confetti, o cálculo
  * da precisão (precision.js) e a lista ordenada por baixo da animação.
  *
  * REGRAS que todos os temas têm de cumprir:
@@ -204,6 +207,8 @@
           show: shows[id],
           index: i,
           total: r.order.length,
+          // Tempo até ao passo seguinte (pace.js): a animação deste palpite tem de caber aqui.
+          duration: root.RevealPace.timeFor(r.order.length, i),
           instant,
         });
       }

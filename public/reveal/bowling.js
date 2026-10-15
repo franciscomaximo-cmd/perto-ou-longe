@@ -25,6 +25,9 @@
   const MANY_CELL_H = 34; // altura de cada célula do placar com mais de 6 jogadores
   const ROLL_MS = 520;
   const FALL_MS = 320;
+  const PIN_GAP_MS = 25; // entre a queda de um pino e a do seguinte
+  // Lançamento completo: rolar + o último pino a começar a cair + a queda.
+  const THROW_MS = ROLL_MS + 9 * PIN_GAP_MS + FALL_MS;
 
   // Ordem em que os pinos caem (do pino da frente para trás), para n pinos parecer natural.
   const FALL_ORDER = [0, 1, 2, 4, 3, 5, 7, 8, 6, 9];
@@ -74,13 +77,15 @@
       for (const p of pins) p.classList.remove('down', 'falling');
     }
 
-    function knock(n, animate) {
+    // `speed` (0..1) encurta a queda quando o palpite seguinte vem depressa.
+    function knock(n, animate, speed = 1) {
       FALL_ORDER.slice(0, n).forEach((i, k) => {
         const pin = pins[i];
         pin.style.setProperty('--dir', `${(i % 2 ? 1 : -1) * (40 + ((i * 17) % 40))}deg`);
+        pin.style.setProperty('--fall', `${Math.round(FALL_MS * speed)}ms`);
         if (animate) {
           pin.classList.add('falling');
-          later(() => pin.classList.add('down'), k * 25);
+          later(() => pin.classList.add('down'), k * PIN_GAP_MS * speed);
         } else pin.classList.add('down');
       });
     }
@@ -222,8 +227,12 @@
         container.append(scene);
       },
 
-      revealPlayer(player, precision, { instant }) {
+      revealPlayer(player, precision, { instant, duration = THROW_MS + 80 }) {
         if (current) current.finish(); // o lançamento anterior acaba já
+        // Com os palpites rápidos (os mais longe), o lançamento todo encurta para caber antes
+        // do seguinte, em vez de ser cortado a meio.
+        const speed = Math.min(1, Math.max(0.3, (duration - 80) / THROW_MS));
+        const rollMs = ROLL_MS * speed;
         const n = pinsDown(player.show);
         showThrower(player);
         resetPins();
@@ -256,7 +265,7 @@
           record(player.id, n);
         };
         const frame = (now) => {
-          const t = Math.min(1, (now - start) / ROLL_MS);
+          const t = Math.min(1, (now - start) / rollMs);
           const y = fromY + (toY - fromY) * (1 - (1 - t) ** 1.6);
           const lane = laneAt(y);
           const x = n === null ? lane.mid + side * (lane.width / 2 + 4) * Math.min(1, t * 1.6) : lane.mid;
@@ -264,9 +273,9 @@
           if (t < 1) { current.frame = requestAnimationFrame(frame); return; }
           // Chegou aos pinos: caem (ou nada, na caleira) e o resultado vai para o placar.
           ball.classList.add('gone');
-          if (n) knock(n, true);
+          if (n) knock(n, true, speed);
           if (n === 10) strikeFx(player.show.exact);
-          later(() => { if (!done) { done = true; current = null; ball.remove(); record(player.id, n); } }, FALL_MS);
+          later(() => { if (!done) { done = true; current = null; ball.remove(); record(player.id, n); } }, (9 * PIN_GAP_MS + FALL_MS) * speed);
         };
         current = { frame: requestAnimationFrame(frame), finish };
       },

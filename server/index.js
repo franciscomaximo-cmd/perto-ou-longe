@@ -35,7 +35,11 @@ function handle(socket, event, fn) {
       reply({ ok: true, ...(fn(payload || {}) || {}) });
     } catch (err) {
       if (!(err instanceof GameError)) console.error(`Erro em ${event}:`, err);
-      reply({ ok: false, error: err instanceof GameError ? err.message : 'Ocorreu um erro inesperado.' });
+      reply({
+        ok: false,
+        error: err instanceof GameError ? err.message : 'Ocorreu um erro inesperado.',
+        ...(err instanceof GameError && err.reason ? { reason: err.reason } : {}),
+      });
     }
   });
 }
@@ -81,7 +85,13 @@ io.on('connection', (socket) => {
   // Serve tanto para entrar pela primeira vez como para voltar (com o playerId guardado).
   handle(socket, 'room:join', ({ code, name, playerId }) => {
     const room = getRoom(code);
-    if (!room) throw new GameError('Sala não encontrada. Confirma o código.');
+    if (!room) {
+      // `reason` deixa o cliente distinguir "a sala já não existe" (ex.: o servidor reiniciou
+      // e quem volta a ligar tinha lá um lugar) de outros erros.
+      const err = new GameError('Sala não encontrada. Confirma o código.');
+      err.reason = 'no-room';
+      throw err;
+    }
     const existing = playerId && room.players.get(playerId);
     return attach(room, existing || room.addPlayer(name));
   });

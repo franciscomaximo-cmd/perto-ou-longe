@@ -6,7 +6,8 @@
 //   drawCharacter(player, pose, { size, small, title, kartColor, withPet })
 //     player: { emoji, color, character } (peças em public/reveal/character-options.js; as que
 //             faltarem ficam com o valor por omissão)
-//     pose:   'parado' | 'arco' | 'lancar' | 'kart' | 'rematar' | 'dardo' | 'golfe'
+//     pose:   'parado' | 'arco' | 'lancar' | 'kart' | 'rematar' | 'dardo' | 'golfe' | 'malha'
+//             | 'basquete'
 //             | 'festejar' | 'triste'
 //             | 'kart_festejar' | 'kart_triste' (no kart, no fim da corrida)
 //             "festejar" e "triste" desenham a animação de vitória e a reação de derrota que o
@@ -98,6 +99,18 @@
       head: [52, 32, 12],
       armL: [[40, 55], [45, 70], [53, 82]], armR: [[60, 55], [60, 70], [56, 82]],
       legL: [[45, 82], [40, 101], [37, 121]], legR: [[55, 82], [61, 101], [64, 121]],
+    },
+    // A lançar a malha: por baixo, com o disco na mão direita e um passo em frente.
+    malha: {
+      head: [53, 32, 6],
+      armL: [[39, 55], [30, 64], [22, 70]], armR: [[61, 55], [68, 72], [78, 84]],
+      legL: [[45, 82], [37, 100], [26, 118]], legR: [[55, 82], [64, 98], [68, 121]],
+    },
+    // A lançar ao cesto: os dois braços no ar, com a bola por cima da cabeça.
+    basquete: {
+      head: [50, 34, -6],
+      armL: [[39, 54], [40, 36], [45, 18]], armR: [[61, 54], [62, 36], [57, 18]],
+      legL: [[45, 82], [42, 101], [42, 121]], legR: [[55, 82], [59, 101], [60, 121]],
     },
     rematar: {
       head: [48, 30, -6],
@@ -439,6 +452,18 @@
           svgEl('path', { d: 'M60,33 L84,30', stroke: '#adb5bd', 'stroke-width': 2.2, 'stroke-linecap': 'round' }),
           svgEl('path', { d: 'M84,30 L90,29.3', stroke: '#495057', 'stroke-width': 1.2, 'stroke-linecap': 'round' }),
           svgEl('path', { d: 'M60,33 L54,28 L57,33 L54,38 Z', fill: '#e03131' }),
+        ]);
+      case 'malha':
+        // A malha (disco de metal) na mão.
+        return svgEl('g', {}, [
+          svgEl('ellipse', { cx: 83, cy: 86, rx: 7.5, ry: 3.8, fill: '#ced4da', stroke: '#495057', 'stroke-width': 1.2 }),
+          small ? null : svgEl('ellipse', { cx: 83, cy: 85.5, rx: 3, ry: 1.4, fill: '#868e96' }),
+        ]);
+      case 'basquete':
+        // A bola por cima da cabeça, entre as mãos.
+        return svgEl('g', {}, [
+          svgEl('circle', { cx: 51, cy: 9, r: 8.5, fill: '#f76707', stroke: '#7a2e00', 'stroke-width': 1.2 }),
+          small ? null : svgEl('path', { d: 'M42.5,9 L59.5,9 M51,0.5 L51,17.5 M45,3 Q51,9 45,15 M57,3 Q51,9 57,15', fill: 'none', stroke: '#7a2e00', 'stroke-width': 0.9 }),
         ]);
       case 'golfe':
         // Taco de golfe (putter) das mãos até ao chão, e a bola ao lado da cabeça do taco.

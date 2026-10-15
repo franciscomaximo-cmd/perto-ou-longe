@@ -93,10 +93,10 @@
 
   // Poses (usadas pelos temas e pela pré-visualização). "festejar" e "triste" desenham a
   // animação de vitória / reação de derrota escolhidas pelo jogador.
-  const POSES = ['parado', 'arco', 'lancar', 'kart', 'rematar', 'dardo', 'golfe', 'festejar', 'triste', 'kart_festejar', 'kart_triste'];
+  const POSES = ['parado', 'arco', 'lancar', 'kart', 'rematar', 'dardo', 'golfe', 'malha', 'basquete', 'festejar', 'triste', 'kart_festejar', 'kart_triste'];
   const POSE_LABELS = {
     parado: 'Parado', arco: 'A disparar arco', lancar: 'A lançar bola', kart: 'A conduzir kart',
-    rematar: 'A rematar', dardo: 'A lançar dardo', golfe: 'A dar a tacada', festejar: 'A festejar', triste: 'Triste',
+    rematar: 'A rematar', dardo: 'A lançar dardo', golfe: 'A dar a tacada', malha: 'A lançar a malha', basquete: 'A lançar ao cesto', festejar: 'A festejar', triste: 'Triste',
     kart_festejar: 'A festejar no kart', kart_triste: 'Triste no kart',
   };
 

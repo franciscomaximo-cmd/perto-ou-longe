@@ -70,11 +70,22 @@
   const player = (id) => (state && state.players.find((p) => p.id === id)) || null;
   const nameOf = (id) => (player(id) ? player(id).name : '?');
   const colorOf = (id) => (player(id) ? player(id).color : 'var(--muted)');
-  // Emoji do jogador num círculo da sua cor; who() devolve [avatar, nome] para pôr em listas.
-  const avatar = (p) => el('span', { class: 'avatar', style: `--c:${p.color}`, 'aria-hidden': 'true', text: p.emoji || '' });
-  const who = (id) => {
+  // Avatar de um jogador (o mesmo em todo o lado): emoji grande num círculo com gradiente da
+  // sua cor, borda branca fina e sombra. "Tu" tem um anel brilhante, o anfitrião uma coroa e
+  // quem está desligado fica a cinzento. Tamanhos: 's' (~26 px, dentro de etiquetas),
+  // 'm' (~40 px, listas) e 'l' (~56 px, alvo e ecrã final).
+  function avatar(p, size = 'm') {
+    const cls = ['avatar', size,
+      p.id === state.me ? 'me' : '',
+      p.id === state.hostId ? 'host' : '',
+      p.connected === false ? 'off' : ''].filter(Boolean).join(' ');
+    return el('span', { class: cls, style: `--c:${p.color}`, 'data-player': p.id, 'aria-hidden': 'true' },
+      el('span', { class: 'emoji', text: p.emoji || '' }));
+  }
+  // [avatar, nome] para pôr em listas.
+  const who = (id, size = 'm') => {
     const p = player(id);
-    return p ? [avatar(p), p.name] : ['?'];
+    return p ? [avatar(p, size), el('span', { class: 'nm', text: p.name })] : ['?'];
   };
   const isHost = () => state && state.hostId === state.me;
 
@@ -193,10 +204,13 @@
   });
 
   $('#btn-start').addEventListener('click', () => act('game:start'));
-  $$('.btn-force').forEach((btn) => btn.addEventListener('click', () => act('round:force')));
-  $('#btn-next').addEventListener('click', () => act('round:next'));
-  $('#btn-step').addEventListener('click', () => act('reveal:skip'));
-  $('#btn-tb-next').addEventListener('click', () => act('round:next'));
+  // Avançar e saltar levam a fase e a pergunta que o anfitrião está a ver: se entretanto
+  // mudaram, o servidor ignora o pedido (não salta uma fase sem querer).
+  const seen = () => ({ phase: state.phase, round: state.round, tb: state.tiebreak ? state.tiebreak.number : null });
+  $$('.btn-force').forEach((btn) => btn.addEventListener('click', () => act('round:force', seen())));
+  $('#btn-next').addEventListener('click', () => act('round:next', seen()));
+  $('#btn-step').addEventListener('click', () => act('reveal:skip', seen()));
+  $('#btn-tb-next').addEventListener('click', () => act('round:next', seen()));
   $('#btn-again').addEventListener('click', () => act('game:lobby'));
 
   // --- Responder e votar --------------------------------------------------
@@ -255,6 +269,47 @@
   }
 
   const narrowScreen = () => window.innerWidth < 600;
+  // No telemóvel o mapa inteiro fica muito baixo: o zoom mínimo é 2×.
+  const minZoom = () => (narrowScreen() ? 1 : 0);
+  const MAP_RATIO = (MAP_TOP - MAP_BOTTOM) / 360; // altura / largura do mapa
+
+  // O contentor do mapa tem tamanho FIXO: largura total e altura até 45% do ecrã (nunca maior
+  // do que o mapa no zoom mínimo, para não sobrar mar). O zoom acontece só lá dentro, sem
+  // fazer crescer a página.
+  function sizeMapBox(wrap) {
+    const box = wrap.querySelector('.map-box');
+    if (!box.clientWidth) return;
+    const full = box.clientWidth * ZOOMS[minZoom()] * MAP_RATIO;
+    box.style.height = `${Math.round(Math.min(window.innerHeight * 0.45, full))}px`;
+  }
+  window.addEventListener('resize', () => $$('.map-wrap').forEach(sizeMapBox));
+
+  // Sem barras de scroll: no telemóvel arrasta-se com o dedo (scroll nativo); no computador,
+  // com o rato. Um arrasto não conta como toque para escolher o sítio.
+  function enableMouseDrag(box) {
+    let start = null;
+    let moved = false;
+    box.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0) return;
+      start = { x: e.clientX, y: e.clientY, left: box.scrollLeft, top: box.scrollTop };
+      moved = false;
+    });
+    window.addEventListener('pointermove', (e) => {
+      if (!start) return;
+      const dx = e.clientX - start.x;
+      const dy = e.clientY - start.y;
+      if (Math.abs(dx) + Math.abs(dy) > 4) { moved = true; box.classList.add('dragging'); }
+      box.scrollLeft = start.left - dx;
+      box.scrollTop = start.top - dy;
+    });
+    window.addEventListener('pointerup', () => { start = null; box.classList.remove('dragging'); });
+    box.addEventListener('click', (e) => {
+      if (!moved) return;
+      moved = false;
+      e.stopPropagation();
+      e.preventDefault();
+    }, true);
+  }
 
   // Põe o SVG no mapa (quando já chegou) e liga os botões de zoom uma vez.
   function setupMap(wrap) {
@@ -262,11 +317,13 @@
     const inner = wrap.querySelector('.map-inner');
     // (O mapa da revelação também tem um <svg class="lines"> por cima, para as linhas.)
     if (mapSvg && !inner.querySelector('svg:not(.lines)')) inner.insertAdjacentHTML('afterbegin', mapSvg);
+    sizeMapBox(wrap);
     if (wrap.dataset.ready) return;
     wrap.dataset.ready = '1';
-    wrap.dataset.zoom = '0';
+    wrap.dataset.zoom = String(minZoom());
+    enableMouseDrag(box);
     wrap.querySelectorAll('[data-zoom]').forEach((btn) => btn.addEventListener('click', () => {
-      const level = Math.min(ZOOMS.length - 1, Math.max(0, Number(wrap.dataset.zoom) + Number(btn.dataset.zoom)));
+      const level = Math.min(ZOOMS.length - 1, Math.max(minZoom(), Number(wrap.dataset.zoom) + Number(btn.dataset.zoom)));
       // Mantém o centro da vista ao aproximar ou afastar.
       const cx = (box.scrollLeft + box.clientWidth / 2) / inner.offsetWidth;
       const cy = (box.scrollTop + box.clientHeight / 2) / inner.offsetHeight;
@@ -274,14 +331,14 @@
     }));
   }
 
-  // No telemóvel o mapa inteiro fica muito baixo: cada pergunta de mapa começa já ampliada
-  // (2×), centrada no meio do mapa; o jogador arrasta para os lados para procurar.
+  // Cada pergunta de mapa começa no zoom mínimo (2× no telemóvel), centrada no meio do mapa;
+  // o jogador arrasta para os lados para procurar.
   function resetAnswerMap(wrap) {
     if (wrap.dataset.round === lastRound) return;
     const inner = wrap.querySelector('.map-inner');
     if (!inner.querySelector('svg:not(.lines)') || !inner.offsetWidth) return; // ainda sem mapa ou escondido
     wrap.dataset.round = lastRound;
-    setZoom(wrap, narrowScreen() ? 1 : 0, 0.5, 0.45);
+    setZoom(wrap, minZoom(), 0.5, 0.45);
   }
 
   // Revelação: enquadra a zona com todos os palpites e o país certo, com alguma margem,
@@ -297,12 +354,12 @@
     // Folga mínima, para um só ponto (ou pontos muito juntos) não dar um zoom exagerado.
     const spanX = Math.max(maxX - minX, 8) * 1.3;
     const spanY = Math.max(maxY - minY, 14) * 1.3;
-    const maxH = parseFloat(getComputedStyle(box).maxHeight) || Infinity;
-    let level = 0;
-    for (let z = ZOOMS.length - 1; z > 0; z--) {
+    sizeMapBox(wrap);
+    let level = minZoom();
+    for (let z = ZOOMS.length - 1; z > minZoom(); z--) {
       const w = box.clientWidth * ZOOMS[z];
-      const h = (w * (MAP_TOP - MAP_BOTTOM)) / 360;
-      if ((spanX / 100) * w <= box.clientWidth && (spanY / 100) * h <= Math.min(h, maxH)) { level = z; break; }
+      const h = w * MAP_RATIO;
+      if ((spanX / 100) * w <= box.clientWidth && (spanY / 100) * h <= box.clientHeight) { level = z; break; }
     }
     setZoom(wrap, level, (minX + maxX) / 200, (minY + maxY) / 200);
     return inner.offsetWidth > 0;
@@ -348,7 +405,7 @@
       $('#custom-error').textContent = '';
       // As marcas "já feito nesta pergunta" (zoom do mapa, contador, animações) usam o número
       // da pergunta: no jogo seguinte a pergunta 1 é outra, por isso começam do zero.
-      for (const sel of ['#ans-map', '#rev-map', '#rev-line', '#rev-answer', '#rev-list', '#rev-scores']) {
+      for (const sel of ['#ans-map', '#rev-map', '#rev-target', '#rev-answer', '#rev-list', '#rev-scores']) {
         const node = $(sel);
         for (const key of ['round', 'framed', 'shown', 'anim']) delete node.dataset[key];
       }
@@ -393,7 +450,10 @@
     $('#topbar').hidden = !state;
     if (!state) return;
     $('#tb-code').textContent = state.code;
-    $('#tb-round').textContent = state.tiebreak ? 'Desempate' : inGame && state.round ? `Pergunta ${state.round} de ${state.totalRounds}` : 'Sala de espera';
+    $('#tb-round').textContent = state.phase === 'end' ? 'Fim do jogo'
+      : state.tiebreak ? `Desempate${state.tiebreak.number > 1 ? ` ${state.tiebreak.number}` : ''}`
+      : inGame && state.round ? `Pergunta ${state.round} de ${state.totalRounds}`
+      : 'Sala de espera';
   }
 
   function tick() {
@@ -476,19 +536,32 @@
       : host ? '' : 'À espera que o anfitrião comece o jogo…';
   }
 
-  // Emojis: o meu fica marcado; os dos outros jogadores ficam indisponíveis.
+  // Emojis: o meu fica marcado; os dos outros mostram o mini-avatar de quem o tem e ficam
+  // indisponíveis. Ao trocar de emoji, o meu avatar faz um "pop".
+  let lastMyEmoji = null;
   function renderEmojiPicker() {
     const me = player(state.me);
-    const taken = new Set(state.players.filter((p) => p.id !== state.me).map((p) => p.emoji));
+    const owners = new Map(state.players.filter((p) => p.id !== state.me).map((p) => [p.emoji, p]));
     $('#emoji-picker').style.setProperty('--c', me ? me.color : 'var(--accent)');
-    $('#emoji-picker').replaceChildren(...(state.emojis || []).map((e) => el('button', {
-      type: 'button',
-      class: me && me.emoji === e ? 'on' : '',
-      text: e,
-      'aria-label': `Escolher ${e}`,
-      ...(taken.has(e) ? { disabled: '' } : {}),
-      onclick: () => act('player:emoji', { emoji: e }),
-    })));
+    $('#emoji-picker').replaceChildren(...(state.emojis || []).map((e) => {
+      const owner = owners.get(e);
+      return el('button', {
+        type: 'button',
+        class: [me && me.emoji === e ? 'on' : '', owner ? 'taken' : ''].join(' '),
+        'aria-label': owner ? `${e} (de ${owner.name})` : `Escolher ${e}`,
+        title: owner ? `De ${owner.name}` : '',
+        ...(owner ? { disabled: '' } : {}),
+        onclick: () => act('player:emoji', { emoji: e }),
+      }, owner ? avatar(owner, 's') : el('span', { class: 'emoji', text: e }));
+    }));
+    if (me && lastMyEmoji && me.emoji !== lastMyEmoji && !reducedMotion()) {
+      for (const node of $$(`#screen-lobby .avatar[data-player="${me.id}"], #emoji-picker button.on`)) {
+        node.classList.remove('pop');
+        void node.offsetWidth;
+        node.classList.add('pop');
+      }
+    }
+    lastMyEmoji = me ? me.emoji : null;
   }
 
   // QR code com o convite (gerado aqui, só quando muda o código da sala).
@@ -651,7 +724,7 @@
 
   // Classificação. Com `gained` (pontos desta ronda), mostra quantos lugares cada um subiu
   // ou desceu e, uma vez por `animKey`, faz os jogadores deslizarem da posição antiga.
-  function renderScores(sel, { gained = null, animKey = null } = {}) {
+  function renderScores(sel, { gained = null, animKey = null, size = 'm' } = {}) {
     const groups = standingGroups();
     const top = groups.length ? groups[0][0].score : 0;
     const rows = [];
@@ -672,7 +745,7 @@
       return el('li', { class: classes, 'data-id': p.id }, [
         el('span', { class: 'pos', text: `${position}.º` }),
         el('span', { class: 'name' }, [
-          avatar(p),
+          avatar(p, size),
           p.name,
           // Explica porque está à frente de quem tem os mesmos pontos.
           state.standings && p.id === state.tiebreakWinner ? el('span', { class: 'won-tb', text: '(venceu o desempate)' }) : null,
@@ -705,165 +778,156 @@
   }
 
   // --- Revelação em passos -------------------------------------------------
-  // O servidor diz em que passo vamos (r.step de r.steps); com n palpites:
-  // passos 1..n mostram os palpites do mais longe para o mais perto,
-  // n+1 a resposta certa, n+2 os votos e n+3 os pontos e a classificação.
+  // O servidor diz em que passo vamos (r.step de r.steps) e avança sozinho; com n palpites:
+  // passos 1..n mostram os palpites do mais longe para o mais perto, n+1 a resposta certa e
+  // n+2 os pontos, a classificação e os votos.
 
-  const median = (sorted) => {
-    const m = sorted.length >> 1;
-    return sorted.length % 2 ? sorted[m] : (sorted[m - 1] + sorted[m]) / 2;
-  };
+  // --- Alvo: revelação das perguntas de números ---------------------------
+  // O centro é a resposta certa (escondida com "?" até ao fim). A distância ao centro é o
+  // ERRO RELATIVO |palpite − certa| / |certa| em escala logarítmica: cada anel é uma ordem de
+  // grandeza (até 1%, até 10%, até 100%) e os erros maiores ficam no anel de fora. Assim um
+  // palpite absurdo não esmaga os bons. O alvo tem tamanho fixo desde o início.
 
-  // Passo "redondo" (1, 2 ou 5 × 10ⁿ) para as pontas da reta terem números legíveis.
-  function niceStep(range) {
-    const raw = range / 10;
-    const pow = 10 ** Math.floor(Math.log10(raw));
-    return [1, 2, 5, 10].map((m) => m * pow).find((s) => s >= raw);
+  const TARGET_CENTER = 0.19; // raio do centro, em fração do raio útil
+  const TARGET_RINGS = [{ r: 0.43, label: '1%' }, { r: 0.62, label: '10%' }, { r: 0.81, label: '100%' }, { r: 1 }];
+  const RING_FILLS = ['#2a2360', '#332b72', '#3d3584', '#473f96'];
+
+  // 0 = em cheio; 0,24…1 = do erro de 0,1% (ou menos) até 1000% (ou mais). As fronteiras dos
+  // anéis (TARGET_RINGS) ficam nos erros de 1%, 10% e 100%.
+  function targetRadius(value, correct) {
+    const err = Math.abs(value - correct) / (Math.abs(correct) || 1);
+    if (err === 0) return 0;
+    const t = Math.min(1, Math.max(0, (Math.log10(err) + 3) / 4));
+    return 0.24 + 0.76 * t;
   }
 
-  // Escala da reta, fixa durante toda a revelação: calculada logo no início com todos os
-  // palpites e a resposta certa, com ~10% de margem e pontas arredondadas. Os palpites muito
-  // afastados ficam de fora (desenhados na ponta, a tracejado, depois de um corte ≪ ≫);
-  // a resposta certa fica sempre dentro.
-  function lineScale(values, correct) {
-    const sorted = [...values].sort((a, b) => a - b);
-    let lo = sorted[0];
-    let hi = sorted[sorted.length - 1];
-    const med = median(sorted);
-    const mad = median(sorted.map((v) => Math.abs(v - med)).sort((a, b) => a - b));
-    if (mad > 0) {
-      const inside = sorted.filter((v) => Math.abs(v - med) <= 8 * mad);
-      lo = inside[0];
-      hi = inside[inside.length - 1];
+  // Posições: ângulos distribuídos pela ordem da revelação, à distância do erro, com meio passo
+  // de desvio para nenhum ficar no topo (onde estão as etiquetas dos anéis). Se dois avatares
+  // ficarem quase no mesmo sítio, afasta-os um pouco no ângulo.
+  function targetLayout(order, r, size, av) {
+    const R = size / 2 - av / 2 - 4; // raio útil, em px (o avatar nunca sai do alvo)
+    const n = Math.max(order.length, 1);
+    const items = order.map((id, i) => ({
+      id,
+      rad: targetRadius(r.answers[id], r.correct) || TARGET_CENTER * 0.6, // em cheio: no centro
+      ang: -Math.PI / 2 + ((i + 0.5) * 2 * Math.PI) / n,
+    }));
+    const pos = (it) => ({ x: it.rad * R * Math.cos(it.ang), y: it.rad * R * Math.sin(it.ang) });
+    const minDist = av * 0.95;
+    for (let iter = 0; iter < 120; iter++) {
+      let clash = false;
+      for (let i = 0; i < items.length; i++) {
+        for (let j = i + 1; j < items.length; j++) {
+          const a = pos(items[i]);
+          const b = pos(items[j]);
+          const d = Math.hypot(a.x - b.x, a.y - b.y);
+          if (d >= minDist) continue;
+          clash = true;
+          // Empurra os dois ângulos em sentidos opostos (mais perto do centro, mais ângulo).
+          let diff = items[j].ang - items[i].ang;
+          diff = Math.atan2(Math.sin(diff), Math.cos(diff)) || 0.01;
+          const push = Math.min(0.35, (minDist - d) / (Math.max(items[i].rad, items[j].rad) * R + 1)) / 2;
+          items[i].ang -= Math.sign(diff) * push;
+          items[j].ang += Math.sign(diff) * push;
+        }
+      }
+      if (!clash) break;
     }
-    lo = Math.min(lo, correct);
-    hi = Math.max(hi, correct);
-    if (lo === hi) { lo -= Math.abs(lo) * 0.1 || 1; hi += Math.abs(hi) * 0.1 || 1; }
-    const nonNegative = sorted[0] >= 0 && correct >= 0;
-    const pad = (hi - lo) * 0.1;
-    lo -= pad;
-    hi += pad;
-    const step = niceStep(hi - lo);
-    lo = Math.floor(lo / step) * step;
-    hi = Math.ceil(hi / step) * step;
-    if (nonNegative) lo = Math.max(0, lo); // sem pontas negativas em contagens, anos, alturas…
-    return {
-      lo, hi,
-      pos: (v) => Math.min(100, Math.max(0, ((v - lo) / (hi - lo)) * 100)),
-      clipped: (v) => (v < lo ? 'lo' : v > hi ? 'hi' : ''),
+    return Object.fromEntries(items.map((it) => {
+      const p = pos(it);
+      return [it.id, { x: 50 + (p.x / size) * 100, y: 50 + (p.y / size) * 100 }];
+    }));
+  }
+
+  function drawTargetRings(svg, size, av) {
+    const R = ((size / 2 - av / 2 - 4) / size) * 100; // em unidades do viewBox (0..100)
+    const NS = 'http://www.w3.org/2000/svg';
+    const make = (tag, attrs) => {
+      const node = document.createElementNS(NS, tag);
+      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
+      return node;
     };
-  }
-
-  const LANE = 42; // altura de cada fila de etiquetas, em px
-
-  // Atualiza (ou cria) a marca de um palpite, para que mude de sítio com transição.
-  function upsertMark(container, key, cls, html) {
-    let mark = container.querySelector(`[data-key="${key}"]`);
-    if (!mark) {
-      mark = el('div', { class: 'mark appear', 'data-key': key });
-      container.append(mark);
+    const nodes = [make('circle', { cx: 50, cy: 50, r: 49.5, class: 'tgt-rim' })];
+    [...TARGET_RINGS].reverse().forEach((ring, i) => {
+      nodes.push(make('circle', { cx: 50, cy: 50, r: ring.r * R, fill: RING_FILLS[i], class: 'tgt-ring' }));
+    });
+    for (const ring of TARGET_RINGS) {
+      if (!ring.label) continue;
+      const label = make('text', { x: 50, y: 50 - ring.r * R + 3.6, class: 'tgt-label' });
+      label.textContent = ring.label;
+      nodes.push(label);
     }
-    mark.className = `mark ${cls} ${mark.classList.contains('appear') ? 'appear' : ''}`;
-    mark.replaceChildren(...html);
-    return mark;
+    svg.replaceChildren(...nodes);
+    // O centro (em HTML, para o contador) acompanha o tamanho dos anéis.
+    svg.parentElement.style.setProperty('--center', `${TARGET_CENTER * R * 2}%`);
   }
 
-  // Põe a etiqueta dentro da caixa (o pé da marca fica no sítio certo) e devolve o centro
-  // e a meia-largura da etiqueta, em % da largura da reta.
-  function fitTag(tag, x, width) {
-    const half = ((tag.offsetWidth / 2 + 3) / width) * 100;
-    const center = Math.min(100 - half, Math.max(half, x));
-    tag.style.setProperty('--dx', `${((center - x) / 100) * width}px`);
-    return { center, half };
-  }
-
-  function renderNumberLine(r, order, shown, showCorrect) {
-    const box = $('#rev-line');
-    const marks = box.querySelector('.numline-marks');
-    const correctBox = box.querySelector('.numline-correct');
-    if (box.dataset.round !== String(state.round)) {
-      marks.replaceChildren();
-      correctBox.replaceChildren();
-      box.dataset.round = String(state.round);
-    }
-    const ids = order.slice(0, shown);
-    const all = order.map((id) => r.answers[id]);
-    const scale = lineScale(all.length ? all : [r.correct], r.correct);
+  function renderTarget(r, order, shown, showCorrect) {
+    const wrap = $('#rev-target');
+    const box = wrap.querySelector('.tgt-board');
+    const layer = box.querySelector('.tgt-players');
+    const center = box.querySelector('.tgt-center span');
+    const list = $('#rev-target-list');
     const unit = state.question.unit;
+    const fresh = wrap.dataset.round !== String(state.round);
+    const size = box.clientWidth || 300;
+    const av = Math.round(Math.min(56, Math.max(34, size * 0.15)));
+    box.style.setProperty('--av', `${av}px`);
+    drawTargetRings(box.querySelector('svg'), size, av);
 
-    // Os palpites fora da escala ficam numa zona própria na ponta, depois de um corte (≫),
-    // para não parecerem perto da resposta certa. Conta com todos os palpites (não só os
-    // já mostrados), para a reta não mudar a meio da revelação.
-    const cuts = order.map((id) => scale.clipped(r.answers[id]));
-    const hasLo = cuts.includes('lo');
-    const hasHi = cuts.includes('hi');
-    const left = hasLo ? 22 : 4;
-    const right = hasHi ? 78 : 96;
-    const xOf = (v) => {
-      const cut = scale.clipped(v);
-      if (cut === 'lo') return 5;
-      if (cut === 'hi') return 95;
-      return left + ((v - scale.lo) / (scale.hi - scale.lo)) * (right - left);
-    };
-    box.querySelector('.cut-lo').hidden = !hasLo;
-    box.querySelector('.cut-hi').hidden = !hasHi;
-    // Valores nas pontas da escala, desde o primeiro palpite.
-    for (const [cls, value, x] of [['.end-lo', scale.lo, left], ['.end-hi', scale.hi, right]]) {
-      const end = box.querySelector(cls);
-      end.textContent = fmt(value);
-      end.style.left = `${x}%`;
+    if (fresh) {
+      wrap.dataset.round = String(state.round);
+      layer.replaceChildren();
+      center.textContent = '?';
+      center.parentElement.classList.remove('revealed');
+      // A lista tem já uma linha por palpite (escondida), para não empurrar a página.
+      const byDistance = [...order].sort((a, b) => r.distances[a] - r.distances[b]);
+      list.replaceChildren(...byDistance.map((id) => el('li', { 'data-id': id }, [
+        ...who(id),
+        el('span', { class: 'guess', text: `— ${withUnit(r.answers[id], unit)}` }),
+        el('span', { class: 'miss' }),
+      ])));
     }
 
-    const keep = new Set();
-    for (const id of ids) {
-      const value = r.answers[id];
-      const cut = scale.clipped(value);
-      const cls = [
-        showCorrect && r.closest.includes(id) ? 'near' : '',
-        showCorrect && r.farthest.includes(id) ? 'far' : '',
-        cut ? 'clipped' : '',
-      ].join(' ');
-      const valueText = `${cut === 'lo' ? '≪ ' : ''}${fmt(value)}${cut === 'hi' ? ' ≫' : ''}`;
-      const mark = upsertMark(marks, id, cls, [
-        el('span', { class: 'tag-box' }, [...who(id), el('b', { text: valueText })]),
-        el('span', { class: 'stem' }),
-      ]);
-      mark.style.left = `${xOf(value)}%`;
-      mark.style.setProperty('--c', colorOf(id));
-      keep.add(id);
-    }
-    for (const m of marks.querySelectorAll('.mark')) if (!keep.has(m.dataset.key)) m.remove();
-
-    // Filas: mede cada etiqueta e põe-na na primeira fila onde não choca com outra.
-    const width = marks.clientWidth || 1;
-    const items = ids.map((id) => {
-      const mark = marks.querySelector(`[data-key="${id}"]`);
-      return { mark, ...fitTag(mark.querySelector('.tag-box'), xOf(r.answers[id]), width) };
-    }).sort((a, b) => a.center - b.center);
-    const lanes = [];
-    for (const it of items) {
-      let lane = lanes.findIndex((edge) => it.center - it.half > edge + 1);
-      if (lane === -1) { lane = lanes.length; lanes.push(0); }
-      lanes[lane] = it.center + it.half;
-      it.lane = lane;
-    }
-    const height = Math.max(1, lanes.length) * LANE + 12;
-    marks.style.height = `${height}px`;
-    for (const it of items) {
-      it.mark.style.top = `${it.lane * LANE}px`;
-      it.mark.style.height = `${height - it.lane * LANE}px`;
+    const positions = targetLayout(order, r, size, av);
+    const visible = new Set(order.slice(0, shown));
+    // Quem entrou a meio (ex.: recarregou a página) não vê os voos dos que já tinham aterrado.
+    const animate = !fresh || shown <= 1;
+    for (const id of visible) {
+      let node = layer.querySelector(`[data-id="${id}"]`);
+      if (!node) {
+        const p = player(id);
+        node = el('div', { class: `tgt-player ${animate ? 'land' : ''}`, 'data-id': id }, [
+          p ? avatar(p, 'l') : el('span', { text: '?' }),
+          el('span', { class: 'tgt-val', text: fmt(r.answers[id]) }),
+        ]);
+        layer.append(node);
+      }
+      node.style.left = `${positions[id].x}%`;
+      node.style.top = `${positions[id].y}%`;
+      node.classList.toggle('near', showCorrect && r.closest.includes(id));
+      // O mais longe só quando não empatou toda a gente (aí eram todos os mais perto também).
+      node.classList.toggle('far', showCorrect && r.farthest.includes(id) && !r.closest.includes(id));
     }
 
-    correctBox.classList.toggle('shown', showCorrect);
-    if (showCorrect) {
-      const mark = upsertMark(correctBox, 'correct', 'correct', [
-        el('span', { class: 'stem' }),
-        el('span', { class: 'tag-box', text: withUnit(r.correct, unit) }),
-      ]);
-      mark.style.left = `${xOf(r.correct)}%`;
-      fitTag(mark.querySelector('.tag-box'), xOf(r.correct), width);
-    } else {
-      correctBox.replaceChildren();
+    // No fim, o "?" passa a ser a resposta certa, a rolar até ao valor.
+    if (showCorrect && !center.parentElement.classList.contains('revealed')) {
+      center.parentElement.classList.add('revealed');
+      center.dataset.len = String(fmt(r.correct).length);
+      countUp(center, r.correct, '');
+    }
+
+    // Lista por baixo, em sincronia: aparece cada palpite quando aterra; "falhou por" só depois
+    // da resposta certa (antes disso dava para adivinhá-la).
+    for (const li of list.children) {
+      const id = li.dataset.id;
+      li.classList.toggle('shown', visible.has(id));
+      li.classList.toggle('near', showCorrect && r.closest.includes(id));
+      li.classList.toggle('far', showCorrect && r.farthest.includes(id) && !r.closest.includes(id));
+      // Antes da resposta certa fica um espaço reservado, para a linha não crescer depois.
+      li.querySelector('.miss').textContent = showCorrect
+        ? (r.distances[id] === 0 ? 'em cheio!' : `falhou por ${fmt(r.distances[id])}`)
+        : ' ';
     }
   }
 
@@ -921,8 +985,10 @@
     }) : []));
     wrap.querySelector('.pins').replaceChildren(
       center ? pin(r.center, 'target') : null,
+      // A etiqueta leva o emoji e uma borda na cor do jogador: lê-se a quem pertence mesmo
+      // quando fica afastada do pino.
       ...ids.map((id, i) => pin(r.answers[id], `${clsOf(id)} ${i >= before ? 'appear' : ''}`,
-        `${nameOf(id)} · ${fmt(r.distances[id])} km`, colorOf(id))),
+        `${player(id) ? player(id).emoji : ''} ${nameOf(id)} · ${fmt(r.distances[id])} km`, colorOf(id))),
     );
     wrap.relayout = () => layoutPinLabels(wrap);
 
@@ -1114,10 +1180,13 @@
     const showPoints = r.step >= r.steps;
     $('#rev-novote').hidden = r.voting || n === 0;
 
-    $('#rev-line').hidden = isMap;
+    $('#rev-target').hidden = isMap;
     $('#rev-map').hidden = !isMap;
     if (isMap) renderMapReveal(r, order, shown, showCorrect);
-    else renderNumberLine(r, order, shown, showCorrect);
+    else renderTarget(r, order, shown, showCorrect);
+    // Nas rondas de mapa as distâncias apareciam duas vezes: a lista por baixo do mapa
+    // acompanha a revelação e dá lugar aos cartões "Esta ronda" no fim.
+    $('#rev-map-list').hidden = showPoints;
     $('#rev-progress').textContent = n === 0 ? 'Ninguém respondeu a esta pergunta.'
       : shown < n ? `Palpite ${shown} de ${n} (do mais longe para o mais perto)` : '';
 
@@ -1139,9 +1208,10 @@
     else $('#rev-votes-box').open = false;
     $('#rev-points-box').hidden = !showPoints;
 
-    // A revelação corre sozinha; o anfitrião pode saltar para o fim e depois só avança.
+    // A revelação corre sozinha; o anfitrião pode saltar enquanto ainda há palpites por
+    // mostrar. Depois só lhe resta "Próxima pergunta".
     const host = isHost();
-    $('#btn-step').hidden = !host || showPoints;
+    $('#btn-step').hidden = !host || showCorrect;
     $('#btn-next').hidden = !host || !showPoints;
     $('#rev-hint').textContent = host || showPoints ? '' : 'A revelar os palpites…';
     if (!showPoints) return;
@@ -1261,14 +1331,14 @@
       return el('div', { class: `award ${ids.includes(state.me) ? 'me' : ''}`, style: `--i:${i}` }, [
         el('span', { class: 'icon', text: meta.icon, 'aria-hidden': 'true' }),
         el('span', { class: 'title', text: meta.title }),
-        el('span', { class: 'who', text: listNames(ids) }),
+        el('span', { class: 'who' }, [...ids.map(player).filter(Boolean).map((p) => avatar(p, 's')), listNames(ids)]),
         el('span', { class: 'why', text: meta.why(a.winners[0]) }),
       ]);
     }));
   }
 
   function renderEnd() {
-    renderScores('#end-scores');
+    renderScores('#end-scores', { size: 'l' });
     const winners = standingGroups()[0].map((p) => p.name);
     $('#end-winner').textContent = winners.length === 1
       ? `🏆 ${winners[0]} ganhou!`

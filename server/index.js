@@ -98,9 +98,10 @@ io.on('connection', (socket) => {
     'question:submit': (room, id, p) => room.submitCustomQuestion(id, p),
     'answer:submit': (room, id, p) => room.submitAnswer(id, p.value),
     'vote:submit': (room, id, p) => room.submitVote(id, p.targetId),
-    'round:force': (room, id) => room.forceAdvance(id),
-    'round:next': (room, id) => room.nextQuestion(id),
-    'reveal:skip': (room, id) => room.revealSkip(id),
+    // Estes três levam a fase e a pergunta esperadas: { phase, round, tb } (ver Room.isStale).
+    'round:force': (room, id, p) => room.forceAdvance(id, p),
+    'round:next': (room, id, p) => room.nextQuestion(id, p),
+    'reveal:skip': (room, id, p) => room.revealSkip(id, p),
     'player:emoji': (room, id, p) => room.setEmoji(id, p.emoji),
     'game:lobby': (room, id) => room.backToLobby(id),
   };

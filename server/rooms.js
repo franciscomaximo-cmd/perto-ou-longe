@@ -591,25 +591,38 @@ class Room {
     ].filter((a) => a.winners.length);
   }
 
+  // Os pedidos do anfitrião para avançar ou saltar levam a fase e a pergunta que ele estava a
+  // ver. Se entretanto a fase mudou (ex.: o último jogador respondeu no mesmo instante e já se
+  // passou à votação), o pedido é ignorado, para não saltar também a fase seguinte.
+  // Sem `expected` (clientes antigos), aceita sempre.
+  isStale(expected) {
+    if (!expected || expected.phase === undefined) return false;
+    const tb = this.phase === 'tiebreak' || this.phase === 'tiebreak-reveal' ? this.tiebreak.number : null;
+    return expected.phase !== this.phase || expected.round !== this.round || (expected.tb ?? null) !== tb;
+  }
+
   // O anfitrião salta a animação e mostra a revelação toda de uma vez.
-  revealSkip(playerId) {
+  revealSkip(playerId, expected) {
     this.requireHost(playerId);
+    if (this.isStale(expected)) return;
     if (this.phase !== 'reveal') throw new GameError('Não há nada para revelar agora.');
     this.clearRevealTimer();
     this.current.step = this.current.steps;
     this.touch();
   }
 
-  forceAdvance(playerId) {
+  forceAdvance(playerId, expected) {
     this.requireHost(playerId);
+    if (this.isStale(expected)) return;
     if (this.phase === 'answering') this.endAnswering();
     else if (this.phase === 'voting') this.reveal();
     else if (this.phase === 'tiebreak') this.revealTiebreak();
     else throw new GameError('Não há nada para avançar agora.');
   }
 
-  nextQuestion(playerId) {
+  nextQuestion(playerId, expected) {
     this.requireHost(playerId);
+    if (this.isStale(expected)) return; // ex.: dois cliques seguidos não saltam uma pergunta
     if (this.phase === 'tiebreak-reveal') return this.nextTiebreak();
     if (this.phase !== 'reveal') throw new GameError('Ainda não é altura de avançar.');
     if (this.round < this.questions.length) return this.nextRound();

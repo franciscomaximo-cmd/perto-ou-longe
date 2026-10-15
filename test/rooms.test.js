@@ -324,6 +324,41 @@ test('a revelação avança sozinha e o anfitrião pode saltar para o fim', asyn
   room.destroy();
 });
 
+test('"Avançar já" atrasado não salta a votação (corrida com a última resposta)', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  startWithNumber(room, ana);
+  // O anfitrião carregou a ver a fase de respostas da pergunta 1…
+  const seen = { phase: 'answering', round: 1, tb: null };
+  room.submitAnswer(ana, 200);
+  room.submitAnswer(rui, 100);
+  room.submitAnswer(eva, 50); // …mas o último respondeu primeiro e já se passou à votação
+  assert.equal(room.phase, 'voting');
+  room.forceAdvance(ana, seen);
+  assert.equal(room.phase, 'voting', 'o pedido atrasado é ignorado');
+  // Com a fase certa, avança normalmente.
+  room.forceAdvance(ana, { phase: 'voting', round: 1, tb: null });
+  assert.equal(room.phase, 'reveal');
+  room.destroy();
+});
+
+test('saltar e "Próxima pergunta" com fase antiga são ignorados; sem fase continuam a funcionar', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  startWithNumber(room, ana);
+  for (const [id, v] of [[ana, 200], [rui, 100], [eva, 50]]) room.submitAnswer(id, v);
+  room.forceAdvance(ana); // sem fase esperada (clientes antigos): aceita
+  room.forceAdvance(ana, { phase: 'voting', round: 1, tb: null });
+  assert.equal(room.phase, 'reveal');
+  room.nextQuestion(ana, { phase: 'reveal', round: 1, tb: null });
+  assert.equal(room.round, 2);
+  // Segundo clique no mesmo botão (ainda a pensar na pergunta 1): não salta a 2.
+  room.nextQuestion(ana, { phase: 'reveal', round: 1, tb: null });
+  room.revealSkip(ana, { phase: 'reveal', round: 1, tb: null });
+  assert.deepEqual([room.phase, room.round], ['answering', 2]);
+  room.destroy();
+});
+
 test('saltar a revelação: só o anfitrião, e mostra tudo de uma vez', () => {
   const { room, ids } = setup();
   const [ana, rui, eva] = ids;

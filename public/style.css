@@ -177,14 +177,21 @@ textarea:focus { border-color: var(--accent); }
 
 /* Mapa */
 .map-wrap { display: flex; flex-direction: column; gap: 10px; position: relative; }
+/* Contentor de tamanho fixo (a altura é posta em JS: até 45% do ecrã); o zoom acontece só
+   lá dentro. Sem barras de scroll: arrasta-se com o dedo ou com o rato. */
 .map-box {
   overflow: auto;
   border-radius: var(--radius);
   border: 2px solid var(--line);
   background: #a9cfe9; /* mar */
-  max-height: 60vh;
+  max-height: 45vh;
   -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  cursor: grab;
 }
+.map-box::-webkit-scrollbar { display: none; }
+.map-box.dragging { cursor: grabbing; }
+.map-box.dragging .map-inner { cursor: grabbing; }
 .map-inner { position: relative; width: 100%; cursor: crosshair; }
 .map-inner svg { display: block; width: 100%; height: auto; aspect-ratio: 360 / 142; }
 .map-inner path { fill: #fff; stroke: #9b96bd; stroke-width: .6; vector-effect: non-scaling-stroke; }
@@ -209,7 +216,8 @@ textarea:focus { border-color: var(--accent); }
 .pin-label {
   position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
   white-space: nowrap; font-size: .72rem; font-weight: 700;
-  background: var(--bg); color: var(--text); border-radius: 6px; padding: 1px 5px;
+  background: var(--bg); color: var(--text); border-radius: 6px; padding: 1px 6px;
+  border: 2px solid var(--c, var(--line)); /* cor do jogador: lê-se a quem pertence */
 }
 
 /* Revelação em passos */
@@ -219,44 +227,79 @@ textarea:focus { border-color: var(--accent); }
 @keyframes rise { from { opacity: 0; transform: translateY(10px); } }
 @keyframes pop { from { opacity: 0; scale: .4; } }
 
-/* Reta numérica: palpites por cima do eixo, resposta certa por baixo. */
-.numline {
-  position: relative;
-  background: var(--card); border-radius: var(--radius);
-  padding: 12px 0 8px;
+/* Alvo das perguntas de números: tamanho fixo desde o início (quadrado, largura disponível
+   até 45% da altura do ecrã), por isso nada salta durante a revelação. */
+.target-wrap { display: flex; flex-direction: column; gap: 12px; }
+.tgt-board {
+  position: relative; align-self: center;
+  width: min(100%, 45vh); width: min(100%, 45svh); aspect-ratio: 1;
 }
-.numline-marks { position: relative; margin: 0 12px; }
-.numline-axis { position: relative; height: 3px; margin: 0 12px; background: var(--line); border-radius: 2px; }
-.numline-correct { position: relative; height: 0; margin: 0 12px; }
-.numline-correct.shown { height: 54px; }
-/* Corte na reta entre a escala e os palpites fora dela */
-.numline-cut {
-  position: absolute; top: 50%; transform: translate(-50%, -50%);
-  padding: 0 4px; background: var(--card); color: var(--muted); font-weight: 800; line-height: 1;
+.tgt-board svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.tgt-board .tgt-rim { fill: none; stroke: var(--line); stroke-width: .6; }
+.tgt-board .tgt-ring { stroke: rgba(255, 255, 255, .14); stroke-width: .35; }
+.tgt-board .tgt-label { fill: var(--muted); font-size: 3.4px; font-weight: 700; text-anchor: middle; opacity: .85; }
+.tgt-center {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+  width: var(--center, 20%); aspect-ratio: 1; border-radius: 50%;
+  display: grid; place-items: center; overflow: hidden;
+  background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 0 0 3px rgba(255, 203, 71, .25), 0 4px 14px rgba(0, 0, 0, .35);
+  font-weight: 800; font-size: clamp(1.2rem, 6vw, 2rem); line-height: 1;
 }
-.numline-cut.cut-lo { left: 13.5%; }
-.numline-cut.cut-hi { left: 86.5%; }
-/* Cada marca tem largura zero no sítio exato do palpite: o pé fica nesse ponto e a
-   etiqueta pode afastar-se para o lado (--dx) para caber na caixa. */
-.mark {
-  position: absolute; width: 0;
-  transition: left .45s ease, top .45s ease;
-  white-space: nowrap; font-size: .78rem; line-height: 1.2;
+.tgt-center span { padding: 0 3px; text-align: center; }
+/* Com a resposta certa, o tamanho da letra encolhe conforme o número de algarismos. */
+.tgt-center.revealed span { font-size: .7em; }
+.tgt-center.revealed span[data-len="5"], .tgt-center.revealed span[data-len="6"] { font-size: .5em; }
+.tgt-center.revealed span[data-len="7"], .tgt-center.revealed span[data-len="8"] { font-size: .4em; }
+.tgt-center.revealed span[data-len="9"], .tgt-center.revealed span[data-len="10"],
+.tgt-center.revealed span[data-len="11"], .tgt-center.revealed span[data-len="12"] { font-size: .3em; }
+.tgt-center.revealed { animation: pop .45s cubic-bezier(.2, 1.4, .4, 1); }
+.tgt-players { position: absolute; inset: 0; }
+.tgt-player {
+  position: absolute; transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center;
 }
-.mark .tag-box {
-  position: absolute; top: 0; left: 0;
-  transform: translateX(calc(-50% + var(--dx, 0px)));
-  background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 2px 7px; text-align: center;
+.tgt-player .avatar { --size: var(--av, 56px); margin: 0; }
+.tgt-val {
+  position: relative; z-index: 1; /* por cima do anel do avatar */
+  margin-top: -4px; padding: 0 6px; border-radius: 999px;
+  background: var(--bg); color: var(--text); font-size: .7rem; font-weight: 800; white-space: nowrap;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, .35);
 }
-.mark .tag-box b { display: block; font-size: .85rem; }
-.mark .stem { position: absolute; left: -1px; width: 2px; top: 34px; bottom: 0; background: var(--c, var(--muted)); }
-.mark .tag-box .avatar { width: 1.35em; height: 1.35em; font-size: .85em; margin-right: 4px; }
-.mark.near .tag-box { border-color: var(--near); }
-.mark.far .tag-box { border-color: var(--far); }
-.mark.clipped .tag-box { border-style: dashed; }
-.mark.correct { top: 0; height: 54px; }
-.mark.correct .tag-box { top: 10px; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
-.mark.correct .stem { top: 0; bottom: auto; height: 10px; background: var(--accent); }
+/* Voo e ressalto ao aterrar no alvo */
+.tgt-player.land { animation: land .75s cubic-bezier(.25, 1.25, .45, 1) both; }
+@keyframes land {
+  0% { opacity: 0; transform: translate(-50%, -50%) translateY(-90px) scale(1.7); }
+  55% { opacity: 1; transform: translate(-50%, -50%) translateY(4px) scale(.92); }
+  75% { transform: translate(-50%, -50%) translateY(-5px) scale(1.04); }
+  100% { opacity: 1; transform: translate(-50%, -50%); }
+}
+/* No fim: brilho verde no mais perto, contorno vermelho e abanão no mais longe. */
+.tgt-player.near .avatar { box-shadow: 0 0 0 3px var(--near), 0 0 18px 6px rgba(61, 220, 151, .65); }
+.tgt-player.far .avatar { box-shadow: 0 0 0 3px var(--far), 0 3px 8px rgba(0, 0, 0, .35); }
+.tgt-player.far { animation: tgt-shake .55s .2s ease-in-out; }
+@keyframes tgt-shake {
+  0%, 100% { transform: translate(-50%, -50%); }
+  20%, 60% { transform: translate(calc(-50% - 6px), -50%); }
+  40%, 80% { transform: translate(calc(-50% + 6px), -50%); }
+}
+.tgt-player.near, .tgt-player.far { z-index: 2; }
+/* Lista por baixo do alvo: as linhas existem desde o início (escondidas), para não empurrar a
+   página; cada uma aparece quando o seu palpite aterra. */
+.target-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.target-list li {
+  display: grid; grid-template-columns: auto auto 1fr; align-items: center; column-gap: 0;
+  background: var(--card); border-radius: 10px; padding: 6px 12px;
+  border-left: 4px solid transparent; font-weight: 600;
+  visibility: hidden; opacity: 0; transition: opacity .3s;
+}
+.target-list li .avatar { grid-row: 1 / span 2; }
+.target-list li .miss { grid-column: 2 / 4; margin-left: 0; font-size: .88rem; }
+.target-list li.shown { visibility: visible; opacity: 1; }
+.target-list li.near { border-left-color: var(--near); }
+.target-list li.far { border-left-color: var(--far); }
+.target-list .guess { margin-left: 6px; }
+.target-list .miss { margin-left: 4px; color: var(--muted); font-weight: 400; }
 
 /* Botões do anfitrião: "Saltar" fica sempre à vista no fundo do ecrã durante a revelação.
    "Próxima pergunta" fica logo a seguir à classificação, sem tapar os resultados. */
@@ -292,7 +335,9 @@ textarea:focus { border-color: var(--accent); }
 
 @media (prefers-reduced-motion: reduce) {
   .reveal-in, .appear, .votes li { animation: none; }
-  .mark { transition: none; }
+  /* Alvo: sem voos nem abanões, os avatares só aparecem. */
+  .tgt-player.land, .tgt-player.far, .tgt-center.revealed { animation: none; }
+  .target-list li { transition: none; }
 }
 
 /* Votação */
@@ -356,19 +401,47 @@ textarea:focus { border-color: var(--accent); }
 @keyframes award-in { from { opacity: 0; transform: translateY(14px) scale(.92); } }
 @media (prefers-reduced-motion: reduce) { .award { animation: none; } }
 
-/* --- Jogadores: cor e emoji ------------------------------------------- */
+/* --- Avatares: o mesmo componente em todo o lado ----------------------- */
+/* Emoji grande num círculo com gradiente da cor do jogador, borda branca fina e sombra.
+   Tamanhos: .s ~26 px (etiquetas), .m ~40 px (listas), .l ~56 px (alvo, fim do jogo). */
 .avatar {
-  display: inline-grid; place-items: center; flex: none;
-  width: 1.7em; height: 1.7em; margin-right: 8px; border-radius: 50%;
-  background: var(--c, var(--card)); font-size: .95em; line-height: 1;
-  box-shadow: 0 0 0 2px rgba(0, 0, 0, .25);
+  --size: 40px;
+  position: relative; display: inline-grid; place-items: center; flex: none;
+  width: var(--size); height: var(--size); margin-right: 10px; border-radius: 50%;
+  background: var(--c, var(--card));
+  background: radial-gradient(circle at 32% 26%,
+    color-mix(in srgb, var(--c) 45%, #fff) 0%, var(--c) 52%, color-mix(in srgb, var(--c) 72%, #000) 100%);
+  border: 2px solid rgba(255, 255, 255, .9);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, .35);
+  line-height: 1; vertical-align: middle;
 }
+.avatar .emoji {
+  font-size: calc(var(--size) * .56); line-height: 1;
+  transform: translateY(.04em); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .3));
+}
+.avatar.s { --size: 26px; margin-right: 6px; border-width: 1.5px; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+.avatar.l { --size: 56px; }
+/* "Tu": anel brilhante na tua cor. */
+.avatar.me { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--c), 0 0 14px 2px var(--c); }
+/* Anfitrião: pequena coroa no canto. */
+.avatar.host::after {
+  content: "👑"; position: absolute; top: -.42em; right: -.32em;
+  font-size: max(11px, calc(var(--size) * .36)); transform: rotate(18deg);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .5));
+}
+.avatar.off { filter: grayscale(1); opacity: .5; }
+.avatar.pop { animation: avatar-pop .45s cubic-bezier(.2, 1.6, .4, 1); }
+@keyframes avatar-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
 .who { display: inline-flex; align-items: center; min-width: 0; }
 .options button { display: flex; align-items: center; justify-content: center; }
-.emoji-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(44px, 1fr)); gap: 6px; margin-top: 10px; }
-.emoji-picker button { padding: 6px 0; font-size: 1.4rem; line-height: 1.2; border-radius: 12px; }
-.emoji-picker button.on { background: var(--c); border-color: var(--c); }
-.emoji-picker button:disabled { opacity: .25; }
+
+/* Seletor de emoji: os ocupados mostram o mini-avatar de quem os tem. */
+.emoji-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 6px; margin-top: 10px; }
+.emoji-picker button { display: grid; place-items: center; padding: 6px 0; font-size: 1.4rem; line-height: 1.2; border-radius: 12px; min-height: 46px; }
+.emoji-picker button .avatar { margin: 0; }
+.emoji-picker button.on { background: var(--c); border-color: #fff; }
+.emoji-picker button.taken:disabled { opacity: .75; background: transparent; border-style: dashed; }
+.emoji-picker button.pop { animation: avatar-pop .45s cubic-bezier(.2, 1.6, .4, 1); }
 
 /* Cabeçalho: tempo e botão de som */
 .tb-right { display: flex; align-items: center; gap: 8px; }
@@ -379,20 +452,11 @@ textarea:focus { border-color: var(--accent); }
 .qr:empty { display: none; }
 .qr svg { display: block; width: 100%; height: auto; }
 
-/* Pontas da reta: valores mínimo e máximo da escala */
-.numline-ends { position: relative; height: 20px; margin: 6px 12px 0; }
-.numline-end { position: absolute; top: 0; font-size: .75rem; font-weight: 700; color: var(--muted); white-space: nowrap; }
-.numline-end.end-lo { transform: translateX(-4px); }
-.numline-end.end-hi { transform: translateX(calc(-100% + 4px)); }
-.numline-end::before { content: ""; position: absolute; top: -8px; width: 2px; height: 6px; background: var(--line); }
-.end-lo::before { left: 3px; }
-.end-hi::before { right: 3px; }
-
 /* Mapa: tocar e arrastar mexe só no mapa (não faz scroll da página); no telemóvel ocupa a
-   largura toda e fica mais alto. */
+   largura toda. */
 .map-box { overscroll-behavior: contain; touch-action: pan-x pan-y; }
 @media (max-width: 599px) {
-  .map-box { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; max-height: 72vh; }
+  .map-box { margin: 0 -16px; border-radius: 0; border-left: 0; border-right: 0; }
 }
 /* Etiqueta afastada do pino: uma linha fina liga-a ao pino. */
 .pin-label.lead::after {
@@ -435,15 +499,6 @@ textarea:focus { border-color: var(--accent); }
   40%, 80% { transform: translateX(6px); }
 }
 .results li.shake { animation: shake .55s .25s ease-in-out; }
-.mark.far .tag-box { animation: shake-tag .55s ease-in-out; }
-@keyframes shake-tag {
-  0%, 100% { translate: 0; }
-  20%, 60% { translate: -5px; }
-  40%, 80% { translate: 5px; }
-}
-
-/* Na revelação o mapa fica mais baixo, para sobrar ecrã para fazer scroll da página. */
-#rev-map .map-box { max-height: 55vh; }
 
 /* Faixa de ligação ao servidor */
 #offline {
@@ -463,7 +518,7 @@ textarea:focus { border-color: var(--accent); }
 .confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
 
 @media (prefers-reduced-motion: reduce) {
-  .results li.shake, .mark.far .tag-box { animation: none; }
+  .results li.shake, .avatar.pop, .emoji-picker button.pop { animation: none; }
   .scores li { transition: none !important; }
   .spinner { animation-duration: 3s; }
 }

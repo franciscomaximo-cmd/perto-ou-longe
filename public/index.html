@@ -174,17 +174,13 @@
       <p id="rev-question" class="question small"></p>
 
       <!-- 1. Palpites, um a um (reta numérica ou mapa) -->
-      <div id="rev-line" class="numline" hidden>
-        <div class="numline-marks"></div>
-        <div class="numline-axis">
-          <span class="numline-cut cut-lo" aria-hidden="true" hidden>≪</span>
-          <span class="numline-cut cut-hi" aria-hidden="true" hidden>≫</span>
+      <div id="rev-target" class="target-wrap" hidden>
+        <div class="tgt-board" role="img" aria-label="Alvo: quanto mais perto do centro, mais perto da resposta certa">
+          <svg viewBox="0 0 100 100" aria-hidden="true"></svg>
+          <div class="tgt-center"><span>?</span></div>
+          <div class="tgt-players"></div>
         </div>
-        <div class="numline-correct"></div>
-        <div class="numline-ends">
-          <span class="numline-end end-lo"></span>
-          <span class="numline-end end-hi"></span>
-        </div>
+        <ol id="rev-target-list" class="target-list"></ol>
       </div>
       <div id="rev-map" class="map-wrap" hidden>
         <div class="map-box"><div class="map-inner"><svg class="lines" viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div class="pins"></div></div></div>

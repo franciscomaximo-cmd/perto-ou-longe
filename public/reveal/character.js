@@ -6,7 +6,8 @@
 //   drawCharacter(player, pose, { size, small, title, kartColor, withPet })
 //     player: { emoji, color, character } (peças em public/reveal/character-options.js; as que
 //             faltarem ficam com o valor por omissão)
-//     pose:   'parado' | 'arco' | 'lancar' | 'kart' | 'rematar' | 'festejar' | 'triste'
+//     pose:   'parado' | 'arco' | 'lancar' | 'kart' | 'rematar' | 'dardo' | 'golfe'
+//             | 'festejar' | 'triste'
 //             | 'kart_festejar' | 'kart_triste' (no kart, no fim da corrida)
 //             "festejar" e "triste" desenham a animação de vitória e a reação de derrota que o
 //             jogador escolheu (pular, rodopiar, siuuu, dança robô, braços no ar; chorar,
@@ -85,6 +86,18 @@
       armL: [[40, 59], [50, 70], [63, 78]], armR: [[60, 59], [65, 70], [69, 78]],
       legL: [[45, 86], [56, 90], [64, 92]], legR: [[55, 86], [62, 90], [68, 92]],
       seated: true, kart: true, mood: 'triste',
+    },
+    // A lançar um dardo: braço direito dobrado junto à cabeça, com o dardo apontado em frente.
+    dardo: {
+      head: [49, 30, -4],
+      armL: [[39, 54], [32, 64], [36, 74]], armR: [[61, 54], [72, 46], [66, 34]],
+      legL: [[45, 82], [41, 101], [38, 121]], legR: [[55, 82], [60, 101], [64, 121]],
+    },
+    // A dar a tacada (putt): as duas mãos juntas no taco, cabeça a olhar para a bola.
+    golfe: {
+      head: [52, 32, 12],
+      armL: [[40, 55], [45, 70], [53, 82]], armR: [[60, 55], [60, 70], [56, 82]],
+      legL: [[45, 82], [40, 101], [37, 121]], legR: [[55, 82], [61, 101], [64, 121]],
     },
     rematar: {
       head: [48, 30, -6],
@@ -419,6 +432,20 @@
           svgEl('circle', { cx: 77, cy: 114, r: 8, fill: '#212529', stroke: '#000', 'stroke-width': 1 }),
           small ? null : svgEl('circle', { cx: 27, cy: 114, r: 3, fill: '#adb5bd' }),
           small ? null : svgEl('circle', { cx: 77, cy: 114, r: 3, fill: '#adb5bd' }),
+        ]);
+      case 'dardo':
+        // Dardo na mão, a apontar em frente (para a direita).
+        return svgEl('g', {}, [
+          svgEl('path', { d: 'M60,33 L84,30', stroke: '#adb5bd', 'stroke-width': 2.2, 'stroke-linecap': 'round' }),
+          svgEl('path', { d: 'M84,30 L90,29.3', stroke: '#495057', 'stroke-width': 1.2, 'stroke-linecap': 'round' }),
+          svgEl('path', { d: 'M60,33 L54,28 L57,33 L54,38 Z', fill: '#e03131' }),
+        ]);
+      case 'golfe':
+        // Taco de golfe (putter) das mãos até ao chão, e a bola ao lado da cabeça do taco.
+        return svgEl('g', {}, [
+          svgEl('path', { d: 'M55,82 L62,118', stroke: '#868e96', 'stroke-width': small ? 3 : 2.2, 'stroke-linecap': 'round' }),
+          svgEl('rect', { x: 58, y: 116, width: 13, height: 5, rx: 2, fill: '#495057' }),
+          svgEl('circle', { cx: 79, cy: 118, r: 4, fill: '#ffffff', stroke: '#adb5bd', 'stroke-width': 0.8 }),
         ]);
       case 'rematar':
         return svgEl('g', {}, [

@@ -331,6 +331,63 @@ textarea:focus { border-color: var(--accent); }
   .kart-photo { display: none; }
 }
 
+/* --- Tema "dardos" ------------------------------------------------------------------------- */
+/* Tamanho fixo (cena 300 × 270; mais alta com mais de 6 jogadores, via kit.sizeScene). */
+.dart-scene { display: block; width: min(100%, calc(45vh * 300 / 270)); width: min(100%, calc(45svh * 300 / 270)); aspect-ratio: 300 / 270; border-radius: var(--radius); }
+.dart-plaque { fill: var(--accent); stroke: #c98a00; stroke-width: 1; }
+.dart-plaque-label { fill: var(--accent-ink); font-size: 6px; font-weight: 800; letter-spacing: .08em; opacity: .7; }
+.dart-answer { fill: var(--accent-ink); font-size: 15px; font-weight: 800; }
+.dart-number { fill: #f8f9fa; font-size: 7.5px; font-weight: 700; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+.dart-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.dart.near { filter: drop-shadow(0 0 3px #3ddc97) drop-shadow(0 0 2px #3ddc97); }
+.dart.far line { stroke-dasharray: 3 2; }
+.dart-thrower.near { filter: drop-shadow(0 0 5px rgba(61, 220, 151, .9)); }
+.dart-thrower.far { filter: drop-shadow(0 0 4px rgba(255, 107, 107, .9)); }
+/* "Em cheio": dardo dourado, a brilhar e a vibrar (à volta da ponta) umas vezes. */
+.dart.gold line:nth-of-type(2) { stroke: #fcc419; }
+.dart.gold { filter: drop-shadow(0 0 3px #ffd43b) drop-shadow(0 0 3px #ffd43b); }
+.dart.quiver .dart-body { animation: arco-quiver .07s ease-in-out 12 alternate; }
+.dart-hit { fill: none; stroke: #fff; stroke-width: 1.5; transform-box: fill-box; transform-origin: center; animation: arco-hit .6s ease-out forwards; }
+.dart-hit.gold { stroke: #ffd43b; stroke-width: 2.2; }
+.dart-fx-text { font-size: 15px; font-weight: 900; stroke: #1d1846; stroke-width: 3.5px; paint-order: stroke; animation: arco-fade 1.3s ease-out forwards; }
+.dart-fx-text.win { fill: #3ddc97; }
+.dart-fx-text.gold { fill: var(--accent); }
+.dart-fx-text.miss { fill: #ffa8a8; font-size: 10px; }
+@media (prefers-reduced-motion: reduce) {
+  .dart-hit, .dart-fx-text { display: none; }
+  .dart.quiver .dart-body { animation: none; }
+}
+
+/* --- Tema "golfe" -------------------------------------------------------------------------- */
+/* Tamanho fixo (cena 300 × 300; mais alta com mais de 6 jogadores, via kit.sizeScene). */
+.golf-scene { display: block; width: min(100%, 45vh); width: min(100%, 45svh); aspect-ratio: 1; border-radius: var(--radius); }
+.golf-plaque { fill: var(--accent); stroke: #c98a00; stroke-width: 1; }
+.golf-plaque-label { fill: var(--accent-ink); font-size: 6.5px; font-weight: 800; letter-spacing: .08em; opacity: .7; }
+.golf-answer { fill: var(--accent-ink); font-size: 13px; font-weight: 800; }
+.golf-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.golf-ball { filter: drop-shadow(1px 2px 0 rgba(0, 0, 0, .3)); }
+.golf-ball.sunk { opacity: .75; filter: none; }
+.golf-ball.sunk circle { stroke: #a5d8ff; stroke-dasharray: 2 2; }
+.golf-ball.near, .golf-badge.near { filter: drop-shadow(0 0 3px #3ddc97) drop-shadow(0 0 2px #3ddc97); }
+.golf-ball.far circle { stroke: #ff6b6b; stroke-width: 2; }
+.golf-row-player.near { filter: drop-shadow(0 0 5px rgba(61, 220, 151, .95)); }
+.golf-row-player.far { filter: drop-shadow(0 0 4px rgba(255, 107, 107, .95)); }
+.golf-fx-text { font-size: 17px; font-weight: 900; stroke: #1d1846; stroke-width: 3.5px; paint-order: stroke; animation: pen-fx 1.4s ease-out forwards; }
+.golf-fx-text.win { fill: #3ddc97; }
+.golf-fx-text.gold { fill: var(--accent); font-size: 21px; }
+.golf-fx-text.miss { fill: #a5d8ff; }
+/* Splash no lago e "hole in one" (uma vez). */
+.golf-ripple { fill: none; stroke: #e7f5ff; stroke-width: 1.5; transform-box: fill-box; transform-origin: center; animation: golf-ripple .9s ease-out forwards; }
+.golf-ripple.second { animation-delay: .2s; }
+@keyframes golf-ripple { from { transform: scale(1); opacity: 1; } to { transform: scale(4); opacity: 0; } }
+.golf-drop { animation: golf-drop .7s ease-out forwards; }
+@keyframes golf-drop { from { transform: translateY(0); opacity: 1; } to { transform: translateY(-10px); opacity: 0; } }
+.golf-hio { transform-box: fill-box; transform-origin: center; animation: golf-hio 1.4s ease-out forwards; }
+@keyframes golf-hio { 0% { opacity: 0; transform: scale(.4) rotate(0); } 20% { opacity: 1; } 100% { opacity: 0; transform: scale(1.5) rotate(45deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .golf-fx-text, .golf-splash, .golf-hio { display: none; }
+}
+
 /* --- Tema "penálti" ------------------------------------------------------------------------ */
 /* Tamanho fixo: largura disponível, no máximo ~45% da altura do ecrã (cena 300 × 300). */
 .pen-scene { display: block; width: min(100%, 45vh); width: min(100%, 45svh); aspect-ratio: 1; border-radius: var(--radius); }

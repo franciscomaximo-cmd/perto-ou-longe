@@ -188,9 +188,14 @@ test('baralho: 40 rondas sem temas seguidos repetidos e com baralhos em ordens n
     for (let i = 1; i < drawn.length; i++) assert.notEqual(drawn[i], drawn[i - 1], `tema repetido seguido na ronda ${i + 1}`);
     const decks = [];
     for (let i = 0; i < drawn.length; i += n) decks.push(drawn.slice(i, i + n).join(','));
-    for (const d of decks) assert.deepEqual(d.split(',').sort(), [...REVEAL_THEMES].sort(), 'cada baralho tem todos os temas');
-    for (let i = 1; i < decks.length; i++) assert.notEqual(decks[i], decks[i - 1], `baralho ${i + 1} na mesma ordem do anterior`);
-    assert.ok(new Set(decks).size > 1, 'os baralhos não saem sempre na mesma ordem');
+    // 40 rondas podem acabar a meio de um baralho: os completos têm todos os temas; o último,
+    // se estiver a meio, não tem nenhum repetido.
+    const full = decks.filter((d) => d.split(',').length === n);
+    for (const d of full) assert.deepEqual(d.split(',').sort(), [...REVEAL_THEMES].sort(), 'cada baralho tem todos os temas');
+    const last = decks[decks.length - 1].split(',');
+    assert.equal(new Set(last).size, last.length, 'sem temas repetidos no último baralho');
+    for (let i = 1; i < full.length; i++) assert.notEqual(full[i], full[i - 1], `baralho ${i + 1} na mesma ordem do anterior`);
+    assert.ok(new Set(full).size > 1, 'os baralhos não saem sempre na mesma ordem');
   }
 });
 

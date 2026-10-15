@@ -62,9 +62,24 @@
       <h2>Jogadores <span id="lobby-count" class="muted"></span></h2>
       <ul id="lobby-players" class="players"></ul>
 
-      <div class="card">
-        <h2>O teu emoji</h2>
-        <div id="emoji-picker" class="emoji-picker"></div>
+      <!-- Boneco do jogador: cabeça (emoji), roupa, chapéu/acessório e extra. É o boneco que
+           aparece nos temas de revelação. Só se muda aqui, na sala de espera. -->
+      <div class="card char-card">
+        <h2>O teu boneco</h2>
+        <div class="char-top">
+          <div id="emoji-picker" class="emoji-picker" aria-label="Cabeça (emoji)"></div>
+          <div class="char-side">
+            <button id="char-preview" class="char-preview" type="button" aria-label="O teu boneco. Toca para ver as poses."></button>
+            <span id="char-pose" class="hint center"></span>
+          </div>
+        </div>
+        <span class="group-title">Roupa</span>
+        <div id="char-outfit" class="swatches"></div>
+        <span class="group-title">Chapéu ou acessório</span>
+        <div id="char-hat" class="chips"></div>
+        <span class="group-title">Extra</span>
+        <div id="char-extra" class="chips"></div>
+        <button id="char-random" type="button" class="char-random">🎲 Aleatório</button>
       </div>
 
       <div class="card">
@@ -260,6 +275,8 @@
   <script src="numero.js"></script>
   <!-- Temas de revelação: precisão comum, registo e um ficheiro por tema. -->
   <script src="reveal/precision.js"></script>
+  <script src="reveal/character-options.js"></script>
+  <script src="reveal/character.js"></script>
   <script src="reveal/index.js"></script>
   <script src="reveal/alvo.js"></script>
   <script src="client.js"></script>

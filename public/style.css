@@ -463,6 +463,33 @@ html, body { overflow-anchor: none; }
 .emoji-picker button.taken:disabled { opacity: .75; background: transparent; border-style: dashed; }
 .emoji-picker button.pop { animation: avatar-pop .45s cubic-bezier(.2, 1.6, .4, 1); }
 
+/* --- Boneco: editor na sala de espera ----------------------------------- */
+.char-card { display: flex; flex-direction: column; gap: 10px; }
+.char-card .group-title { margin-top: 4px; }
+/* Pré-visualização grande ao lado do seletor de emoji (a cabeça). */
+.char-top { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: start; }
+.char-top .emoji-picker { margin-top: 0; grid-template-columns: repeat(auto-fill, minmax(42px, 1fr)); }
+.char-side { display: flex; flex-direction: column; align-items: center; gap: 4px; position: sticky; top: 70px; }
+.char-preview {
+  width: 128px; height: 166px; padding: 6px; display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 35%, var(--bg-2), var(--bg)); border-radius: var(--radius);
+}
+.char-preview svg { width: 100%; height: 100%; }
+.char-side .hint { font-size: .75rem; max-width: 128px; }
+/* Cores da roupa: círculos grandes, fáceis de tocar. */
+.swatches { display: flex; flex-wrap: wrap; gap: 8px; }
+.swatch {
+  width: 40px; height: 40px; padding: 0; border-radius: 50%;
+  background: var(--c); border: 3px solid rgba(255, 255, 255, .25);
+  display: grid; place-items: center; color: rgba(0, 0, 0, .55); font-size: 1rem;
+}
+.swatch.on { border-color: #fff; box-shadow: 0 0 0 3px var(--accent); }
+.char-card .chips button { min-height: 40px; }
+.char-random { align-self: flex-start; }
+@media (max-width: 400px) {
+  .char-preview { width: 112px; height: 146px; }
+}
+
 /* Cabeçalho: tempo e botão de som */
 .tb-right { display: flex; align-items: center; gap: 8px; }
 .icon-btn { padding: 4px 9px; font-size: 1.05rem; line-height: 1.3; border-radius: 999px; border: 0; background: var(--card); }

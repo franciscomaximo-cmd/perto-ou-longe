@@ -4,6 +4,7 @@ const crypto = require('crypto');
 const { scoreRound, shuffle, distance } = require('./game');
 const { distanceToCountry, centerOf } = require('./geo');
 const { ThemeDeck } = require('./themes');
+const CharacterOptions = require('../public/reveal/character-options');
 // Perguntas de mapa: o texto é montado com o artigo guardado de cada país
 // ("os Camarões", "as Filipinas" → "Onde ficam…"; "Angola", sem artigo → "Onde fica Angola?").
 function mapQuestionText(q) {
@@ -51,10 +52,8 @@ const MIN_TIME_SECONDS = 10;
 const HOST_GRACE_MS = 20_000;
 const REVEAL_STEP_MS = 1500; // revelação automática: um palpite (ou passo) a cada 1,5 s
 // Cada jogador recebe uma cor fixa (a primeira livre) e um emoji, que pode trocar na sala de espera.
-const PLAYER_COLORS = [
-  '#4dabf7', '#f783ac', '#ff922b', '#9775fa', '#3bc9db', '#a9e34b',
-  '#e599f7', '#ffd43b', '#c49a6c', '#f1f3f5', '#5c7cfa', '#adb5bd',
-];
+// A paleta e as peças do boneco são partilhadas com o cliente (public/reveal/character-options.js).
+const PLAYER_COLORS = CharacterOptions.COLORS;
 const PLAYER_EMOJIS = [
   '🦊', '🐼', '🐸', '🐙', '🦉', '🐢', '🦁', '🐧', '🐨', '🦄', '🐝', '🐳',
   '🦖', '🐯', '🐰', '🦜', '🐌', '🦀', '🐷', '🐶', '🐱', '🦒', '🐞', '🦦',
@@ -204,7 +203,10 @@ class Room {
     const color = PLAYER_COLORS.find((c) => !used.some((p) => p.color === c)) || PLAYER_COLORS[used.length % PLAYER_COLORS.length];
     const freeEmojis = PLAYER_EMOJIS.filter((e) => !used.some((p) => p.emoji === e));
     const emoji = freeEmojis[crypto.randomInt(freeEmojis.length)];
-    const player = { id: crypto.randomUUID(), name, score: 0, connected: false, socketId: null, color, emoji };
+    const player = {
+      id: crypto.randomUUID(), name, score: 0, connected: false, socketId: null, color, emoji,
+      character: { ...CharacterOptions.DEFAULT_CHARACTER }, // boneco: roupa, chapéu e extra
+    };
     this.players.set(player.id, player);
     if (!this.hostId) this.hostId = player.id;
     this.touch();
@@ -294,6 +296,18 @@ class Room {
       throw new GameError('Esse emoji já é de outro jogador.');
     }
     player.emoji = emoji;
+    this.touch();
+  }
+
+  // Boneco do jogador (roupa, chapéu, extra): só na sala de espera e só com peças que existem.
+  // Combinações iguais são permitidas (só o emoji é único).
+  setCharacter(playerId, raw) {
+    if (this.phase !== 'lobby') throw new GameError('Só podes mudar o boneco antes de começar.');
+    const player = this.players.get(playerId);
+    if (!player) throw new GameError('Não estás nesta sala.');
+    const character = CharacterOptions.cleanCharacter(raw, player.character);
+    if (!character) throw new GameError('Essa peça do boneco não existe.');
+    player.character = character;
     this.touch();
   }
 
@@ -765,6 +779,7 @@ class Room {
         connected: p.connected,
         color: p.color,
         emoji: p.emoji,
+        character: { ...p.character },
       })),
     };
     if (this.phase === 'lobby') state.emojis = PLAYER_EMOJIS;

@@ -11,8 +11,10 @@
  * RevealThemes.register(id, () => ({ ... }))):
  *   mount(container, { players, answer, unit, kit })
  *       Desenha o cenário vazio. `players` vem já na ordem da revelação (do mais longe para o
- *       mais perto), cada um com { id, name, color, emoji, value, precision, avatar(size) },
- *       para o tema poder planear o espaço de todos desde o início.
+ *       mais perto), cada um com { id, name, color, emoji, character, value, precision,
+ *       avatar(size) }, para o tema poder planear o espaço de todos desde o início.
+ *       O boneco de cada jogador desenha-se SEMPRE com kit.drawCharacter(player, pose, opções)
+ *       (public/reveal/character.js); os temas só escolhem a pose.
  *   revealPlayer(player, precision, info)
  *       Anima a vez de UM jogador. info = { value, distance, exact, index, total, instant }.
  *       Com instant = true mostra o resultado final sem animação.
@@ -84,7 +86,8 @@
   }
   const stopCount = (node) => cancelAnimationFrame(node.counting);
 
-  const kit = { el, fmt, withUnit, avatar, countUp, stopCount, reducedMotion, precisionOf };
+  // drawCharacter(player, pose, opções) vem de character.js: os temas só escolhem a pose.
+  const kit = { el, fmt, withUnit, avatar, countUp, stopCount, reducedMotion, precisionOf, drawCharacter: root.drawCharacter };
 
   // --- Registo de temas -------------------------------------------------------------------
 

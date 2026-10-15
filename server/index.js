@@ -103,6 +103,7 @@ io.on('connection', (socket) => {
     'round:next': (room, id, p) => room.nextQuestion(id, p),
     'reveal:skip': (room, id, p) => room.revealSkip(id, p),
     'player:emoji': (room, id, p) => room.setEmoji(id, p.emoji),
+    'player:character': (room, id, p) => room.setCharacter(id, p),
     'game:lobby': (room, id) => room.backToLobby(id),
   };
   for (const [event, action] of Object.entries(actions)) {

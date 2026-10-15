@@ -39,10 +39,27 @@
         <ol id="rev-guess-list" class="target-list"></ol>
       </div>
       <div class="answer-box"><span class="label">Resposta certa</span><strong id="answer">?</strong></div>
+
+      <h2>Bonecos</h2>
+      <p class="dev-note">Todos os bonecos dos jogadores falsos em todas as poses (arrasta para o lado para ver
+        as poses todas). Entre eles estão todos os chapéus/acessórios e todos os extras.</p>
+      <label class="dev-bar"><input type="checkbox" id="char-small"> Versão pequena (muitos jogadores no ecrã)</label>
+      <div id="characters" class="dev-chars"></div>
     </section>
   </main>
 
+  <style>
+    .dev-chars { display: flex; flex-direction: column; gap: 10px; }
+    .dev-row { background: var(--card); border-radius: 12px; padding: 8px 10px; }
+    .dev-row h3 { margin: 0 0 4px; text-transform: none; letter-spacing: 0; font-size: .85rem; color: var(--text); }
+    .dev-poses { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
+    .dev-poses figure { margin: 0; flex: none; display: flex; flex-direction: column; align-items: center; }
+    .dev-poses figcaption { font-size: .65rem; color: var(--muted); }
+  </style>
+
   <script src="../reveal/precision.js"></script>
+  <script src="../reveal/character-options.js"></script>
+  <script src="../reveal/character.js"></script>
   <script src="../reveal/index.js"></script>
   <script src="../reveal/alvo.js"></script>
   <script>
@@ -55,7 +72,24 @@
       const COLORS = ['#4dabf7', '#f783ac', '#ff922b', '#9775fa', '#3bc9db', '#a9e34b', '#e599f7', '#ffd43b', '#c49a6c', '#f1f3f5', '#5c7cfa', '#adb5bd'];
       const EMOJIS = ['🦊', '🐼', '🐸', '🐙', '🦉', '🐢', '🦁', '🐧', '🐨', '🦄', '🐝', '🐳'];
       const NAMES = ['Ana', 'Rui', 'Eva', 'Tiago', 'Inês', 'João', 'Marta', 'Pedro', 'Sofia', 'Diogo', 'Rita', 'Hugo'];
-      const fakePlayers = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: NAMES[i], color: COLORS[i], emoji: EMOJIS[i] }));
+      // Bonecos variados: passam por todos os chapéus/acessórios e extras, e alguns com roupa
+      // de outra cor da paleta.
+      const { HATS, EXTRAS, POSES, POSE_LABELS } = window.CharacterOptions;
+      const fakePlayers = (n) => Array.from({ length: n }, (_, i) => ({
+        id: `p${i}`, name: NAMES[i], color: COLORS[i], emoji: EMOJIS[i],
+        character: { outfit: i % 3 === 2 ? COLORS[(i + 5) % COLORS.length] : null, hat: HATS[i % HATS.length].id, extra: EXTRAS[i % EXTRAS.length].id },
+      }));
+
+      function renderCharacters() {
+        const small = $('#char-small').checked;
+        $('#characters').replaceChildren(...fakePlayers(12).map((p) => kit.el('div', { class: 'dev-row' }, [
+          kit.el('h3', { text: `${p.emoji} ${p.name} · ${p.character.hat} · ${p.character.extra}${p.character.outfit ? ' · outra roupa' : ''}` }),
+          kit.el('div', { class: 'dev-poses' }, POSES.map((pose) => kit.el('figure', {}, [
+            window.drawCharacter(p, pose, { size: small ? 46 : 96, small }),
+            kit.el('figcaption', { text: POSE_LABELS[pose] }),
+          ]))),
+        ])));
+      }
 
       // Cenários: pergunta, resposta e palpites.
       const SCENARIOS = {
@@ -138,6 +172,8 @@
         render();
       });
       start('3 jogadores');
+      $('#char-small').addEventListener('change', renderCharacters);
+      renderCharacters();
     })();
   </script>
 </body>

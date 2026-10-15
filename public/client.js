@@ -8,6 +8,7 @@
   const SESSION_KEY = 'pertoOuLonge.session';
   const NAME_KEY = 'pertoOuLonge.name';
   const SOUND_KEY = 'pertoOuLonge.sound';
+  const CHAR_KEY = 'pertoOuLonge.character'; // boneco escolhido (para o jogo seguinte)
   const numberFormat = new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 3 });
   const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -119,6 +120,10 @@
     saveSession({ code: res.code, playerId: res.playerId, name: res.name });
     store(NAME_KEY, res.name);
     history.replaceState(null, '', location.pathname);
+    // Volta a vestir o boneco guardado. A meio de um jogo o servidor recusa (só na sala de
+    // espera se muda o boneco): aí ignora-se a resposta, sem aviso.
+    const saved = window.CharacterOptions.cleanCharacter(load(CHAR_KEY));
+    if (saved) socket.emit('player:character', saved, () => {});
   }
 
   function rejoin() {
@@ -520,6 +525,7 @@
       : null)));
 
     renderEmojiPicker();
+    renderCharacterEditor();
     renderQr();
 
     const host = isHost();
@@ -589,6 +595,62 @@
     }
     lastMyEmoji = me ? me.emoji : null;
   }
+
+  // --- Boneco (sala de espera) -------------------------------------------------------------
+  // Roupa, chapéu/acessório e extra. A pré-visualização muda logo ao tocar (sem esperar pelo
+  // servidor); as escolhas ficam no localStorage e são reaplicadas ao entrar numa sala.
+  const { COLORS: CHAR_COLORS, HATS, EXTRAS, POSES: CHAR_POSES, POSE_LABELS, cleanCharacter, randomCharacter } = window.CharacterOptions;
+  let pendingCharacter = null; // escolha enviada e ainda não confirmada pelo servidor
+  let previewPose = 0;
+
+  function setCharacter(change) {
+    const me = player(state.me);
+    if (!me) return;
+    const next = cleanCharacter(change, pendingCharacter || me.character);
+    if (!next) return;
+    pendingCharacter = next;
+    store(CHAR_KEY, next);
+    renderCharacterEditor();
+    act('player:character', next);
+  }
+
+  function renderCharacterEditor() {
+    const me = player(state.me);
+    if (!me) return;
+    if (pendingCharacter && JSON.stringify(pendingCharacter) === JSON.stringify(me.character)) pendingCharacter = null;
+    const ch = pendingCharacter || me.character;
+    const pose = CHAR_POSES[previewPose % CHAR_POSES.length];
+    $('#char-preview').replaceChildren(window.drawCharacter({ ...me, character: ch }, pose, { size: 150 }));
+    $('#char-pose').textContent = `${POSE_LABELS[pose]} · toca para mudar`;
+
+    // Roupa: a cor do jogador (por omissão) ou outra da paleta.
+    const swatch = (value, color, label) => el('button', {
+      type: 'button',
+      class: `swatch ${(ch.outfit || null) === value ? 'on' : ''}`,
+      style: `--c:${color}`,
+      'aria-label': label,
+      title: label,
+      onclick: () => setCharacter({ outfit: value }),
+    }, value === null ? el('span', { text: '★', 'aria-hidden': 'true' }) : null);
+    $('#char-outfit').replaceChildren(
+      swatch(null, me.color, 'A tua cor'),
+      ...CHAR_COLORS.filter((c) => c !== me.color).map((c) => swatch(c, c, `Roupa ${c}`)),
+    );
+    const chips = (sel, list, key) => $(sel).replaceChildren(...list.map((o) => el('button', {
+      type: 'button',
+      class: ch[key] === o.id ? 'on' : '',
+      text: o.label,
+      onclick: () => setCharacter({ [key]: o.id }),
+    })));
+    chips('#char-hat', HATS, 'hat');
+    chips('#char-extra', EXTRAS, 'extra');
+  }
+
+  $('#char-preview').addEventListener('click', () => {
+    previewPose = (previewPose + 1) % CHAR_POSES.length;
+    renderCharacterEditor();
+  });
+  $('#char-random').addEventListener('click', () => setCharacter(randomCharacter()));
 
   // QR code com o convite (gerado aqui, só quando muda o código da sala).
   const inviteUrl = () => `${location.origin}/?sala=${state.code}`;
@@ -823,7 +885,7 @@
       key: `${state.code}|${state.round}|${state.question.text}`,
       theme: state.question.theme,
       order,
-      players: Object.fromEntries(state.players.map((p) => [p.id, { id: p.id, name: p.name, color: p.color, emoji: p.emoji }])),
+      players: Object.fromEntries(state.players.map((p) => [p.id, { id: p.id, name: p.name, color: p.color, emoji: p.emoji, character: p.character }])),
       answers: r.answers,
       distances: r.distances,
       correct: r.correct,

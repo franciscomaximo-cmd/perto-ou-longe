@@ -62,6 +62,7 @@
   <script src="../reveal/character.js"></script>
   <script src="../reveal/index.js"></script>
   <script src="../reveal/alvo.js"></script>
+  <script src="../reveal/arco.js"></script>
   <script>
     'use strict';
     (() => {
@@ -99,6 +100,8 @@
         'Dois "em cheio"': { q: 'Em que ano foi o 25 de Abril?', answer: 1974, unit: '', guesses: [1974, 1975, 1974, 1960] },
         'Palpites iguais': { q: 'Quantos países tem a União Europeia?', answer: 27, unit: '', guesses: [30, 30, 30, 25] },
         'Palpite absurdo': { q: 'Quantas províncias tem o Canadá?', answer: 10, unit: '', guesses: [12, 9, 1247, 15] },
+        // Mais de 100% de erro em vários jogadores: falhanços (no "arco", parede e chão).
+        'Vários falhanços': { q: 'Quantos dentes tem um adulto?', answer: 32, unit: '', guesses: [500, 2, 30, 90, 12000, 33] },
       };
 
       // O mesmo que o servidor calcula (distâncias, mais perto, mais longe, em cheio).

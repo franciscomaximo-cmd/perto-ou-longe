@@ -214,7 +214,7 @@ textarea:focus { border-color: var(--accent); }
   background: transparent; border: 3px solid var(--near); box-shadow: 0 0 0 2px var(--bg);
 }
 .pin-label {
-  position: absolute; left: 50%; bottom: 14px; transform: translateX(-50%);
+  position: absolute; left: 50%; bottom: 14px; transform: translateX(calc(-50% + var(--dx, 0px)));
   white-space: nowrap; font-size: .72rem; font-weight: 700;
   background: var(--bg); color: var(--text); border-radius: 6px; padding: 1px 6px;
   border: 2px solid var(--c, var(--line)); /* cor do jogador: lê-se a quem pertence */
@@ -301,12 +301,24 @@ textarea:focus { border-color: var(--accent); }
 .target-list .guess { margin-left: 6px; }
 .target-list .miss { margin-left: 4px; color: var(--muted); font-weight: 400; }
 
-/* Botões do anfitrião: "Saltar" fica sempre à vista no fundo do ecrã durante a revelação.
-   "Próxima pergunta" fica logo a seguir à classificação, sem tapar os resultados. */
-#btn-step, #btn-tb-next {
+/* Botões do anfitrião. "Saltar" fica fixo ao fundo do ecrã durante a revelação; enquanto está
+   visível, o ecrã da revelação ganha no fim um espaço livre com a altura do botão, para a
+   lista de palpites nunca ficar escondida por baixo dele. "Próxima pergunta" fica logo a
+   seguir à classificação, sem tapar os resultados. */
+#btn-step {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 4;
+  width: min(448px, calc(100% - 32px));
+  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
+}
+#btn-step:active { transform: translateX(-50%) scale(.98); }
+#screen-reveal.has-skip { padding-bottom: calc(var(--skip-h, 56px) + 24px + env(safe-area-inset-bottom)); }
+#btn-tb-next {
   position: sticky; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 4;
   box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
 }
+/* Sem ajustes automáticos do scroll quando o conteúdo muda (o Safari podia "puxar" a página). */
+html, body { overflow-anchor: none; }
 .note { margin: 0; text-align: center; color: var(--accent); font-weight: 600; font-size: .9rem; }
 .field-error { margin: 0; color: var(--far); font-size: .85rem; font-weight: 600; }
 .field-error:empty { display: none; }
@@ -460,7 +472,7 @@ textarea:focus { border-color: var(--accent); }
 }
 /* Etiqueta afastada do pino: uma linha fina liga-a ao pino. */
 .pin-label.lead::after {
-  content: ""; position: absolute; left: 50%; top: 100%;
+  content: ""; position: absolute; left: calc(50% - var(--dx, 0px)); top: 100%;
   width: 1px; height: var(--lead); background: var(--text); opacity: .85;
 }
 .pin-label.lead.below::after { top: auto; bottom: 100%; }

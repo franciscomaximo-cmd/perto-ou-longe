@@ -322,6 +322,12 @@
     wrap.dataset.ready = '1';
     wrap.dataset.zoom = String(minZoom());
     enableMouseDrag(box);
+    // Ao arrastar o mapa, a parte à vista muda: volta a arrumar as etiquetas junto às bordas.
+    let relayoutFrame = 0;
+    box.addEventListener('scroll', () => {
+      if (!wrap.relayout || relayoutFrame) return;
+      relayoutFrame = requestAnimationFrame(() => { relayoutFrame = 0; wrap.relayout(); });
+    }, { passive: true });
     wrap.querySelectorAll('[data-zoom]').forEach((btn) => btn.addEventListener('click', () => {
       const level = Math.min(ZOOMS.length - 1, Math.max(minZoom(), Number(wrap.dataset.zoom) + Number(btn.dataset.zoom)));
       // Mantém o centro da vista ao aproximar ou afastar.
@@ -396,6 +402,24 @@
 
   let lastPhase = null;
 
+  // Volta ao topo de forma robusta (sobretudo no Safari do iPhone):
+  // - tira o foco do botão ou campo onde se tocou (ex.: "Começar jogo" ou a pergunta escrita
+  //   na sala de espera), senão o Safari volta a fazer scroll até ele;
+  // - repete depois de o ecrã novo estar desenhado, porque um scrollTo feito no mesmo
+  //   instante em que a página encolhe pode ser ignorado.
+  function scrollToTop() {
+    const active = document.activeElement;
+    if (active && active !== document.body && typeof active.blur === 'function') active.blur();
+    const go = () => {
+      window.scrollTo(0, 0);
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+    };
+    go();
+    requestAnimationFrame(go);
+    setTimeout(go, 150);
+  }
+
   function render() {
     const phase = state ? state.phase : 'home';
     // De volta à sala de espera depois de um jogo: a pergunta antiga já foi usada.
@@ -431,7 +455,7 @@
     const view = `${phase}|${questionKey}`;
     if (view !== lastView) {
       lastView = view;
-      window.scrollTo(0, 0);
+      scrollToTop();
     }
 
     if (phase === 'home') renderHome();
@@ -936,12 +960,20 @@
   // não tapar nenhuma das já postas nem sair do mapa. Quando fica afastada, uma linha fina
   // liga-a ao seu pino. A lista por baixo do mapa garante que nada fica ilegível.
   function layoutPinLabels(wrap) {
+    // Limites: a parte do mapa que está À VISTA (com zoom, o mapa inteiro vai muito além do
+    // ecrã e uma etiqueta "dentro do mapa" podia estar cortada pela borda do contentor).
     const inner = wrap.querySelector('.map-inner').getBoundingClientRect();
+    const view = wrap.querySelector('.map-box').getBoundingClientRect();
+    const bounds = {
+      left: Math.max(inner.left, view.left) + 4, right: Math.min(inner.right, view.right) - 4,
+      top: Math.max(inner.top, view.top) + 4, bottom: Math.min(inner.bottom, view.bottom) - 4,
+    };
     const placed = [...wrap.querySelectorAll('.pins .pin')].map((p) => p.getBoundingClientRect());
     const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    // Quanto pior é uma posição: choques com etiquetas e pinos e, pior ainda, ficar fora do mapa.
+    // Quanto pior é uma posição: choques com etiquetas e pinos e, pior ainda, ficar cortada em
+    // cima ou em baixo (perto de uma borda, a etiqueta vira-se para dentro do mapa).
     const badness = (a) => placed.filter((b) => overlaps(a, b)).length
-      + (a.top < inner.top || a.bottom > inner.bottom ? 3 : 0);
+      + (a.top < bounds.top || a.bottom > bounds.bottom ? 3 : 0);
     const ROW = 22; // um pouco mais do que a altura de uma etiqueta
     const options = [0, 1, 2, 3, 4].flatMap((row) => [['above', row], ['below', row]]);
     const apply = ([side, row], label) => {
@@ -952,6 +984,14 @@
       label.style.setProperty('--lead', `${row * ROW + 7}px`);
     };
     for (const label of wrap.querySelectorAll('.pins .pin-label')) {
+      // Primeiro, na horizontal: perto da borda esquerda ou direita, a etiqueta desliza para
+      // dentro (a linha até ao pino continua a apontar para ele).
+      label.style.setProperty('--dx', '0px');
+      const box = label.getBoundingClientRect();
+      const dx = box.left < bounds.left ? bounds.left - box.left
+        : box.right > bounds.right ? bounds.right - box.right : 0;
+      label.style.setProperty('--dx', `${Math.round(dx)}px`);
+
       let best = null;
       for (const option of options) {
         apply(option, label);
@@ -1212,6 +1252,9 @@
     // mostrar. Depois só lhe resta "Próxima pergunta".
     const host = isHost();
     $('#btn-step').hidden = !host || showCorrect;
+    // Espaço livre no fim da página com a altura do botão "Saltar" (que está fixo ao fundo).
+    $('#screen-reveal').classList.toggle('has-skip', !$('#btn-step').hidden);
+    if (!$('#btn-step').hidden) $('#screen-reveal').style.setProperty('--skip-h', `${$('#btn-step').offsetHeight}px`);
     $('#btn-next').hidden = !host || !showPoints;
     $('#rev-hint').textContent = host || showPoints ? '' : 'A revelar os palpites…';
     if (!showPoints) return;

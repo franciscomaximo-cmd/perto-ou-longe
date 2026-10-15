@@ -315,10 +315,10 @@ test('a revelação avança sozinha e o anfitrião pode saltar para o fim', asyn
   room.submitAnswer(eva, 50);
   room.forceAdvance(ana); // sem votos
   assert.equal(room.phase, 'reveal');
-  // 3 palpites + resposta certa + votos + pontos
-  assert.deepEqual([room.stateFor(rui).result.step, room.stateFor(rui).result.steps], [1, 6]);
+  // 3 palpites + resposta certa + pontos (com os votos)
+  assert.deepEqual([room.stateFor(rui).result.step, room.stateFor(rui).result.steps], [1, 5]);
   await new Promise((r) => setTimeout(r, 120));
-  assert.equal(room.stateFor(eva).result.step, 6, 'chega sozinha ao último passo e para aí');
+  assert.equal(room.stateFor(eva).result.step, 5, 'chega sozinha ao último passo e para aí');
   room.nextQuestion(ana);
   assert.equal(room.phase, 'answering');
   room.destroy();
@@ -332,7 +332,7 @@ test('saltar a revelação: só o anfitrião, e mostra tudo de uma vez', () => {
   room.forceAdvance(ana);
   assert.throws(() => room.revealSkip(rui), /anfitrião/);
   room.revealSkip(ana);
-  assert.equal(room.stateFor(eva).result.step, 6);
+  assert.equal(room.stateFor(eva).result.step, 5);
   assert.equal(room.revealTimer, null, 'a animação parou');
   room.nextQuestion(ana);
   assert.throws(() => room.revealSkip(ana), /revelar/);

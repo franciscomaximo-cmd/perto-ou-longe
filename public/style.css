@@ -258,8 +258,9 @@ textarea:focus { border-color: var(--accent); }
 .mark.correct .tag-box { top: 10px; background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 700; }
 .mark.correct .stem { top: 0; bottom: auto; height: 10px; background: var(--accent); }
 
-/* Botões do anfitrião na revelação: sempre à vista no fundo do ecrã. */
-#btn-step, #btn-next, #btn-tb-next {
+/* Botões do anfitrião: "Saltar" fica sempre à vista no fundo do ecrã durante a revelação.
+   "Próxima pergunta" fica logo a seguir à classificação, sem tapar os resultados. */
+#btn-step, #btn-tb-next {
   position: sticky; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 4;
   box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
 }
@@ -441,11 +442,30 @@ textarea:focus { border-color: var(--accent); }
   40%, 80% { translate: 5px; }
 }
 
+/* Na revelação o mapa fica mais baixo, para sobrar ecrã para fazer scroll da página. */
+#rev-map .map-box { max-height: 55vh; }
+
+/* Faixa de ligação ao servidor */
+#offline {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 30;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
+  background: var(--accent); color: var(--accent-ink); font-weight: 700;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, .35);
+}
+.spinner {
+  width: 16px; height: 16px; border-radius: 50%;
+  border: 3px solid rgba(42, 33, 0, .25); border-top-color: var(--accent-ink);
+  animation: spin .8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
 .confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
 
 @media (prefers-reduced-motion: reduce) {
   .results li.shake, .mark.far .tag-box { animation: none; }
   .scores li { transition: none !important; }
+  .spinner { animation-duration: 3s; }
 }
 
 /* Aviso */

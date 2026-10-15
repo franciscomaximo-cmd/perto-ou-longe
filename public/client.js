@@ -79,11 +79,27 @@
   const isHost = () => state && state.hostId === state.me;
 
   // Envia uma ação e mostra o erro, se houver.
+  // Se o servidor não responder em 10 s (ex.: está a acordar ou caiu), mostra um erro em vez
+  // de ficar à espera em silêncio.
   function act(event, payload = {}, onOk) {
-    socket.emit(event, payload, (res) => {
-      if (!res || !res.ok) toast((res && res.error) || 'Sem resposta do servidor.');
+    if (!socket.connected) return toast('Sem ligação ao servidor. Espera um pouco e tenta outra vez.');
+    socket.timeout(10000).emit(event, payload, (err, res) => {
+      if (err) toast('O servidor não respondeu. Tenta outra vez.');
+      else if (!res || !res.ok) toast((res && res.error) || 'Sem resposta do servidor.');
       else if (onOk) onOk(res);
     });
+  }
+
+  // Faixa "A ligar ao servidor…" enquanto não houver ligação (só aparece se demorar mais de
+  // meio segundo, para não piscar ao abrir a página). No Render gratuito o servidor pode
+  // demorar até um minuto a acordar.
+  let offlineTimer = null;
+  function renderConnection() {
+    const online = socket.connected;
+    clearTimeout(offlineTimer);
+    if (online) $('#offline').hidden = true;
+    else offlineTimer = setTimeout(() => { $('#offline').hidden = socket.connected; }, 500);
+    for (const sel of ['#btn-create', '#btn-join']) $(sel).disabled = !online;
   }
 
   // --- Entrar / sair ------------------------------------------------------
@@ -307,8 +323,10 @@
 
   // --- Ligação ------------------------------------------------------------
 
-  socket.on('connect', rejoin); // também cobre reconexões depois de o telemóvel bloquear
-  socket.on('disconnect', () => { if (session) toast('Ligação perdida. A tentar voltar…'); });
+  // 'connect' também cobre reconexões depois de o telemóvel bloquear.
+  socket.on('connect', () => { renderConnection(); rejoin(); });
+  socket.on('disconnect', renderConnection);
+  renderConnection();
   socket.on('room:state', (s) => { state = s; render(); });
 
   // --- Desenho ------------------------------------------------------------
@@ -328,6 +346,13 @@
       for (const sel of ['#custom-text', '#custom-answer', '#custom-unit']) $(sel).value = '';
       $('#custom-preview').textContent = '';
       $('#custom-error').textContent = '';
+      // As marcas "já feito nesta pergunta" (zoom do mapa, contador, animações) usam o número
+      // da pergunta: no jogo seguinte a pergunta 1 é outra, por isso começam do zero.
+      for (const sel of ['#ans-map', '#rev-map', '#rev-line', '#rev-answer', '#rev-list', '#rev-scores']) {
+        const node = $(sel);
+        for (const key of ['round', 'framed', 'shown', 'anim']) delete node.dataset[key];
+      }
+      lastEffect = null;
     }
     lastPhase = phase;
     for (const sel of new Set(Object.values(SCREENS))) $(sel).hidden = sel !== SCREENS[phase];
@@ -1030,9 +1055,19 @@
   function play(name) {
     if (!soundOn) return;
     const c = audio();
-    if (c && c.state === 'running') SOUNDS[name](c);
+    if (!c) return;
+    if (c.state === 'running') SOUNDS[name](c);
+    else c.resume().then(() => { if (c.state === 'running') SOUNDS[name](c); }).catch(() => {});
   }
-  document.addEventListener('pointerdown', () => { if (soundOn) audio(); }, { once: true });
+  // Desbloqueio do áudio: no telemóvel só contam como gesto do utilizador o fim do toque,
+  // o clique e as teclas (não o pointerdown). Tenta em cada gesto até o áudio estar a correr.
+  const UNLOCK_EVENTS = ['pointerup', 'touchend', 'click', 'keydown'];
+  function unlockAudio() {
+    if (!soundOn) return;
+    const c = audio();
+    if (c && c.state === 'running') UNLOCK_EVENTS.forEach((ev) => document.removeEventListener(ev, unlockAudio, true));
+  }
+  UNLOCK_EVENTS.forEach((ev) => document.addEventListener(ev, unlockAudio, true));
 
   function renderSoundButton() {
     const btn = $('#tb-sound');
@@ -1058,7 +1093,8 @@
     if (fresh && shown > 1) return; // entrou a meio (ex.: recarregou a página): sem repetir efeitos
     if (!showCorrect) { if (shown > 0) play('tick'); return; }
     if ((r.exact || []).length) { play('exact'); confetti(); } else play('reveal');
-    if (r.farthest.length && Object.keys(r.answers).length > 1) setTimeout(() => play('far'), 700);
+    // Sem som triste quando todos empataram (ficaram todos ao mesmo tempo mais perto e mais longe).
+    if (r.farthest.length && r.farthest.length < Object.keys(r.answers).length) setTimeout(() => play('far'), 700);
   }
 
   function renderReveal() {

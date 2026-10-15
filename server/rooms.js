@@ -510,7 +510,8 @@ class Room {
     // Revelação em passos, automática: um palpite de cada vez (do mais longe para o mais
     // perto), depois a resposta certa, os votos (se houve votação) e por fim os pontos.
     // O anfitrião pode saltar para o fim. Sem respostas, vai direto ao fim da ronda.
-    this.current.steps = answers.size + (this.current.voting ? 3 : 2);
+    // Passos: um por palpite, a resposta certa e, no fim, os pontos (com os votos juntos).
+    this.current.steps = answers.size + 2;
     this.current.step = answers.size === 0 ? this.current.steps : 1;
     this.setPhase('reveal');
     this.scheduleRevealStep();
@@ -519,13 +520,18 @@ class Room {
   scheduleRevealStep() {
     this.clearRevealTimer();
     if (this.phase !== 'reveal' || this.current.step >= this.current.steps) return;
+    // Com muitos jogadores os palpites passam mais depressa (de 1,5 s até metade disso),
+    // para a revelação não se arrastar; a resposta certa e os pontos mantêm o tempo normal.
+    const guesses = this.current.answers.size;
+    const perGuess = Math.round(this.revealStepMs * Math.min(1, Math.max(0.47, 6 / guesses)));
+    const delay = this.current.step < guesses ? perGuess : this.revealStepMs;
     this.revealTimer = setTimeout(() => {
       this.revealTimer = null;
       if (this.phase !== 'reveal') return;
       this.current.step += 1;
       this.notify(this);
       this.scheduleRevealStep();
-    }, this.revealStepMs);
+    }, delay);
     // Não segura o processo (testes, encerramento) só por causa da animação.
     if (this.revealTimer.unref) this.revealTimer.unref();
   }

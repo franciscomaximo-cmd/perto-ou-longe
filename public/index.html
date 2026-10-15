@@ -209,6 +209,7 @@
         <p id="rev-mine" class="mine"></p>
         <h3>Classificação</h3>
         <ol id="rev-scores" class="scores"></ol>
+        <button id="btn-next" class="primary" hidden></button>
         <h3>Esta ronda</h3>
         <ul id="rev-list" class="results"></ul>
       </div>
@@ -221,7 +222,6 @@
       </details>
 
       <button id="btn-step" class="primary" hidden>Saltar</button>
-      <button id="btn-next" class="primary" hidden></button>
       <p id="rev-hint" class="hint center"></p>
     </section>
 
@@ -257,6 +257,9 @@
   </main>
 
   <div id="toast" role="status" aria-live="polite" hidden></div>
+  <div id="offline" role="status" aria-live="polite" hidden>
+    <span class="spinner" aria-hidden="true"></span> A ligar ao servidor…
+  </div>
 
   <script src="/socket.io/socket.io.js"></script>
   <script src="/vendor/qrcode.js"></script>

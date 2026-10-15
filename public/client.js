@@ -74,13 +74,13 @@
   // sua cor, borda branca fina e sombra. "Tu" tem um anel brilhante, o anfitrião uma coroa e
   // quem está desligado fica a cinzento. Tamanhos: 's' (~26 px, dentro de etiquetas),
   // 'm' (~40 px, listas) e 'l' (~56 px, alvo e ecrã final).
+  // (O desenho está em public/reveal/index.js, partilhado com os temas de revelação.)
   function avatar(p, size = 'm') {
-    const cls = ['avatar', size,
-      p.id === state.me ? 'me' : '',
-      p.id === state.hostId ? 'host' : '',
-      p.connected === false ? 'off' : ''].filter(Boolean).join(' ');
-    return el('span', { class: cls, style: `--c:${p.color}`, 'data-player': p.id, 'aria-hidden': 'true' },
-      el('span', { class: 'emoji', text: p.emoji || '' }));
+    return window.RevealThemes.kit.avatar(p, size, {
+      me: p.id === state.me,
+      host: p.id === state.hostId,
+      off: p.connected === false,
+    });
   }
   // [avatar, nome] para pôr em listas.
   const who = (id, size = 'm') => {
@@ -429,12 +429,14 @@
       $('#custom-error').textContent = '';
       // As marcas "já feito nesta pergunta" (zoom do mapa, contador, animações) usam o número
       // da pergunta: no jogo seguinte a pergunta 1 é outra, por isso começam do zero.
-      for (const sel of ['#ans-map', '#rev-map', '#rev-target', '#rev-answer', '#rev-list', '#rev-scores']) {
+      for (const sel of ['#ans-map', '#rev-map', '#rev-answer', '#rev-list', '#rev-scores']) {
         const node = $(sel);
         for (const key of ['round', 'framed', 'shown', 'anim']) delete node.dataset[key];
       }
       lastEffect = null;
     }
+    // Fora da revelação, o tema da ronda é desmontado (para as animações e os eventos).
+    if (phase !== 'reveal') revealCtl.destroy();
     lastPhase = phase;
     for (const sel of new Set(Object.values(SCREENS))) $(sel).hidden = sel !== SCREENS[phase];
 
@@ -806,153 +808,32 @@
   // passos 1..n mostram os palpites do mais longe para o mais perto, n+1 a resposta certa e
   // n+2 os pontos, a classificação e os votos.
 
-  // --- Alvo: revelação das perguntas de números ---------------------------
-  // O centro é a resposta certa (escondida com "?" até ao fim). A distância ao centro é o
-  // ERRO RELATIVO |palpite − certa| / |certa| em escala logarítmica: cada anel é uma ordem de
-  // grandeza (até 1%, até 10%, até 100%) e os erros maiores ficam no anel de fora. Assim um
-  // palpite absurdo não esmaga os bons. O alvo tem tamanho fixo desde o início.
+  // --- Revelação das perguntas de números: tema escolhido pelo servidor ----------------
+  // O tema (public/reveal/<id>.js) só desenha; a ordem, o ritmo (passo do servidor), o
+  // "Saltar", os sons, o confetti e a lista por baixo são do código comum
+  // (public/reveal/index.js e este ficheiro).
+  const revealCtl = window.RevealThemes.createController({
+    stage: $('#rev-stage'),
+    list: $('#rev-guess-list'),
+    avatarOf: (id, size) => (player(id) ? avatar(player(id), size) : el('span', { class: `avatar ${size}`, text: '?' })),
+  });
 
-  const TARGET_CENTER = 0.19; // raio do centro, em fração do raio útil
-  const TARGET_RINGS = [{ r: 0.43, label: '1%' }, { r: 0.62, label: '10%' }, { r: 0.81, label: '100%' }, { r: 1 }];
-  const RING_FILLS = ['#2a2360', '#332b72', '#3d3584', '#473f96'];
-
-  // 0 = em cheio; 0,24…1 = do erro de 0,1% (ou menos) até 1000% (ou mais). As fronteiras dos
-  // anéis (TARGET_RINGS) ficam nos erros de 1%, 10% e 100%.
-  function targetRadius(value, correct) {
-    const err = Math.abs(value - correct) / (Math.abs(correct) || 1);
-    if (err === 0) return 0;
-    const t = Math.min(1, Math.max(0, (Math.log10(err) + 3) / 4));
-    return 0.24 + 0.76 * t;
-  }
-
-  // Posições: ângulos distribuídos pela ordem da revelação, à distância do erro, com meio passo
-  // de desvio para nenhum ficar no topo (onde estão as etiquetas dos anéis). Se dois avatares
-  // ficarem quase no mesmo sítio, afasta-os um pouco no ângulo.
-  function targetLayout(order, r, size, av) {
-    const R = size / 2 - av / 2 - 4; // raio útil, em px (o avatar nunca sai do alvo)
-    const n = Math.max(order.length, 1);
-    const items = order.map((id, i) => ({
-      id,
-      rad: targetRadius(r.answers[id], r.correct) || TARGET_CENTER * 0.6, // em cheio: no centro
-      ang: -Math.PI / 2 + ((i + 0.5) * 2 * Math.PI) / n,
-    }));
-    const pos = (it) => ({ x: it.rad * R * Math.cos(it.ang), y: it.rad * R * Math.sin(it.ang) });
-    const minDist = av * 0.95;
-    for (let iter = 0; iter < 120; iter++) {
-      let clash = false;
-      for (let i = 0; i < items.length; i++) {
-        for (let j = i + 1; j < items.length; j++) {
-          const a = pos(items[i]);
-          const b = pos(items[j]);
-          const d = Math.hypot(a.x - b.x, a.y - b.y);
-          if (d >= minDist) continue;
-          clash = true;
-          // Empurra os dois ângulos em sentidos opostos (mais perto do centro, mais ângulo).
-          let diff = items[j].ang - items[i].ang;
-          diff = Math.atan2(Math.sin(diff), Math.cos(diff)) || 0.01;
-          const push = Math.min(0.35, (minDist - d) / (Math.max(items[i].rad, items[j].rad) * R + 1)) / 2;
-          items[i].ang -= Math.sign(diff) * push;
-          items[j].ang += Math.sign(diff) * push;
-        }
-      }
-      if (!clash) break;
-    }
-    return Object.fromEntries(items.map((it) => {
-      const p = pos(it);
-      return [it.id, { x: 50 + (p.x / size) * 100, y: 50 + (p.y / size) * 100 }];
-    }));
-  }
-
-  function drawTargetRings(svg, size, av) {
-    const R = ((size / 2 - av / 2 - 4) / size) * 100; // em unidades do viewBox (0..100)
-    const NS = 'http://www.w3.org/2000/svg';
-    const make = (tag, attrs) => {
-      const node = document.createElementNS(NS, tag);
-      for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-      return node;
-    };
-    const nodes = [make('circle', { cx: 50, cy: 50, r: 49.5, class: 'tgt-rim' })];
-    [...TARGET_RINGS].reverse().forEach((ring, i) => {
-      nodes.push(make('circle', { cx: 50, cy: 50, r: ring.r * R, fill: RING_FILLS[i], class: 'tgt-ring' }));
+  function renderNumbers(r, order, shown, showCorrect) {
+    revealCtl.update({
+      key: `${state.code}|${state.round}|${state.question.text}`,
+      theme: state.question.theme,
+      order,
+      players: Object.fromEntries(state.players.map((p) => [p.id, { id: p.id, name: p.name, color: p.color, emoji: p.emoji }])),
+      answers: r.answers,
+      distances: r.distances,
+      correct: r.correct,
+      unit: state.question.unit,
+      shown,
+      showCorrect,
+      closest: r.closest,
+      farthest: r.farthest,
+      exact: r.exact,
     });
-    for (const ring of TARGET_RINGS) {
-      if (!ring.label) continue;
-      const label = make('text', { x: 50, y: 50 - ring.r * R + 3.6, class: 'tgt-label' });
-      label.textContent = ring.label;
-      nodes.push(label);
-    }
-    svg.replaceChildren(...nodes);
-    // O centro (em HTML, para o contador) acompanha o tamanho dos anéis.
-    svg.parentElement.style.setProperty('--center', `${TARGET_CENTER * R * 2}%`);
-  }
-
-  function renderTarget(r, order, shown, showCorrect) {
-    const wrap = $('#rev-target');
-    const box = wrap.querySelector('.tgt-board');
-    const layer = box.querySelector('.tgt-players');
-    const center = box.querySelector('.tgt-center span');
-    const list = $('#rev-target-list');
-    const unit = state.question.unit;
-    const fresh = wrap.dataset.round !== String(state.round);
-    const size = box.clientWidth || 300;
-    const av = Math.round(Math.min(56, Math.max(34, size * 0.15)));
-    box.style.setProperty('--av', `${av}px`);
-    drawTargetRings(box.querySelector('svg'), size, av);
-
-    if (fresh) {
-      wrap.dataset.round = String(state.round);
-      layer.replaceChildren();
-      center.textContent = '?';
-      center.parentElement.classList.remove('revealed');
-      // A lista tem já uma linha por palpite (escondida), para não empurrar a página.
-      const byDistance = [...order].sort((a, b) => r.distances[a] - r.distances[b]);
-      list.replaceChildren(...byDistance.map((id) => el('li', { 'data-id': id }, [
-        ...who(id),
-        el('span', { class: 'guess', text: `— ${withUnit(r.answers[id], unit)}` }),
-        el('span', { class: 'miss' }),
-      ])));
-    }
-
-    const positions = targetLayout(order, r, size, av);
-    const visible = new Set(order.slice(0, shown));
-    // Quem entrou a meio (ex.: recarregou a página) não vê os voos dos que já tinham aterrado.
-    const animate = !fresh || shown <= 1;
-    for (const id of visible) {
-      let node = layer.querySelector(`[data-id="${id}"]`);
-      if (!node) {
-        const p = player(id);
-        node = el('div', { class: `tgt-player ${animate ? 'land' : ''}`, 'data-id': id }, [
-          p ? avatar(p, 'l') : el('span', { text: '?' }),
-          el('span', { class: 'tgt-val', text: fmt(r.answers[id]) }),
-        ]);
-        layer.append(node);
-      }
-      node.style.left = `${positions[id].x}%`;
-      node.style.top = `${positions[id].y}%`;
-      node.classList.toggle('near', showCorrect && r.closest.includes(id));
-      // O mais longe só quando não empatou toda a gente (aí eram todos os mais perto também).
-      node.classList.toggle('far', showCorrect && r.farthest.includes(id) && !r.closest.includes(id));
-    }
-
-    // No fim, o "?" passa a ser a resposta certa, a rolar até ao valor.
-    if (showCorrect && !center.parentElement.classList.contains('revealed')) {
-      center.parentElement.classList.add('revealed');
-      center.dataset.len = String(fmt(r.correct).length);
-      countUp(center, r.correct, '');
-    }
-
-    // Lista por baixo, em sincronia: aparece cada palpite quando aterra; "falhou por" só depois
-    // da resposta certa (antes disso dava para adivinhá-la).
-    for (const li of list.children) {
-      const id = li.dataset.id;
-      li.classList.toggle('shown', visible.has(id));
-      li.classList.toggle('near', showCorrect && r.closest.includes(id));
-      li.classList.toggle('far', showCorrect && r.farthest.includes(id) && !r.closest.includes(id));
-      // Antes da resposta certa fica um espaço reservado, para a linha não crescer depois.
-      li.querySelector('.miss').textContent = showCorrect
-        ? (r.distances[id] === 0 ? 'em cheio!' : `falhou por ${fmt(r.distances[id])}`)
-        : ' ';
-    }
   }
 
   // Etiquetas dos pinos no mapa (deteção de colisões): cada etiqueta tenta, por ordem, ficar
@@ -1069,22 +950,8 @@
 
   // --- Efeitos: contador, confetti e sons ---------------------------------
 
-  // A resposta certa "rola" do zero até ao valor final (~1 s), com as mesmas casas decimais.
-  function countUp(node, value, unit) {
-    if (reducedMotion() || !Number.isFinite(value)) { node.textContent = withUnit(value, unit); return; }
-    const decimals = (String(value).split('.')[1] || '').length;
-    const start = performance.now();
-    const DURATION = 1000;
-    const frame = (now) => {
-      const t = Math.min(1, (now - start) / DURATION);
-      const eased = 1 - (1 - t) ** 3;
-      const v = t < 1 ? Number((value * eased).toFixed(decimals)) : value;
-      node.textContent = withUnit(v, unit);
-      if (t < 1) node.counting = requestAnimationFrame(frame);
-    };
-    cancelAnimationFrame(node.counting);
-    node.counting = requestAnimationFrame(frame);
-  }
+  // A resposta certa "rola" do zero até ao valor final (~1 s): ver public/reveal/index.js.
+  const countUp = (node, value, unit) => window.RevealThemes.kit.countUp(node, value, unit);
 
   // Confetti leve, desenhado num <canvas> por cima de tudo durante ~2 s.
   function confetti() {
@@ -1220,10 +1087,10 @@
     const showPoints = r.step >= r.steps;
     $('#rev-novote').hidden = r.voting || n === 0;
 
-    $('#rev-target').hidden = isMap;
+    $('#rev-numbers').hidden = isMap;
     $('#rev-map').hidden = !isMap;
     if (isMap) renderMapReveal(r, order, shown, showCorrect);
-    else renderTarget(r, order, shown, showCorrect);
+    else renderNumbers(r, order, shown, showCorrect);
     // Nas rondas de mapa as distâncias apareciam duas vezes: a lista por baixo do mapa
     // acompanha a revelação e dá lugar aos cartões "Esta ronda" no fim.
     $('#rev-map-list').hidden = showPoints;

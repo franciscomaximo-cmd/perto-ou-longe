@@ -3,6 +3,7 @@
 const crypto = require('crypto');
 const { scoreRound, shuffle, distance } = require('./game');
 const { distanceToCountry, centerOf } = require('./geo');
+const { ThemeDeck } = require('./themes');
 // Perguntas de mapa: o texto é montado com o artigo guardado de cada país
 // ("os Camarões", "as Filipinas" → "Onde ficam…"; "Angola", sem artigo → "Onde fica Angola?").
 function mapQuestionText(q) {
@@ -164,6 +165,7 @@ class Room {
     this.round = 0;
     this.questions = [];
     this.usedQuestions = new Set();
+    this.themeDeck = new ThemeDeck(); // tema da revelação de cada pergunta de números
     this.current = null;
     this.standings = null; // classificação final: [{ ids, settled }], do 1.º lugar para baixo
     this.tiebreak = null;
@@ -403,8 +405,12 @@ class Room {
 
   nextRound() {
     this.round += 1;
+    const question = this.questions[this.round - 1];
     this.current = {
-      question: this.questions[this.round - 1],
+      question,
+      // O servidor escolhe o tema logo no início da ronda (igual para todos); as perguntas de
+      // mapa têm a sua própria revelação.
+      theme: question.type === 'map' ? null : this.themeDeck.next(),
       answers: new Map(),
       votes: new Map(),
       result: null,
@@ -770,6 +776,7 @@ class Room {
         type: cur.question.type || 'number',
         category: CATEGORY_LABELS[cur.question.category] || '',
         author: cur.question.author || null,
+        theme: cur.theme || null, // tema da revelação (null nas perguntas de mapa)
       };
       state.answered = [...cur.answers.keys()];
       state.voted = [...cur.votes.keys()];

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="pt-PT">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="robots" content="noindex">
+  <title>Pré-visualização das revelações · Perto ou Longe</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🛠️%3C/text%3E%3C/svg%3E">
+  <link rel="stylesheet" href="../style.css">
+  <style>
+    /* Só para esta página de desenvolvimento. */
+    .dev-bar { display: flex; flex-wrap: wrap; gap: 8px; }
+    .dev-bar button { padding: 8px 12px; font-size: .9rem; }
+    .dev-bar button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+    .dev-bar select { font: inherit; padding: 8px 10px; border-radius: 10px; background: var(--card); color: var(--text); border: 2px solid var(--line); }
+    .dev-note { color: var(--muted); font-size: .85rem; margin: 0; }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="screen">
+      <h1 class="logo small">Revelações (dev)</h1>
+      <p class="dev-note">Página de desenvolvimento, fora do jogo: escolhe um tema e um cenário. Usa o mesmo
+        controlador e os mesmos temas do jogo (public/reveal/), com jogadores falsos e 1,5 s por palpite.
+        Para testar o movimento reduzido, liga-o no sistema ou nas ferramentas do browser.</p>
+
+      <div class="dev-bar">
+        <label>Tema <select id="theme"></select></label>
+      </div>
+      <div class="dev-bar" id="scenarios"></div>
+      <div class="dev-bar">
+        <button id="replay" type="button">↻ Repetir</button>
+        <button id="skip" type="button">Saltar</button>
+      </div>
+
+      <p id="question" class="question small"></p>
+      <div class="target-wrap">
+        <div id="rev-stage" class="reveal-stage"></div>
+        <ol id="rev-guess-list" class="target-list"></ol>
+      </div>
+      <div class="answer-box"><span class="label">Resposta certa</span><strong id="answer">?</strong></div>
+    </section>
+  </main>
+
+  <script src="../reveal/precision.js"></script>
+  <script src="../reveal/index.js"></script>
+  <script src="../reveal/alvo.js"></script>
+  <script>
+    'use strict';
+    (() => {
+      const { kit, createController, ids } = window.RevealThemes;
+      const $ = (s) => document.querySelector(s);
+      const STEP_MS = 1500;
+
+      const COLORS = ['#4dabf7', '#f783ac', '#ff922b', '#9775fa', '#3bc9db', '#a9e34b', '#e599f7', '#ffd43b', '#c49a6c', '#f1f3f5', '#5c7cfa', '#adb5bd'];
+      const EMOJIS = ['🦊', '🐼', '🐸', '🐙', '🦉', '🐢', '🦁', '🐧', '🐨', '🦄', '🐝', '🐳'];
+      const NAMES = ['Ana', 'Rui', 'Eva', 'Tiago', 'Inês', 'João', 'Marta', 'Pedro', 'Sofia', 'Diogo', 'Rita', 'Hugo'];
+      const fakePlayers = (n) => Array.from({ length: n }, (_, i) => ({ id: `p${i}`, name: NAMES[i], color: COLORS[i], emoji: EMOJIS[i] }));
+
+      // Cenários: pergunta, resposta e palpites.
+      const SCENARIOS = {
+        '3 jogadores': { q: 'Quantos ossos tem o corpo humano adulto?', answer: 206, unit: '', guesses: [150, 300, 210] },
+        '12 jogadores': { q: 'Qual a altitude do Monte Evereste?', answer: 8849, unit: 'metros',
+          guesses: [8000, 9000, 8849, 7500, 10000, 6000, 8800, 12000, 8500, 5000, 20000, 8900] },
+        'Dois "em cheio"': { q: 'Em que ano foi o 25 de Abril?', answer: 1974, unit: '', guesses: [1974, 1975, 1974, 1960] },
+        'Palpites iguais': { q: 'Quantos países tem a União Europeia?', answer: 27, unit: '', guesses: [30, 30, 30, 25] },
+        'Palpite absurdo': { q: 'Quantas províncias tem o Canadá?', answer: 10, unit: '', guesses: [12, 9, 1247, 15] },
+      };
+
+      // O mesmo que o servidor calcula (distâncias, mais perto, mais longe, em cheio).
+      function result(answer, guesses) {
+        const players = fakePlayers(guesses.length);
+        const answers = Object.fromEntries(players.map((p, i) => [p.id, guesses[i]]));
+        const distances = Object.fromEntries(players.map((p) => [p.id, Math.abs(answers[p.id] - answer)]));
+        const values = Object.values(distances);
+        const min = Math.min(...values);
+        const max = Math.max(...values);
+        const ids = players.map((p) => p.id);
+        return {
+          players: Object.fromEntries(players.map((p) => [p.id, p])),
+          answers,
+          distances,
+          order: [...ids].sort((a, b) => distances[b] - distances[a]), // do mais longe para o mais perto
+          closest: ids.filter((id) => distances[id] === min),
+          farthest: ids.filter((id) => distances[id] === max),
+          exact: min === 0 ? ids.filter((id) => distances[id] === 0) : [],
+        };
+      }
+
+      const ctl = createController({
+        stage: $('#rev-stage'),
+        list: $('#rev-guess-list'),
+        avatarOf: (id, size) => kit.avatar(current.r.players[id], size),
+      });
+
+      let current = null;
+      let timer = null;
+      let run = 0;
+
+      function render() {
+        const { s, r, shown, showCorrect } = current;
+        ctl.update({
+          key: `${run}`, theme: $('#theme').value, order: r.order, players: r.players,
+          answers: r.answers, distances: r.distances, correct: s.answer, unit: s.unit,
+          shown, showCorrect, closest: r.closest, farthest: r.farthest, exact: r.exact,
+        });
+        if (showCorrect) $('#answer').textContent = kit.withUnit(s.answer, s.unit);
+      }
+
+      function start(name) {
+        clearTimeout(timer);
+        run += 1;
+        const s = SCENARIOS[name];
+        current = { name, s, r: result(s.answer, s.guesses), shown: 1, showCorrect: false };
+        $('#question').textContent = s.q;
+        $('#answer').textContent = '?';
+        document.querySelectorAll('#scenarios button').forEach((b) => b.classList.toggle('on', b.textContent === name));
+        render();
+        const step = () => {
+          if (current.shown < current.r.order.length) current.shown += 1;
+          else current.showCorrect = true;
+          render();
+          if (!current.showCorrect) timer = setTimeout(step, STEP_MS);
+        };
+        timer = setTimeout(step, STEP_MS);
+      }
+
+      for (const id of ids()) $('#theme').append(kit.el('option', { value: id, text: id }));
+      for (const name of Object.keys(SCENARIOS)) {
+        $('#scenarios').append(kit.el('button', { type: 'button', text: name, onclick: () => start(name) }));
+      }
+      $('#theme').addEventListener('change', () => start(current.name));
+      $('#replay').addEventListener('click', () => start(current.name));
+      $('#skip').addEventListener('click', () => {
+        clearTimeout(timer);
+        current.shown = current.r.order.length;
+        current.showCorrect = true;
+        render();
+      });
+      start('3 jogadores');
+    })();
+  </script>
+</body>
+</html>

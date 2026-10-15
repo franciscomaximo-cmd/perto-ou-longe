@@ -230,6 +230,11 @@ textarea:focus { border-color: var(--accent); }
 /* Alvo das perguntas de números: tamanho fixo desde o início (quadrado, largura disponível
    até 45% da altura do ecrã), por isso nada salta durante a revelação. */
 .target-wrap { display: flex; flex-direction: column; gap: 12px; }
+/* Palco do tema de revelação: largura disponível; cada tema mantém o seu tamanho fixo
+   (no máximo ~45% da altura do ecrã). */
+.reveal-stage { display: flex; justify-content: center; }
+/* Mostrado sem animação (entrou a meio, "Saltar" ou movimento reduzido). */
+.tgt-player.instant, .tgt-center.instant { animation: none; }
 .tgt-board {
   position: relative; align-self: center;
   width: min(100%, 45vh); width: min(100%, 45svh); aspect-ratio: 1;
@@ -256,10 +261,13 @@ textarea:focus { border-color: var(--accent); }
 .tgt-center.revealed { animation: pop .45s cubic-bezier(.2, 1.4, .4, 1); }
 .tgt-players { position: absolute; inset: 0; }
 .tgt-player {
-  position: absolute; transform: translate(-50%, -50%);
+  position: absolute; transform: translate(-50%, var(--anchor-y));
+  /* O ponto calculado é o centro do AVATAR (a etiqueta do valor fica pendurada por baixo). */
+  --anchor-y: calc(var(--av, 56px) / -2);
   display: flex; flex-direction: column; align-items: center;
 }
-.tgt-player .avatar { --size: var(--av, 56px); margin: 0; }
+/* (Mais específica do que .avatar.l, que vem depois: o tamanho é o calculado pelo tema.) */
+.tgt-board .tgt-player .avatar { --size: var(--av, 56px); margin: 0; }
 .tgt-val {
   position: relative; z-index: 1; /* por cima do anel do avatar */
   margin-top: -4px; padding: 0 6px; border-radius: 999px;
@@ -269,19 +277,19 @@ textarea:focus { border-color: var(--accent); }
 /* Voo e ressalto ao aterrar no alvo */
 .tgt-player.land { animation: land .75s cubic-bezier(.25, 1.25, .45, 1) both; }
 @keyframes land {
-  0% { opacity: 0; transform: translate(-50%, -50%) translateY(-90px) scale(1.7); }
-  55% { opacity: 1; transform: translate(-50%, -50%) translateY(4px) scale(.92); }
-  75% { transform: translate(-50%, -50%) translateY(-5px) scale(1.04); }
-  100% { opacity: 1; transform: translate(-50%, -50%); }
+  0% { opacity: 0; transform: translate(-50%, var(--anchor-y)) translateY(-90px) scale(1.7); }
+  55% { opacity: 1; transform: translate(-50%, var(--anchor-y)) translateY(4px) scale(.92); }
+  75% { transform: translate(-50%, var(--anchor-y)) translateY(-5px) scale(1.04); }
+  100% { opacity: 1; transform: translate(-50%, var(--anchor-y)); }
 }
 /* No fim: brilho verde no mais perto, contorno vermelho e abanão no mais longe. */
 .tgt-player.near .avatar { box-shadow: 0 0 0 3px var(--near), 0 0 18px 6px rgba(61, 220, 151, .65); }
 .tgt-player.far .avatar { box-shadow: 0 0 0 3px var(--far), 0 3px 8px rgba(0, 0, 0, .35); }
 .tgt-player.far { animation: tgt-shake .55s .2s ease-in-out; }
 @keyframes tgt-shake {
-  0%, 100% { transform: translate(-50%, -50%); }
-  20%, 60% { transform: translate(calc(-50% - 6px), -50%); }
-  40%, 80% { transform: translate(calc(-50% + 6px), -50%); }
+  0%, 100% { transform: translate(-50%, var(--anchor-y)); }
+  20%, 60% { transform: translate(calc(-50% - 6px), var(--anchor-y)); }
+  40%, 80% { transform: translate(calc(-50% + 6px), var(--anchor-y)); }
 }
 .tgt-player.near, .tgt-player.far { z-index: 2; }
 /* Lista por baixo do alvo: as linhas existem desde o início (escondidas), para não empurrar a

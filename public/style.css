@@ -286,6 +286,27 @@ textarea:focus { border-color: var(--accent); }
   .bowl-strike { display: none; }
 }
 
+/* --- Tema "karts" (corrida de karts) ------------------------------------------------------- */
+/* Tamanho fixo: largura disponível, no máximo ~45% da altura do ecrã (cena 300 × 300). */
+.kart-scene { display: block; width: min(100%, 45vh); width: min(100%, 45svh); aspect-ratio: 1; border-radius: var(--radius); }
+.kart-plaque { fill: var(--accent); stroke: #c98a00; stroke-width: 1; }
+.kart-plaque-label { fill: var(--accent-ink); font-size: 6.5px; font-weight: 800; letter-spacing: .08em; opacity: .7; }
+.kart-answer { fill: var(--accent-ink); font-size: 13px; font-weight: 800; }
+.kart-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+.kart-lane.near .kart { filter: drop-shadow(0 0 4px rgba(61, 220, 151, .95)); }
+.kart-lane.far .kart { filter: drop-shadow(0 0 4px rgba(255, 107, 107, .95)); }
+/* Bandeira de xadrez a agitar quando um "em cheio" corta a meta (algumas vezes, e para). */
+.kart-flag-cloth { transform-box: fill-box; transform-origin: 0 50%; }
+.kart-flag.waving .kart-flag-cloth { animation: kart-wave .28s ease-in-out 6 alternate; }
+@keyframes kart-wave { from { transform: skewY(-12deg) scaleX(.9); } to { transform: skewY(12deg) scaleX(1); } }
+/* Fumo do despiste: aparece, cresce e fica a esbater-se (uma vez). */
+.kart-smoke { opacity: .75; }
+.kart-smoke.puff circle { transform-box: fill-box; transform-origin: center; animation: kart-puff .8s ease-out both; }
+@keyframes kart-puff { from { transform: scale(.2); opacity: 0; } 40% { opacity: 1; } to { transform: scale(1); opacity: .75; } }
+@media (prefers-reduced-motion: reduce) {
+  .kart-flag.waving .kart-flag-cloth, .kart-smoke.puff circle { animation: none; }
+}
+
 /* Mostrado sem animação (entrou a meio, "Saltar" ou movimento reduzido). */
 .tgt-player.instant, .tgt-center.instant { animation: none; }
 .tgt-board {

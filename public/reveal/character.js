@@ -9,6 +9,7 @@
 //     size:   altura em px (a largura é ~0,77 da altura)
 //     small:  versão simplificada (traços mais grossos, sem extras nem pormenores), para quando
 //             há muitos jogadores no ecrã
+//     kartColor: cor do kart na pose "kart" (por omissão, vermelho)
 //   Devolve um <svg class="character pose-…">.
 (function (root) {
   const NS = 'http://www.w3.org/2000/svg';
@@ -163,7 +164,7 @@
     }
     return null;
   }
-  function propsFront(pose, outfit, small) {
+  function propsFront(pose, outfit, small, kartColor = '#e03131') {
     switch (pose) {
       case 'arco':
         return svgEl('g', {}, [
@@ -181,7 +182,7 @@
         ]);
       case 'kart':
         return svgEl('g', {}, [
-          svgEl('path', { d: 'M14,92 L84,92 Q92,92 92,100 L92,104 Q92,110 86,110 L18,110 Q12,110 12,104 L12,96 Q12,92 16,92 Z', fill: '#e03131', stroke: '#8a1c1c', 'stroke-width': 1.5 }),
+          svgEl('path', { d: 'M14,92 L84,92 Q92,92 92,100 L92,104 Q92,110 86,110 L18,110 Q12,110 12,104 L12,96 Q12,92 16,92 Z', fill: kartColor, stroke: shade(kartColor, 0.45), 'stroke-width': 1.5 }),
           svgEl('rect', { x: 20, y: 98, width: 40, height: 4, rx: 2, fill: '#ffffff', opacity: 0.85 }),
           svgEl('path', { d: 'M70,90 L74,78', stroke: '#343a40', 'stroke-width': 2.5, 'stroke-linecap': 'round' }),
           svgEl('ellipse', { cx: 73, cy: 76, rx: 6, ry: 2.5, fill: 'none', stroke: '#343a40', 'stroke-width': 2.5 }),
@@ -210,7 +211,7 @@
     }
   }
 
-  function drawCharacter(player, pose = 'parado', { size = 120, small = false, title = null } = {}) {
+  function drawCharacter(player, pose = 'parado', { size = 120, small = false, title = null, kartColor = '#e03131' } = {}) {
     const p = POSES[pose] ? pose : 'parado';
     const g = POSES[p];
     const ch = { outfit: null, hat: 'nenhum', extra: 'nenhum', ...(player.character || {}) };
@@ -249,7 +250,7 @@
     if (!small) svg.append(svgEl('path', { d: `M44,${top + 3} Q50,${top + 8} 56,${top + 3}`, fill: 'none', stroke: outfitDark, 'stroke-width': 1.2, opacity: 0.7 }));
 
     // Kart à frente das pernas e do tronco; braços por cima (ao volante).
-    if (p === 'kart') svg.append(propsFront(p, outfit, small));
+    if (p === 'kart') svg.append(propsFront(p, outfit, small, kartColor));
 
     // Braços (mangas na cor da roupa) e mãos.
     for (const arm of [g.armL, g.armR]) {

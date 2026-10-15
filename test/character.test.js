@@ -85,9 +85,10 @@ test('boneco: escolhas antigas guardadas (só roupa, chapéu e extra) continuam 
 });
 
 test('desbloqueáveis: coroa com 3 "em cheio", chamas com 5 vitórias, troféu ao ganhar com 6+', () => {
-  assert.equal(isUnlocked('hat', 'coroa', EMPTY_PROGRESS), false);
-  assert.equal(isUnlocked('hat', 'coroa', { ...EMPTY_PROGRESS, exact: 2 }), false);
-  assert.equal(isUnlocked('hat', 'coroa', { ...EMPTY_PROGRESS, exact: 3 }), true);
+  assert.equal(isUnlocked('hat', 'coroa_dourada', EMPTY_PROGRESS), false);
+  assert.equal(isUnlocked('hat', 'coroa_dourada', { ...EMPTY_PROGRESS, exact: 2 }), false);
+  assert.equal(isUnlocked('hat', 'coroa_dourada', { ...EMPTY_PROGRESS, exact: 3 }), true);
+  assert.equal(isUnlocked('hat', 'coroa', EMPTY_PROGRESS), true, 'a coroa de sempre continua livre');
   assert.equal(isUnlocked('aura', 'chamas', { ...EMPTY_PROGRESS, wins: 4 }), false);
   assert.equal(isUnlocked('aura', 'chamas', { ...EMPTY_PROGRESS, wins: 5 }), true);
   assert.equal(isUnlocked('hand', 'trofeu', { ...EMPTY_PROGRESS, bigWins: 1 }), true);
@@ -100,8 +101,8 @@ test('desbloqueáveis: coroa com 3 "em cheio", chamas com 5 vitórias, troféu a
   }
   // O servidor não verifica desbloqueios (é só por diversão).
   const { room, ids } = setup();
-  room.setCharacter(ids[0], { hat: 'coroa', aura: 'chamas', hand: 'trofeu' });
-  assert.equal(room.players.get(ids[0]).character.hat, 'coroa');
+  room.setCharacter(ids[0], { hat: 'coroa_dourada', aura: 'chamas', hand: 'trofeu' });
+  assert.equal(room.players.get(ids[0]).character.hat, 'coroa_dourada');
   room.destroy();
 });
 

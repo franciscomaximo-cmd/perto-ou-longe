@@ -149,11 +149,17 @@
           small ? null : svgEl('circle', { cx: 0, cy: -22, r: 2, fill: dark }),
         ]);
       case 'coroa':
+        return svgEl('path', { d: 'M-12,-11 L-13,-25 L-6,-18 L0,-29 L6,-18 L13,-25 L12,-11 Z', fill: '#ffd43b', stroke: '#c98a00', 'stroke-width': 1.5, 'stroke-linejoin': 'round' });
+      case 'coroa_dourada':
+        // A desbloqueável: mais alta, com 5 pontas com pérolas, pedras e um brilho.
         return svgEl('g', {}, [
-          svgEl('path', { d: 'M-12,-11 L-13,-25 L-6,-18 L0,-29 L6,-18 L13,-25 L12,-11 Z', fill: '#ffd43b', stroke: '#c98a00', 'stroke-width': 1.5, 'stroke-linejoin': 'round' }),
-          small ? null : svgEl('circle', { cx: 0, cy: -16, r: 2, fill: '#e03131' }),
-          small ? null : svgEl('circle', { cx: -7, cy: -14.5, r: 1.4, fill: '#1c7ed6' }),
-          small ? null : svgEl('circle', { cx: 7, cy: -14.5, r: 1.4, fill: '#2f9e44' }),
+          svgEl('path', { d: 'M-15,-10 L-16,-27 L-9,-20 L-5,-31 L0,-22 L5,-31 L9,-20 L16,-27 L15,-10 Z', fill: '#ffd43b', stroke: '#b07800', 'stroke-width': 1.5, 'stroke-linejoin': 'round' }),
+          svgEl('rect', { x: -15, y: -14, width: 30, height: 4, fill: '#fab005', stroke: '#b07800', 'stroke-width': 0.8 }),
+          ...[[-16, -27], [-5, -31], [5, -31], [16, -27]].map(([x, y]) => svgEl('circle', { cx: x, cy: y, r: small ? 2 : 1.8, fill: '#fff8db', stroke: '#b07800', 'stroke-width': 0.6 })),
+          small ? null : svgEl('circle', { cx: 0, cy: -17, r: 2.3, fill: '#e03131' }),
+          small ? null : svgEl('circle', { cx: -8, cy: -15.5, r: 1.6, fill: '#1c7ed6' }),
+          small ? null : svgEl('circle', { cx: 8, cy: -15.5, r: 1.6, fill: '#2f9e44' }),
+          small ? null : svgEl('path', { d: 'M-10,-24 L-8,-20', stroke: '#ffffff', 'stroke-width': 1.4, 'stroke-linecap': 'round', opacity: 0.8 }),
         ]);
       case 'capacete':
         return svgEl('g', {}, [

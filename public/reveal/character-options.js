@@ -29,7 +29,8 @@
   const HATS = [
     { id: 'nenhum', label: 'Nenhum' },
     { id: 'bone', label: 'Boné' },
-    { id: 'coroa', label: 'Coroa dourada' },
+    { id: 'coroa', label: 'Coroa' },
+    { id: 'coroa_dourada', label: 'Coroa dourada' }, // desbloqueável (com pedras e brilho)
     { id: 'capacete', label: 'Capacete' },
     { id: 'cowboy', label: 'Cowboy' },
     { id: 'gorro', label: 'Gorro' },
@@ -115,7 +116,7 @@
   //   wins    = jogos ganhos; bigWins = jogos ganhos com 6 ou mais jogadores;
   //   games   = jogos jogados até ao fim.
   const UNLOCKS = [
-    { key: 'hat', id: 'coroa', stat: 'exact', need: 3, how: 'Acerta "em cheio" 3 vezes' },
+    { key: 'hat', id: 'coroa_dourada', stat: 'exact', need: 3, how: 'Acerta "em cheio" 3 vezes' },
     { key: 'aura', id: 'chamas', stat: 'wins', need: 5, how: 'Ganha 5 jogos' },
     { key: 'hand', id: 'trofeu', stat: 'bigWins', need: 1, how: 'Ganha um jogo com 6 ou mais jogadores' },
     { key: 'pet', id: 'papagaio', stat: 'games', need: 3, how: 'Joga 3 jogos até ao fim' },

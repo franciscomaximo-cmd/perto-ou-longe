@@ -64,24 +64,76 @@
       <h2>Jogadores <span id="lobby-count" class="muted"></span></h2>
       <ul id="lobby-players" class="players"></ul>
 
-      <!-- Boneco do jogador: cabeça (emoji), roupa, chapéu/acessório e extra. É o boneco que
-           aparece nos temas de revelação. Só se muda aqui, na sala de espera. -->
+      <!-- Boneco do jogador: é o boneco que aparece nos temas de revelação e no fim do jogo.
+           Só se muda aqui, na sala de espera. Separadores: uma secção de cada vez, para a sala
+           de espera não ficar comprida no telemóvel. -->
       <div class="card char-card">
         <h2>O teu boneco</h2>
-        <div class="char-top">
-          <div id="emoji-picker" class="emoji-picker" aria-label="Cabeça (emoji)"></div>
-          <div class="char-side">
-            <button id="char-preview" class="char-preview" type="button" aria-label="O teu boneco. Toca para ver as poses."></button>
-            <span id="char-pose" class="hint center"></span>
+        <div class="char-stage">
+          <button id="char-preview" class="char-preview idle" type="button" aria-label="O teu boneco. Toca para ver as poses."></button>
+          <div class="char-actions">
+            <button id="char-action" type="button">▶ Ver em ação</button>
+            <button id="char-random" type="button">🎲 Aleatório</button>
+            <span id="char-pose" class="hint"></span>
           </div>
         </div>
-        <span class="group-title">Roupa</span>
-        <div id="char-outfit" class="swatches"></div>
-        <span class="group-title">Chapéu ou acessório</span>
-        <div id="char-hat" class="chips"></div>
-        <span class="group-title">Extra</span>
-        <div id="char-extra" class="chips"></div>
-        <button id="char-random" type="button" class="char-random">🎲 Aleatório</button>
+        <div class="char-tabs" role="tablist" aria-label="Partes do boneco">
+          <button type="button" role="tab" data-tab="cabeca" aria-selected="true">Cabeça</button>
+          <button type="button" role="tab" data-tab="roupa" aria-selected="false">Roupa</button>
+          <button type="button" role="tab" data-tab="acessorios" aria-selected="false">Acessórios</button>
+          <button type="button" role="tab" data-tab="festejo" aria-selected="false">Festejo</button>
+        </div>
+
+        <div class="char-panel" data-panel="cabeca" role="tabpanel">
+          <span class="group-title">Cabeça (emoji)</span>
+          <div id="emoji-picker" class="emoji-picker" aria-label="Cabeça (emoji)"></div>
+          <span class="group-title">Chapéu ou acessório</span>
+          <div id="char-hat" class="chips"></div>
+        </div>
+
+        <div class="char-panel" data-panel="roupa" role="tabpanel" hidden>
+          <span class="group-title">Cor da camisola</span>
+          <div id="char-outfit" class="swatches"></div>
+          <span class="group-title">Padrão</span>
+          <div id="char-pattern" class="chips"></div>
+          <div id="char-number-row" class="char-number" hidden>
+            <span class="group-title">Número</span>
+            <button type="button" data-step="-1" aria-label="Número anterior">−</button>
+            <output id="char-number"></output>
+            <button type="button" data-step="1" aria-label="Número seguinte">+</button>
+          </div>
+          <span class="group-title">Calças</span>
+          <div id="char-pants" class="swatches one-row"></div>
+          <span class="group-title">Sapatilhas</span>
+          <div id="char-shoes" class="swatches one-row"></div>
+          <span class="group-title">Extra</span>
+          <div id="char-extra" class="chips"></div>
+        </div>
+
+        <div class="char-panel" data-panel="acessorios" role="tabpanel" hidden>
+          <span class="group-title">Na mão</span>
+          <div id="char-hand" class="chips"></div>
+          <div id="char-scarf-row" hidden>
+            <span class="group-title">Cores do cachecol</span>
+            <div id="char-scarf0" class="swatches one-row"></div>
+            <div id="char-scarf1" class="swatches one-row"></div>
+          </div>
+          <span class="group-title">Animal de estimação</span>
+          <div id="char-pet" class="chips"></div>
+          <span class="group-title">Aura</span>
+          <div id="char-aura" class="chips"></div>
+        </div>
+
+        <div class="char-panel" data-panel="festejo" role="tabpanel" hidden>
+          <span class="group-title">Quando ganha a ronda</span>
+          <div id="char-win" class="chips"></div>
+          <span class="group-title">Quando fica mais longe</span>
+          <div id="char-lose" class="chips"></div>
+          <span class="group-title">Frase de festejo</span>
+          <div id="char-phrase" class="chips"></div>
+        </div>
+        <!-- Como desbloquear as peças com cadeado da secção aberta. -->
+        <ul id="char-locks" class="char-locks"></ul>
       </div>
 
       <div class="card">
@@ -257,6 +309,8 @@
     <!-- Fim -->
     <section id="screen-end" class="screen" hidden>
       <h1 class="logo small">Fim do jogo</h1>
+      <!-- Quem ganhou, em grande, a festejar (com o animal de estimação). -->
+      <div id="end-stage" class="end-stage" aria-hidden="true"></div>
       <p id="end-winner" class="winner"></p>
       <ol id="end-scores" class="scores"></ol>
       <h3 id="end-awards-title">Prémios</h3>

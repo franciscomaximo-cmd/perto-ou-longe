@@ -42,7 +42,9 @@
 
       <h2>Bonecos</h2>
       <p class="dev-note">Todos os bonecos dos jogadores falsos em todas as poses (arrasta para o lado para ver
-        as poses todas). Entre eles estão todos os chapéus/acessórios e todos os extras.</p>
+        as poses todas). Entre eles estão todas as peças: chapéus, extras, padrões, objetos na mão,
+        animais, auras, festejos e reações (o "A festejar" e o "Triste" mostram a escolha de cada um).
+        Para rever as animações, liga e desliga a versão pequena.</p>
       <label class="dev-bar"><input type="checkbox" id="char-small"> Versão pequena (muitos jogadores no ecrã)</label>
       <div id="characters" class="dev-chars"></div>
     </section>
@@ -78,23 +80,38 @@
       const COLORS = ['#4dabf7', '#f783ac', '#ff922b', '#9775fa', '#3bc9db', '#a9e34b', '#e599f7', '#ffd43b', '#c49a6c', '#f1f3f5', '#5c7cfa', '#adb5bd'];
       const EMOJIS = ['🦊', '🐼', '🐸', '🐙', '🦉', '🐢', '🦁', '🐧', '🐨', '🦄', '🐝', '🐳'];
       const NAMES = ['Ana', 'Rui', 'Eva', 'Tiago', 'Inês', 'João', 'Marta', 'Pedro', 'Sofia', 'Diogo', 'Rita', 'Hugo'];
-      // Bonecos variados: passam por todos os chapéus/acessórios e extras, e alguns com roupa
-      // de outra cor da paleta.
-      const { HATS, EXTRAS, POSES, POSE_LABELS } = window.CharacterOptions;
+      // Bonecos variados: passam por todas as peças (chapéus, extras, padrões, calças,
+      // sapatilhas, objetos na mão, animais, auras, festejos, reações e frases), e alguns com
+      // roupa de outra cor da paleta.
+      const CO = window.CharacterOptions;
+      const { POSES, POSE_LABELS } = CO;
+      const at = (list, i) => list[i % list.length];
       const fakePlayers = (n) => Array.from({ length: n }, (_, i) => ({
         id: `p${i}`, name: NAMES[i], color: COLORS[i], emoji: EMOJIS[i],
-        character: { outfit: i % 3 === 2 ? COLORS[(i + 5) % COLORS.length] : null, hat: HATS[i % HATS.length].id, extra: EXTRAS[i % EXTRAS.length].id },
+        character: {
+          outfit: i % 3 === 2 ? COLORS[(i + 5) % COLORS.length] : null,
+          hat: at(CO.HATS, i).id, extra: at(CO.EXTRAS, i).id,
+          pattern: at(CO.PATTERNS, i).id, number: 7 + i * 3,
+          pants: at(CO.PANTS_COLORS, i), shoes: at(CO.SHOE_COLORS, i + 1),
+          hand: at(CO.HAND_ITEMS, i).id, scarf: [at(CO.SCARF_COLORS, i), at(CO.SCARF_COLORS, i + 3)],
+          pet: at(CO.PETS, i).id, aura: at(CO.AURAS, i).id,
+          win: at(CO.WINS, i).id, lose: at(CO.LOSES, i).id, phrase: i % CO.PHRASES.length,
+        },
       }));
+      const label = (list, id) => list.find((o) => o.id === id).label;
 
       function renderCharacters() {
         const small = $('#char-small').checked;
-        $('#characters').replaceChildren(...fakePlayers(12).map((p) => kit.el('div', { class: 'dev-row' }, [
-          kit.el('h3', { text: `${p.emoji} ${p.name} · ${p.character.hat} · ${p.character.extra}${p.character.outfit ? ' · outra roupa' : ''}` }),
-          kit.el('div', { class: 'dev-poses' }, POSES.map((pose) => kit.el('figure', {}, [
-            window.drawCharacter(p, pose, { size: small ? 46 : 96, small }),
-            kit.el('figcaption', { text: POSE_LABELS[pose] }),
-          ]))),
-        ])));
+        $('#characters').replaceChildren(...fakePlayers(12).map((p) => {
+          const c = p.character;
+          return kit.el('div', { class: 'dev-row' }, [
+            kit.el('h3', { text: `${p.emoji} ${p.name} · ${c.hat} · ${c.extra} · ${label(CO.PATTERNS, c.pattern)} · mão: ${label(CO.HAND_ITEMS, c.hand)} · ${label(CO.PETS, c.pet)} · aura: ${label(CO.AURAS, c.aura)} · ${label(CO.WINS, c.win)} / ${label(CO.LOSES, c.lose)} · “${CO.PHRASES[c.phrase]}”` }),
+            kit.el('div', { class: 'dev-poses' }, POSES.map((pose) => kit.el('figure', {}, [
+              window.drawCharacter(p, pose, { size: small ? 46 : 96, small, withPet: !small && (pose === 'parado' || pose === 'festejar') }),
+              kit.el('figcaption', { text: POSE_LABELS[pose] }),
+            ]))),
+          ]);
+        }));
       }
 
       // Cenários: pergunta, resposta e palpites.

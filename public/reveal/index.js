@@ -139,6 +139,23 @@
     let answerShown = false;
     let shows = {}; // posição de apresentação de cada jogador nesta ronda
 
+    // Frase de festejo de quem ganhou a ronda (lista fixa, escolhida no boneco), num balão por
+    // cima da parte de baixo da cena; aparece, fica ~3 s e desaparece (não tapa a resposta).
+    function phraseBubbles(r) {
+      const Options = root.CharacterOptions;
+      const ids = r.closest.filter((id) => r.players[id]).slice(0, 3);
+      if (!Options || !ids.length) return;
+      const box = el('div', { class: 'win-bubbles' }, ids.map((id) => {
+        const ch = Options.cleanCharacter(r.players[id].character || {}) || Options.DEFAULT_CHARACTER;
+        return el('div', { class: 'win-bubble', style: `--c:${r.players[id].color}` }, [
+          avatarOf(id, 's'),
+          el('span', { text: Options.PHRASES[ch.phrase] }),
+        ]);
+      }));
+      box.addEventListener('animationend', (e) => { if (e.target === box) box.remove(); });
+      stage.append(box);
+    }
+
     function destroy() {
       if (theme) theme.destroy();
       theme = null;
@@ -217,6 +234,7 @@
       if (r.showCorrect && !answerShown) {
         answerShown = true;
         theme.revealAnswer(r.correct, { closest: r.closest, farthest: r.farthest, exact: r.exact || [], instant });
+        if (!instant) phraseBubbles(r);
       }
 
       // Lista por baixo, em sincronia: cada linha aparece quando o palpite é revelado; "falhou

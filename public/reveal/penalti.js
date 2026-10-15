@@ -205,7 +205,8 @@
     function showShooter(player, pose = 'rematar', dx = 0) {
       const h = 64;
       const w = h * (100 / 130);
-      const svg = kit.drawCharacter(player, pose, { size: h });
+      // Ao festejar, com o animal de estimação ao lado (há espaço no relvado).
+      const svg = kit.drawCharacter(player, pose, { size: h, withPet: pose === 'festejar' });
       svg.setAttribute('x', (SPOT.x - w * 0.86 + dx).toFixed(1));
       svg.setAttribute('y', (SPOT.y + 7 - h * 0.86).toFixed(1));
       shooterLayer.replaceChildren(svg);

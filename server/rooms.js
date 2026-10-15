@@ -165,6 +165,7 @@ class Room {
     this.stats = new Map(); // id -> estatísticas do jogo, para os prémios do fim
     this.phase = 'lobby'; // lobby | answering | voting | reveal | tiebreak | tiebreak-reveal | end
     this.round = 0;
+    this.gameNumber = 0; // quantos jogos já começaram nesta sala
     this.questions = [];
     this.usedQuestions = new Set();
     this.themeDeck = new ThemeDeck(); // tema da revelação de cada pergunta de números
@@ -208,7 +209,7 @@ class Room {
     const emoji = freeEmojis[crypto.randomInt(freeEmojis.length)];
     const player = {
       id: crypto.randomUUID(), name, score: 0, connected: false, socketId: null, color, emoji,
-      character: { ...CharacterOptions.DEFAULT_CHARACTER }, // boneco: roupa, chapéu e extra
+      character: CharacterOptions.cleanCharacter({}), // boneco (peças por omissão)
     };
     this.players.set(player.id, player);
     if (!this.hostId) this.hostId = player.id;
@@ -374,6 +375,7 @@ class Room {
     this.stats = new Map();
     this.questions = this.pickQuestions();
     this.round = 0;
+    this.gameNumber += 1; // identifica o jogo (ex.: o cliente conta feitos uma vez por jogo)
     this.standings = null;
     this.tiebreak = null;
     this.tiebreakCount = 0;
@@ -762,6 +764,7 @@ class Room {
       me: playerId,
       hostId: this.hostId,
       round: this.round,
+      gameNumber: this.gameNumber,
       totalRounds: this.questions.length || this.settings.rounds,
       // Com perguntas dos jogadores, o mínimo sobe para caberem as de todos.
       minRounds: Math.min(MAX_ROUNDS, Math.max(MIN_ROUNDS, this.customNeeded())),

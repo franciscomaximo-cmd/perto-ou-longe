@@ -125,8 +125,9 @@
       drawCellBoneco(id, 'lancar');
     }
 
+    // Ao festejar, o boneco grande ao lado da pista leva o animal de estimação (há espaço).
     function showThrower(player, pose = 'lancar') {
-      const svg = kit.drawCharacter(player, pose, { size: 70 });
+      const svg = kit.drawCharacter(player, pose, { size: 70, withPet: pose === 'festejar' });
       svg.setAttribute('x', 4);
       svg.setAttribute('y', LANE.botY - 70);
       thrower.replaceChildren(svg);

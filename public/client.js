@@ -449,6 +449,7 @@
     // Fora da revelação, o tema da ronda é desmontado (para as animações e os eventos).
     if (phase !== 'reveal') revealCtl.destroy();
     lastPhase = phase;
+    trackProgress(); // feitos para os desbloqueáveis do boneco
     for (const sel of new Set(Object.values(SCREENS))) $(sel).hidden = sel !== SCREENS[phase];
 
     deadline = state && state.remainingMs != null ? Date.now() + state.remainingMs : null;
@@ -602,12 +603,60 @@
     lastMyEmoji = me ? me.emoji : null;
   }
 
+  // --- Progresso e desbloqueáveis (só neste dispositivo, sem contas) ------------------------
+  // Feitos guardados no localStorage: "em cheio", jogos ganhos (e com 6 ou mais jogadores) e
+  // jogos jogados até ao fim. Cada feito conta uma vez por ronda/jogo (as chaves já contadas
+  // ficam no sessionStorage, para recarregar a página não contar outra vez).
+  const PROGRESS_KEY = 'pertoOuLonge.progress';
+  const COUNTED_KEY = 'pertoOuLonge.counted';
+  const progress = () => ({ ...window.CharacterOptions.EMPTY_PROGRESS, ...(load(PROGRESS_KEY) || {}) });
+  function countOnce(key, stats) {
+    const counted = load(COUNTED_KEY, sessionStorage) || [];
+    if (counted.includes(key)) return;
+    store(COUNTED_KEY, [...counted, key].slice(-200), sessionStorage);
+    const before = progress();
+    const after = { ...before };
+    for (const s of stats) after[s] = (after[s] || 0) + 1;
+    store(PROGRESS_KEY, after);
+    // Peças que acabaram de desbloquear: avisa.
+    const fresh = window.CharacterOptions.UNLOCKS.filter((u) => before[u.stat] < u.need && after[u.stat] >= u.need);
+    if (fresh.length) setTimeout(() => toast(`🔓 Desbloqueaste: ${fresh.map(unlockLabel).join(', ')}! Vê no teu boneco.`), 1800);
+  }
+  function trackProgress() {
+    if (!state || !state.me || state.phase === 'lobby') return;
+    const game = `${state.code}|${state.gameNumber}`; // o servidor numera os jogos de cada sala
+    const r = state.result;
+    if (state.phase === 'reveal' && r && (r.exact || []).includes(state.me) && r.step > Object.keys(r.answers).length) {
+      countOnce(`${game}|exact|${state.round}`, ['exact']);
+    }
+    if (state.phase === 'end') {
+      const won = standingGroups()[0].some((p) => p.id === state.me);
+      const stats = ['games'];
+      if (won) stats.push('wins');
+      if (won && state.players.length >= 6) stats.push('bigWins');
+      countOnce(`${game}|end`, stats);
+    }
+  }
+
   // --- Boneco (sala de espera) -------------------------------------------------------------
-  // Roupa, chapéu/acessório e extra. A pré-visualização muda logo ao tocar (sem esperar pelo
-  // servidor); as escolhas ficam no localStorage e são reaplicadas ao entrar numa sala.
-  const { COLORS: CHAR_COLORS, HATS, EXTRAS, POSES: CHAR_POSES, POSE_LABELS, cleanCharacter, randomCharacter } = window.CharacterOptions;
+  // Separadores Cabeça / Roupa / Acessórios / Festejo (uma secção de cada vez). A
+  // pré-visualização muda logo ao tocar (sem esperar pelo servidor); as escolhas ficam no
+  // localStorage e são reaplicadas ao entrar numa sala.
+  const CO = window.CharacterOptions;
+  const { POSES: CHAR_POSES, POSE_LABELS, cleanCharacter, randomCharacter, isUnlocked, unlockOf } = CO;
   let pendingCharacter = null; // escolha enviada e ainda não confirmada pelo servidor
   let previewPose = 0;
+  let previewAction = null; // 'festejar' | 'triste' durante o "Ver em ação"
+  let actionTimers = [];
+  let previewKey = null;
+  let charTab = 'cabeca';
+
+  const LIST_OF = { hat: CO.HATS, pattern: CO.PATTERNS, extra: CO.EXTRAS, hand: CO.HAND_ITEMS, pet: CO.PETS, aura: CO.AURAS, win: CO.WINS, lose: CO.LOSES };
+  const TAB_KEYS = { cabeca: ['hat'], roupa: ['pattern', 'extra'], acessorios: ['hand', 'pet', 'aura'], festejo: ['win', 'lose'] };
+  function unlockLabel(u) {
+    const o = LIST_OF[u.key].find((x) => x.id === u.id);
+    return o ? o.label : u.id;
+  }
 
   function setCharacter(change) {
     const me = player(state.me);
@@ -620,43 +669,111 @@
     act('player:character', next);
   }
 
+  function renderPreview(me, ch) {
+    const pose = previewAction || CHAR_POSES[previewPose % CHAR_POSES.length];
+    // Só se redesenha quando algo muda (senão cada atualização do servidor recomeçava a
+    // animação).
+    const key = JSON.stringify([ch, me.emoji, me.color, pose]);
+    if (key === previewKey) return;
+    previewKey = key;
+    $('#char-preview').replaceChildren(window.drawCharacter({ ...me, character: ch }, pose, { size: 150, withPet: true }));
+    $('#char-pose').textContent = previewAction
+      ? (previewAction === 'festejar' ? `A festejar: ${CO.WINS.find((w) => w.id === ch.win).label}` : `Reação: ${CO.LOSES.find((l) => l.id === ch.lose).label}`)
+      : `${POSE_LABELS[pose]} · toca no boneco para mudar a pose`;
+  }
+
   function renderCharacterEditor() {
     const me = player(state.me);
     if (!me) return;
     if (pendingCharacter && JSON.stringify(pendingCharacter) === JSON.stringify(me.character)) pendingCharacter = null;
-    const ch = pendingCharacter || me.character;
-    const pose = CHAR_POSES[previewPose % CHAR_POSES.length];
-    $('#char-preview').replaceChildren(window.drawCharacter({ ...me, character: ch }, pose, { size: 150 }));
-    $('#char-pose').textContent = `${POSE_LABELS[pose]} · toca para mudar`;
+    const ch = cleanCharacter(pendingCharacter || me.character || {}) || CO.DEFAULT_CHARACTER;
+    const prog = progress();
+    renderPreview(me, ch);
 
-    // Roupa: a cor do jogador (por omissão) ou outra da paleta.
-    const swatch = (value, color, label) => el('button', {
+    // Separadores.
+    for (const b of $$('.char-tabs [data-tab]')) b.setAttribute('aria-selected', String(b.dataset.tab === charTab));
+    for (const p of $$('.char-panel')) p.hidden = p.dataset.panel !== charTab;
+
+    // Círculos de cor (grandes, fáceis de tocar).
+    const swatches = (sel, colors, current, onPick, labelOf) => $(sel).replaceChildren(...colors.map(([value, color]) => el('button', {
       type: 'button',
-      class: `swatch ${(ch.outfit || null) === value ? 'on' : ''}`,
+      class: `swatch ${current === value ? 'on' : ''}`,
       style: `--c:${color}`,
-      'aria-label': label,
-      title: label,
-      onclick: () => setCharacter({ outfit: value }),
-    }, value === null ? el('span', { text: '★', 'aria-hidden': 'true' }) : null);
-    $('#char-outfit').replaceChildren(
-      swatch(null, me.color, 'A tua cor'),
-      ...CHAR_COLORS.filter((c) => c !== me.color).map((c) => swatch(c, c, `Roupa ${c}`)),
-    );
-    const chips = (sel, list, key) => $(sel).replaceChildren(...list.map((o) => el('button', {
-      type: 'button',
-      class: ch[key] === o.id ? 'on' : '',
-      text: o.label,
-      onclick: () => setCharacter({ [key]: o.id }),
+      'aria-label': labelOf(value),
+      title: labelOf(value),
+      onclick: () => onPick(value),
+    }, value === null ? el('span', { text: '★', 'aria-hidden': 'true' }) : null)));
+    // Camisola: a cor do jogador (por omissão) ou outra da paleta.
+    swatches('#char-outfit', [[null, me.color], ...CO.COLORS.filter((c) => c !== me.color).map((c) => [c, c])],
+      ch.outfit || null, (v) => setCharacter({ outfit: v }), (v) => (v === null ? 'A tua cor' : `Roupa ${v}`));
+    swatches('#char-pants', CO.PANTS_COLORS.map((c) => [c, c]), ch.pants, (v) => setCharacter({ pants: v }), (v) => `Calças ${v}`);
+    swatches('#char-shoes', CO.SHOE_COLORS.map((c) => [c, c]), ch.shoes, (v) => setCharacter({ shoes: v }), (v) => `Sapatilhas ${v}`);
+    [0, 1].forEach((i) => swatches(`#char-scarf${i}`, CO.SCARF_COLORS.map((c) => [c, c]), ch.scarf[i],
+      (v) => setCharacter({ scarf: i === 0 ? [v, ch.scarf[1]] : [ch.scarf[0], v] }), (v) => `Cachecol, cor ${i + 1}: ${v}`));
+
+    // Escolhas em botões; as bloqueadas com cadeado (tocar explica como desbloquear).
+    const chips = (key) => $(`#char-${key}`).replaceChildren(...LIST_OF[key].map((o) => {
+      const open = isUnlocked(key, o.id, prog);
+      const u = unlockOf(key, o.id);
+      return el('button', {
+        type: 'button',
+        class: `${ch[key] === o.id ? 'on' : ''} ${open ? '' : 'locked'}`.trim(),
+        text: open ? o.label : `🔒 ${o.label}`,
+        'aria-disabled': open ? null : 'true',
+        title: open ? o.label : `${o.label}: ${u.how}`,
+        onclick: () => (open ? setCharacter({ [key]: o.id }) : toast(`🔒 ${o.label}: ${u.how} (${Math.min(prog[u.stat], u.need)}/${u.need}).`)),
+      });
+    }));
+    Object.keys(LIST_OF).forEach(chips);
+    $('#char-phrase').replaceChildren(...CO.PHRASES.map((text, i) => el('button', {
+      type: 'button', class: ch.phrase === i ? 'on' : '', text: `“${text}”`, onclick: () => setCharacter({ phrase: i }),
     })));
-    chips('#char-hat', HATS, 'hat');
-    chips('#char-extra', EXTRAS, 'extra');
+
+    // Número da camisola (só na de futebol) e cores do cachecol (só com o cachecol na mão).
+    $('#char-number-row').hidden = ch.pattern !== 'futebol';
+    $('#char-number').textContent = ch.number;
+    $('#char-scarf-row').hidden = ch.hand !== 'cachecol';
+
+    // Como desbloquear as peças com cadeado desta secção (com o progresso).
+    const locks = CO.UNLOCKS.filter((u) => TAB_KEYS[charTab].includes(u.key) && !isUnlocked(u.key, u.id, prog));
+    $('#char-locks').replaceChildren(...locks.map((u) => el('li', {
+      text: `🔒 ${unlockLabel(u)} — ${u.how} (${Math.min(prog[u.stat], u.need)}/${u.need})`,
+    })));
   }
 
+  for (const b of $$('.char-tabs [data-tab]')) {
+    b.addEventListener('click', () => { charTab = b.dataset.tab; renderCharacterEditor(); });
+  }
+  for (const b of $$('#char-number-row [data-step]')) {
+    b.addEventListener('click', () => {
+      const me = player(state.me);
+      const ch = cleanCharacter(pendingCharacter || me.character || {}) || CO.DEFAULT_CHARACTER;
+      const n = ((ch.number - 1 + Number(b.dataset.step) + 99) % 99) + 1; // 1..99, dá a volta
+      setCharacter({ number: n });
+    });
+  }
+  function stopAction() {
+    actionTimers.forEach(clearTimeout);
+    actionTimers = [];
+    previewAction = null;
+  }
   $('#char-preview').addEventListener('click', () => {
+    stopAction();
     previewPose = (previewPose + 1) % CHAR_POSES.length;
     renderCharacterEditor();
   });
-  $('#char-random').addEventListener('click', () => setCharacter(randomCharacter()));
+  // "Ver em ação": o festejo e, a seguir, a reação de derrota escolhidos; depois volta ao normal.
+  $('#char-action').addEventListener('click', () => {
+    stopAction();
+    previewPose = 0;
+    previewKey = null;
+    previewAction = 'festejar';
+    renderCharacterEditor();
+    actionTimers.push(setTimeout(() => { previewKey = null; previewAction = 'triste'; renderCharacterEditor(); }, 2600));
+    actionTimers.push(setTimeout(() => { previewKey = null; previewAction = null; renderCharacterEditor(); }, 5200));
+  });
+  // Aleatório: todas as peças desbloqueadas.
+  $('#char-random').addEventListener('click', () => { stopAction(); setCharacter(randomCharacter(Math.random, progress())); });
 
   // QR code com o convite (gerado aqui, só quando muda o código da sala).
   const inviteUrl = () => `${location.origin}/?sala=${state.code}`;
@@ -1322,6 +1439,16 @@
 
   function renderEnd() {
     renderScores('#end-scores', { size: 'l' });
+    // Quem ganhou a festejar, com o seu festejo e o animal (só se redesenha se mudar, para a
+    // animação não recomeçar a cada atualização).
+    const top = standingGroups()[0].slice(0, 3);
+    const stage = $('#end-stage');
+    const stageKey = JSON.stringify(top.map((p) => [p.id, p.emoji, p.character]));
+    if (stage.dataset.key !== stageKey) {
+      stage.dataset.key = stageKey;
+      const size = top.length > 2 ? 104 : 132;
+      stage.replaceChildren(...top.map((p) => window.drawCharacter(p, 'festejar', { size, withPet: true })));
+    }
     const winners = standingGroups()[0].map((p) => p.name);
     $('#end-winner').textContent = winners.length === 1
       ? `🏆 ${winners[0]} ganhou!`

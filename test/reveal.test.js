@@ -41,6 +41,20 @@ test('precisão: resposta 0 mede o erro em unidades (sem dividir por zero)', () 
   assert.ok(precisionOf(0.1, 0) < 1);
 });
 
+// --- Gerador com semente (variação determinística dos temas) -------------------------------
+
+test('gerador com semente: a mesma semente dá sempre os mesmos números', () => {
+  const { seeded } = require('../public/reveal/seeded');
+  const a = seeded('ABCD|3|jogador-1');
+  const b = seeded('ABCD|3|jogador-1');
+  const seqA = Array.from({ length: 20 }, a);
+  assert.deepEqual(seqA, Array.from({ length: 20 }, b), 'igual em todos os telemóveis e depois de recarregar');
+  for (const v of seqA) assert.ok(v >= 0 && v < 1);
+  // Outro jogador ou outra ronda: outros números.
+  assert.notDeepEqual(Array.from({ length: 5 }, seeded('ABCD|3|jogador-2')), seqA.slice(0, 5));
+  assert.notDeepEqual(Array.from({ length: 5 }, seeded('ABCD|4|jogador-1')), seqA.slice(0, 5));
+});
+
 // --- Baralho de temas ---------------------------------------------------------------------
 
 // Gerador aleatório com semente, para o teste ser repetível.

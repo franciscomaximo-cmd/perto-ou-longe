@@ -6,7 +6,9 @@
 //
 // Cada id tem de ter o seu ficheiro em public/reveal/<id>.js (registado em
 // public/reveal/index.js); há um teste que confirma isso.
-const REVEAL_THEMES = ['alvo', 'arco', 'bowling', 'karts'];
+// (O tema "alvo" saiu do baralho: continua em public/reveal/alvo.js, na página de
+// pré-visualização e como reserva se chegar um tema desconhecido.)
+const REVEAL_THEMES = ['arco', 'bowling', 'karts', 'penalti'];
 
 // "Baralho" de temas: baralha, tira um por ronda e só volta a baralhar quando todos tiverem
 // saído. O primeiro tema de um baralho novo nunca é igual ao último usado (com 2 ou mais temas).

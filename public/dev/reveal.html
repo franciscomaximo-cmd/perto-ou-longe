@@ -58,6 +58,7 @@
   </style>
 
   <script src="../reveal/precision.js"></script>
+  <script src="../reveal/seeded.js"></script>
   <script src="../reveal/character-options.js"></script>
   <script src="../reveal/character.js"></script>
   <script src="../reveal/index.js"></script>
@@ -65,6 +66,7 @@
   <script src="../reveal/arco.js"></script>
   <script src="../reveal/bowling.js"></script>
   <script src="../reveal/karts.js"></script>
+  <script src="../reveal/penalti.js"></script>
   <script>
     'use strict';
     (() => {
@@ -104,6 +106,10 @@
         'Palpite absurdo': { q: 'Quantas províncias tem o Canadá?', answer: 10, unit: '', guesses: [12, 9, 1247, 15] },
         // Mais de 100% de erro em vários jogadores: falhanços (no "arco", parede e chão).
         'Vários falhanços': { q: 'Quantos dentes tem um adulto?', answer: 32, unit: '', guesses: [500, 2, 30, 90, 12000, 33] },
+        // Rui e Eva falham ambos por 60% (160 e 40): mesma precisão, remates para sítios diferentes.
+        'Mesma precisão': { q: 'Quantos países são membros da ONU?', answer: 100, unit: '', guesses: [101, 160, 40, 300] },
+        // Ana e Rui empatam no mais perto (falham ambos por 5): os dois marcam golo.
+        'Empate no mais perto': { q: 'Quantos ossos tem o corpo humano adulto?', answer: 206, unit: '', guesses: [201, 211, 300, 150] },
       };
 
       // O mesmo que o servidor calcula (distâncias, mais perto, mais longe, em cheio).
@@ -139,7 +145,8 @@
       function render() {
         const { s, r, shown, showCorrect } = current;
         ctl.update({
-          key: `${run}`, theme: $('#theme').value, order: r.order, players: r.players,
+          // Semente = o cenário: "Repetir" mostra exatamente os mesmos remates.
+          key: `${run}`, seed: current.name, theme: $('#theme').value, order: r.order, players: r.players,
           answers: r.answers, distances: r.distances, correct: s.answer, unit: s.unit,
           shown, showCorrect, closest: r.closest, farthest: r.farthest, exact: r.exact,
         });

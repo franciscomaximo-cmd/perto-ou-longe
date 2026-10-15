@@ -878,11 +878,14 @@
     stage: $('#rev-stage'),
     list: $('#rev-guess-list'),
     avatarOf: (id, size) => (player(id) ? avatar(player(id), size) : el('span', { class: `avatar ${size}`, text: '?' })),
+    sound: (name) => play(name), // os temas pedem sons (ex.: 'golo'); quem os toca é o código comum
   });
 
   function renderNumbers(r, order, shown, showCorrect) {
     revealCtl.update({
       key: `${state.code}|${state.round}|${state.question.text}`,
+      // Semente da ronda (igual em todos os telemóveis): os temas juntam-lhe o id do jogador.
+      seed: `${state.code}|${state.round}`,
       theme: state.question.theme,
       order,
       players: Object.fromEntries(state.players.map((p) => [p.id, { id: p.id, name: p.name, color: p.color, emoji: p.emoji, character: p.character }])),
@@ -1085,6 +1088,8 @@
     tick: (c) => tone(c, 700, 0, 0.09, { type: 'triangle', gain: 0.07 }),
     reveal: (c) => { tone(c, 523, 0, 0.14); tone(c, 784, 0.12, 0.25); },
     exact: (c) => [523, 659, 784, 1047].forEach((f, i) => tone(c, f, i * 0.09, 0.22, { type: 'triangle', gain: 0.13 })),
+    // Golo (tema "penálti"): fanfarra curta de festejo.
+    golo: (c) => [392, 523, 659, 784, 659, 784].forEach((f, i) => tone(c, f, i * 0.07, i === 5 ? 0.4 : 0.12, { type: 'square', gain: 0.06 })),
     far: (c) => tone(c, 330, 0, 0.55, { type: 'sawtooth', gain: 0.05, to: 110 }),
   };
   function play(name) {

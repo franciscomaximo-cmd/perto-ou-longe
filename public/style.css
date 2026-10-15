@@ -307,6 +307,39 @@ textarea:focus { border-color: var(--accent); }
   .kart-flag.waving .kart-flag-cloth, .kart-smoke.puff circle { animation: none; }
 }
 
+/* --- Tema "penálti" ------------------------------------------------------------------------ */
+/* Tamanho fixo: largura disponível, no máximo ~45% da altura do ecrã (cena 300 × 300). */
+.pen-scene { display: block; width: min(100%, 45vh); width: min(100%, 45svh); aspect-ratio: 1; border-radius: var(--radius); }
+.pen-plaque { fill: var(--accent); stroke: #c98a00; stroke-width: 1; }
+.pen-plaque-label { fill: var(--accent-ink); font-size: 6.5px; font-weight: 800; letter-spacing: .08em; opacity: .7; }
+.pen-answer { fill: var(--accent-ink); font-size: 13px; font-weight: 800; }
+.pen-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
+/* Marcas: golo (anel verde), defesa (anel branco), fora (anel vermelho tracejado). */
+.pen-mark circle { stroke-width: 1.8; }
+.pen-mark.golo circle { stroke: #3ddc97; stroke-width: 2.4; }
+.pen-mark.defesa circle { stroke: #f8f9fa; }
+.pen-mark.ferro circle, .pen-mark.fora circle { stroke: #ff6b6b; stroke-dasharray: 3 2; }
+.pen-mark.golo { filter: drop-shadow(0 0 3px rgba(61, 220, 151, .9)); }
+.pen-row-player.near { filter: drop-shadow(0 0 5px rgba(61, 220, 151, .95)); }
+.pen-row-player.far { filter: drop-shadow(0 0 4px rgba(255, 107, 107, .95)); }
+/* Rede a abanar no golo (algumas vezes, e para). */
+.pen-net { transform-box: fill-box; transform-origin: 50% 0; }
+.pen-net.ripple { animation: pen-ripple .16s ease-in-out 6 alternate; }
+@keyframes pen-ripple { from { transform: scale(1, 1); } to { transform: scale(1.025, 1.06); } }
+/* Texto do resultado de cada remate: aparece e desaparece (uma vez). */
+.pen-fx-text { font-size: 17px; font-weight: 900; stroke: #1d1846; stroke-width: 3.5px; paint-order: stroke; animation: pen-fx .9s ease-out forwards; }
+.pen-fx-text.golo { fill: var(--accent); }
+.pen-fx-text.defesa { fill: #f8f9fa; }
+.pen-fx-text.fora { fill: #ffa8a8; }
+@keyframes pen-fx { 0% { opacity: 0; } 15% { opacity: 1; } 70% { opacity: 1; } 100% { opacity: 0; } }
+/* Soco ou desvio: a bola sai disparada e desaparece. */
+.pen-deflect { animation: pen-deflect .28s ease-out forwards; }
+@keyframes pen-deflect { to { transform: translate(var(--dx, 30px), var(--dy, -20px)); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .pen-net.ripple, .pen-deflect { animation: none; }
+  .pen-fx-text { display: none; }
+}
+
 /* Mostrado sem animação (entrou a meio, "Saltar" ou movimento reduzido). */
 .tgt-player.instant, .tgt-center.instant { animation: none; }
 .tgt-board {

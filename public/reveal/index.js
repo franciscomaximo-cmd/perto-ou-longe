@@ -9,12 +9,18 @@
  *
  * Interface de cada tema (um ficheiro por tema em public/reveal/<id>.js, registado com
  * RevealThemes.register(id, () => ({ ... }))):
- *   mount(container, { players, answer, unit, kit })
+ *   mount(container, { players, answer, unit, kit, result, seed })
  *       Desenha o cenário vazio. `players` vem já na ordem da revelação (do mais longe para o
  *       mais perto), cada um com { id, name, color, emoji, character, value, precision,
- *       avatar(size) }, para o tema poder planear o espaço de todos desde o início.
+ *       closest, avatar(size) }, para o tema poder planear o espaço de todos desde o início.
+ *       `result` = { closest, farthest, exact } (listas de ids) é o que o SERVIDOR calculou:
+ *       os temas usam-no tal como vem (ex.: quem marca golo), nunca o recalculam.
+ *       `seed` identifica a ronda: para variar a animação, os temas usam
+ *       RevealSeeded.seeded(`${seed}|${id}`) (public/reveal/seeded.js), nunca Math.random(),
+ *       para todos os telemóveis (e quem recarrega) verem exatamente o mesmo.
  *       O boneco de cada jogador desenha-se SEMPRE com kit.drawCharacter(player, pose, opções)
- *       (public/reveal/character.js); os temas só escolhem a pose.
+ *       (public/reveal/character.js); os temas só escolhem a pose. Para um som, o tema pede-o
+ *       ao código comum com kit.sound(nome) (ex.: 'golo').
  *   revealPlayer(player, precision, info)
  *       Anima a vez de UM jogador. info = { value, distance, exact, index, total, instant }.
  *       Com instant = true mostra o resultado final sem animação.
@@ -104,7 +110,9 @@
   // Recebe o estado da revelação (o passo vem do servidor) e traduz em chamadas ao tema. Também
   // desenha a lista ordenada por baixo da animação. `avatarOf(id, size)` desenha o avatar
   // (no jogo, com o anel do "tu" e a coroa do anfitrião).
-  function createController({ stage, list, avatarOf }) {
+  function createController({ stage, list, avatarOf, sound = null }) {
+    // Sons pedidos pelos temas (tocados pelo código comum, se houver; na pré-visualização, não).
+    const themeKit = { ...kit, sound: (name) => { if (sound) sound(name); } };
     let theme = null;
     let key = null;
     let revealed = 0;
@@ -119,8 +127,9 @@
     }
 
     /**
-     * r = { key, theme, order, players: { id: {id, name, color, emoji} }, answers, distances,
-     *       correct, unit, shown, showCorrect, closest, farthest, exact }
+     * r = { key, seed, theme, order, players: { id: {id, name, color, emoji} }, answers,
+     *       distances, correct, unit, shown, showCorrect, closest, farthest, exact }
+     * `seed` (igual em todos os telemóveis; por omissão, a key) alimenta a variação dos temas.
      * `order` vem do mais longe para o mais perto; `shown` = quantos palpites já se veem.
      */
     function update(r) {
@@ -136,9 +145,17 @@
           id,
           value: r.answers[id],
           precision: precisionOf(r.answers[id], r.correct),
+          closest: r.closest.includes(id),
           avatar: (size) => avatarOf(id, size),
         }));
-        theme.mount(stage, { players, answer: r.correct, unit: r.unit, kit });
+        theme.mount(stage, {
+          players,
+          answer: r.correct,
+          unit: r.unit,
+          kit: themeKit,
+          result: { closest: [...r.closest], farthest: [...r.farthest], exact: [...(r.exact || [])] },
+          seed: String(r.seed ?? r.key),
+        });
         // Lista com uma linha por palpite desde o início (escondida), para não empurrar a página.
         const byDistance = [...r.order].sort((a, b) => r.distances[a] - r.distances[b]);
         list.replaceChildren(...byDistance.map((id) => el('li', { 'data-id': id }, [

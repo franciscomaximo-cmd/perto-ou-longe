@@ -178,15 +178,21 @@
 
     <!-- Responder -->
     <section id="screen-answer" class="screen" hidden>
-      <p id="ans-tiebreak" class="card center" hidden></p>
-      <p id="ans-cat" class="cat-label"></p>
-      <p id="ans-question" class="question"></p>
-      <p id="ans-unit" class="unit"></p>
+      <p id="ans-tiebreak" class="card center paper" hidden></p>
+      <!-- A pergunta escrita a giz no quadro do "Prato do dia", com a categoria num papel colado. -->
+      <div class="slate board">
+        <p class="board-title" data-t="pratoDoDia">Prato do dia</p>
+        <p id="ans-cat" class="cat-label"></p>
+        <p id="ans-question" class="question"></p>
+        <p id="ans-unit" class="unit"></p>
+      </div>
 
-      <form id="ans-form" autocomplete="off">
+      <!-- O palpite num bloco de pedidos. -->
+      <form id="ans-form" class="order-pad paper" autocomplete="off">
+        <p class="pad-title" data-t="oTeuPedido">O teu pedido</p>
         <input id="ans-input" class="number-input" inputmode="decimal" placeholder="O teu palpite" enterkeyhint="send">
         <p id="ans-preview" class="hint center"></p>
-        <button class="primary" type="submit">Responder</button>
+        <button class="primary" type="submit" data-t="estaDito">Está dito!</button>
       </form>
       <div id="ans-map" class="map-wrap" hidden>
         <div class="map-box"><div class="map-inner"><div class="pins"></div></div></div>
@@ -194,16 +200,16 @@
           <button type="button" data-zoom="-1" aria-label="Afastar">−</button>
           <button type="button" data-zoom="1" aria-label="Aproximar">+</button>
         </div>
-        <button id="btn-map-answer" class="primary" type="button" disabled>Responder</button>
+        <button id="btn-map-answer" class="primary" type="button" disabled>Está dito!</button>
       </div>
-      <div id="ans-done" class="card center" hidden>
-        <p class="label">O teu palpite</p>
+      <div id="ans-done" class="order-pad paper center" hidden>
+        <p class="pad-title" data-t="oTeuPedido">O teu pedido</p>
         <p id="ans-mine" class="big-number"></p>
       </div>
       <p id="ans-watch" class="hint center" hidden>Não estás neste desempate. Fica a ver quem fica à frente.</p>
-      <p id="ans-author" class="card center" hidden>Esta pergunta é tua! Não respondes, mas vais poder votar em quem ficou mais longe.</p>
+      <p id="ans-author" class="card center paper" hidden>Esta pergunta é tua! Não respondes, mas vais poder votar em quem ficou mais longe.</p>
 
-      <h3>Quem já respondeu</h3>
+      <h3 data-t="quemJaPediu">Quem já pediu</h3>
       <ul id="ans-progress" class="players"></ul>
       <button class="ghost btn-force" hidden>Avançar já</button>
     </section>
@@ -211,12 +217,12 @@
     <!-- Votar -->
     <section id="screen-vote" class="screen" hidden>
       <p id="vote-question" class="question small"></p>
-      <h2 class="center">Quem ficou mais longe?</h2>
-      <p class="hint center">Os palpites só são revelados no fim. Confia no teu instinto.</p>
+      <h2 class="center vote-title" data-t="votarTitulo">Quem é que disse a maior barbaridade?</h2>
+      <p class="hint center" data-t="votarDica">Vota em quem achas que ficou mais longe. Os palpites só se veem no fim.</p>
 
       <div id="vote-options" class="options"></div>
-      <button id="btn-vote" class="primary" disabled>Confirmar voto</button>
-      <p id="vote-status" class="card center" hidden></p>
+      <button id="btn-vote" class="primary" disabled data-t="vaiDisto">Vai disto!</button>
+      <p id="vote-status" class="card center paper" hidden></p>
 
       <h3>Quem já votou</h3>
       <ul id="vote-progress" class="players"></ul>
@@ -231,9 +237,10 @@
       <!-- Perguntas de números: o tema da ronda desenha-se em #rev-stage (public/reveal/);
            a lista por baixo é comum a todos os temas. -->
       <div id="rev-numbers" class="target-wrap" hidden>
-        <div id="rev-stage" class="reveal-stage"></div>
+        <!-- O cenário do tema aparece na televisão pendurada na parede da tasca (moldura comum). -->
+        <div id="rev-stage" class="reveal-stage tv"></div>
         <!-- Só o anfitrião: logo a seguir ao cenário (nas de mapa, client.js muda-o para lá). -->
-        <button id="btn-step" class="primary" hidden>Saltar</button>
+        <button id="btn-step" class="primary" hidden data-t="despacha">Despacha!</button>
         <ol id="rev-guess-list" class="target-list"></ol>
       </div>
       <div id="rev-map" class="map-wrap" hidden>
@@ -249,16 +256,19 @@
 
       <!-- 2. Resposta certa (e uma curiosidade, se houver) -->
       <div id="rev-answer" class="answer-box reveal-in" hidden>
-        <span class="label">Resposta certa</span>
+        <span class="label" data-t="contaCerta">A conta certa:</span>
         <strong id="rev-correct"></strong>
       </div>
       <p id="rev-curiosity" class="curiosity reveal-in" hidden></p>
 
-      <!-- 3. Pontos e classificação, no topo dos resultados -->
+      <!-- 3. Pontos e classificação ("As contas da casa", num talão), no topo dos resultados -->
       <div id="rev-points-box" class="reveal-in stack" hidden>
         <p id="rev-mine" class="mine"></p>
-        <h3>Classificação</h3>
-        <ol id="rev-scores" class="scores"></ol>
+        <div class="receipt paper">
+          <h3 class="receipt-title" data-t="contasDaCasa">As contas da casa</h3>
+          <ol id="rev-scores" class="scores"></ol>
+          <p class="receipt-total"><span data-t="totalMesa">Total da mesa</span> <b></b></p>
+        </div>
         <button id="btn-next" class="primary" hidden></button>
         <h3>Esta ronda</h3>
         <ul id="rev-list" class="results"></ul>
@@ -279,31 +289,39 @@
       <h2 class="center">Desempate</h2>
       <p id="tbr-question" class="question small"></p>
       <div class="answer-box">
-        <span class="label">Resposta certa</span>
+        <span class="label" data-t="contaCerta">A conta certa:</span>
         <strong id="tbr-correct"></strong>
       </div>
       <p id="tbr-curiosity" class="curiosity" hidden></p>
       <ul id="tbr-list" class="results"></ul>
       <p id="tbr-status" class="hint"></p>
 
-      <h3>Classificação</h3>
-      <ol id="tbr-scores" class="scores"></ol>
+      <div class="receipt paper">
+        <h3 class="receipt-title" data-t="contasDaCasa">As contas da casa</h3>
+        <ol id="tbr-scores" class="scores"></ol>
+        <p class="receipt-total"><span data-t="totalMesa">Total da mesa</span> <b></b></p>
+      </div>
       <button id="btn-tb-next" class="primary" hidden></button>
       <p id="tbr-hint" class="hint center"></p>
     </section>
 
     <!-- Fim -->
     <section id="screen-end" class="screen" hidden>
-      <h1 class="logo small">Fim do jogo</h1>
+      <div class="tiles" aria-hidden="true"></div>
+      <h1 class="end-title" data-t="fechaConta">Fecha a conta!</h1>
       <!-- Quem ganhou, em grande, a festejar (com o animal de estimação). -->
       <div id="end-stage" class="end-stage" aria-hidden="true"></div>
       <p id="end-winner" class="winner"></p>
-      <ol id="end-scores" class="scores"></ol>
-      <h3 id="end-awards-title">Prémios</h3>
+      <div class="receipt paper">
+        <h3 class="receipt-title" data-t="contasDaCasa">As contas da casa</h3>
+        <ol id="end-scores" class="scores"></ol>
+        <p class="receipt-total"><span data-t="totalMesa">Total da mesa</span> <b></b></p>
+      </div>
+      <h3 id="end-awards-title" data-t="brindes">Brindes da casa</h3>
       <div id="end-awards" class="awards"></div>
-      <button id="btn-again" class="primary" hidden>Jogar de novo</button>
+      <button id="btn-again" class="primary" hidden data-t="maisUmaRodada">Mais uma rodada!</button>
       <p id="end-hint" class="hint center"></p>
-      <button class="ghost btn-leave">Sair da sala</button>
+      <button class="ghost btn-leave" data-t="levantar">Levantar da mesa</button>
     </section>
   </main>
 

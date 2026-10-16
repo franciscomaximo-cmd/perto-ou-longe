@@ -6,6 +6,8 @@
   <meta name="robots" content="noindex">
   <title>Pré-visualização das revelações · Mais Coisa, Menos Coisa</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🛠️%3C/text%3E%3C/svg%3E">
+  <!-- As letras do jogo (para a legenda e o resumo ficarem iguais aos do jogo). -->
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Caveat+Brush&display=swap">
   <link rel="stylesheet" href="../style.css">
   <style>
     /* Só para esta página de desenvolvimento. */
@@ -36,12 +38,14 @@
       <p class="dev-note">Legendas (comuns a todos os temas): na vez de cada um, a legenda com o palpite na faixa
         de cima; no fim da vez, a etiqueta com o palpite no cenário; com a resposta certa, a diferença
         nas etiquetas e o resumo "Mais perto / Mais longe". "Todos os temas" mostra o cenário escolhido
-        em cada tema, um a seguir ao outro.</p>
+        em cada tema, um a seguir ao outro. O cenário aparece na moldura comum do jogo (a
+        televisão de madeira da tasca).</p>
 
       <p id="question" class="question small"></p>
       <!-- Introdução do tema (no jogo aparece antes da revelação, nos ecrãs de responder e votar). -->
       <div class="target-wrap">
-        <div id="rev-stage" class="reveal-stage"></div>
+        <!-- A mesma moldura do jogo: a televisão pendurada na parede da tasca. -->
+        <div id="rev-stage" class="reveal-stage tv"></div>
         <ol id="rev-guess-list" class="target-list"></ol>
       </div>
       <div class="answer-box"><span class="label">Resposta certa</span><strong id="answer">?</strong></div>

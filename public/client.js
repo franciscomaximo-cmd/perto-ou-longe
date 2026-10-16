@@ -50,6 +50,28 @@
     esperaAnfitriao: 'Estás servido. À espera que o anfitrião comece o jogo…',
     regrasMudaram: 'O anfitrião mudou a ementa. Vê a configuração e diz outra vez que estás servido.',
     perguntaPrimeiro: 'Escreve primeiro a tua pergunta para ficares servido.',
+    // Pergunta e resposta
+    pratoDoDia: 'Prato do dia',
+    oTeuPedido: 'O teu pedido',
+    estaDito: 'Está dito!',
+    tocaNoMapa: 'Toca no mapa para escolher',
+    quemJaPediu: 'Quem já pediu',
+    // Votação
+    votarTitulo: 'Quem é que disse a maior barbaridade?',
+    votarDica: 'Vota em quem achas que ficou mais longe. Os palpites só se veem no fim.',
+    vaiDisto: 'Vai disto!',
+    // Revelação
+    despacha: 'Despacha!',
+    contaCerta: 'A conta certa:',
+    // Classificação e fim do jogo
+    contasDaCasa: 'As contas da casa',
+    totalMesa: 'Total da mesa',
+    pontos: (n) => `${n} ${n === 1 ? 'ponto' : 'pontos'}`,
+    fechaConta: 'Fecha a conta!',
+    ganhou: (name) => `🏆 ${name} paga a próxima rodada!`,
+    empate: (names, last) => `🏆 Empate entre ${names} e ${last}: pagam a próxima rodada a meias!`,
+    brindes: 'Brindes da casa',
+    maisUmaRodada: 'Mais uma rodada!',
   };
   for (const node of document.querySelectorAll('[data-t]')) {
     const value = TEXTOS[node.dataset.t];
@@ -562,7 +584,8 @@
     $('#topbar').hidden = !state;
     if (!state) return;
     $('#tb-code').textContent = state.code;
-    $('#tb-round').textContent = state.phase === 'end' ? 'Fim do jogo'
+    // No fim e na sala de espera, o título está na própria página ("Fecha a conta!", "À mesa").
+    $('#tb-round').textContent = state.phase === 'end' ? ''
       : state.tiebreak ? `Desempate${state.tiebreak.number > 1 ? ` ${state.tiebreak.number}` : ''}`
       : inGame && state.round ? `Pergunta ${state.round} de ${state.totalRounds}`
       : ''; // na sala de espera, o título "À mesa" está na própria página
@@ -1084,7 +1107,7 @@
       $('#ans-map .pins').replaceChildren(...(point ? [pin(point, '', '', colorOf(state.me))] : []));
       $('#btn-map-answer').hidden = answered;
       $('#btn-map-answer').disabled = !mapPick;
-      $('#btn-map-answer').textContent = mapPick ? 'Responder' : 'Toca no mapa para escolher';
+      $('#btn-map-answer').textContent = mapPick ? TEXTOS.estaDito : TEXTOS.tocaNoMapa;
     } else if (answered) {
       $('#ans-mine').textContent = withUnit(state.myAnswer, state.question.unit);
     }
@@ -1165,6 +1188,9 @@
     const prevScores = gained ? state.players.map((p) => p.score - (gained[p.id] || 0)) : [];
     const before = gained && new Set(prevScores).size > 1 ? positionsBy((p) => p.score - (gained[p.id] || 0)) : null;
     const list = $(sel);
+    // Total em baixo do talão ("As contas da casa"): os pontos de toda a mesa.
+    const total = list.closest('.receipt') && list.closest('.receipt').querySelector('.receipt-total b');
+    if (total) total.textContent = TEXTOS.pontos(state.players.reduce((sum, p) => sum + p.score, 0));
     list.replaceChildren(...rows.map(({ p, position, first }) => {
       const classes = [p.id === state.me ? 'me' : '', first ? 'first' : ''].join(' ');
       const moved = before ? before.pos[p.id] - position : 0;
@@ -1669,8 +1695,8 @@
     }
     const winners = standingGroups()[0].map((p) => p.name);
     $('#end-winner').textContent = winners.length === 1
-      ? `🏆 ${winners[0]} ganhou!`
-      : `🏆 Empate entre ${winners.slice(0, -1).join(', ')} e ${winners[winners.length - 1]}!`;
+      ? TEXTOS.ganhou(winners[0])
+      : TEXTOS.empate(winners.slice(0, -1).join(', '), winners[winners.length - 1]);
     renderAwards();
     $('#btn-again').hidden = !isHost();
     $('#end-hint').textContent = isHost() ? '' : 'O anfitrião pode começar um novo jogo.';

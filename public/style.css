@@ -1196,3 +1196,115 @@ body.has-actions #toast { bottom: calc(132px + env(safe-area-inset-bottom)); }
   box-shadow: 0 6px 24px rgba(0, 0, 0, .35);
   z-index: 10;
 }
+
+/* =====================================================================================
+   Estilo "tasca" no resto do jogo (as mesmas variáveis do início do ficheiro)
+   ===================================================================================== */
+
+/* --- Pergunta: escrita a giz no quadro do "Prato do dia" --- */
+.board { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 16px 16px; }
+.board-title { margin: 0; font-family: var(--letra-titulo); font-size: 1.55rem; line-height: 1.1; color: var(--palha); }
+.board .question { color: var(--giz); margin: 2px 0 0; }
+.board .unit { color: var(--palha); }
+/* A categoria num papelinho colado com fita-cola. */
+.cat-label {
+  position: relative; margin: 4px 0 2px; transform: rotate(-2deg);
+  color: var(--tinta); background: var(--papel); border-radius: 2px; padding: 4px 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, .35);
+}
+.cat-label::before {
+  content: ""; position: absolute; left: 50%; top: -7px; width: 38px; height: 12px; transform: translateX(-50%) rotate(3deg);
+  background: rgba(243, 234, 215, .55); border: 1px solid rgba(255, 255, 255, .35);
+}
+
+/* --- Palpite: bloco de pedidos (papel com linhas e argolas em cima) --- */
+.order-pad {
+  display: flex; flex-direction: column; gap: 10px; position: relative;
+  padding: 26px 16px 16px; border-radius: 4px 4px 8px 8px;
+  background:
+    radial-gradient(circle at 12px 9px, var(--ardosia) 4px, transparent 4.5px) 0 0 / 34px 18px repeat-x,
+    linear-gradient(var(--tinto) 0 18px, transparent 18px),
+    repeating-linear-gradient(transparent 0 31px, rgba(29, 79, 145, .16) 31px 32px),
+    var(--papel);
+}
+.pad-title { margin: 0; font-family: var(--letra-titulo); font-size: 1.4rem; color: var(--tinto); }
+.order-pad .number-input { background: #fffaf0; }
+.order-pad .big-number { color: var(--tinta); margin: 0; }
+
+/* --- Votação --- */
+.vote-title { font-size: 1.9rem; line-height: 1.15; color: var(--giz); }
+
+/* --- Revelação: o cenário na televisão pendurada na parede da tasca --- */
+.reveal-stage.tv {
+  padding: 10px; border-radius: 22px;
+  background: var(--tex-madeira);
+  box-shadow: inset 0 0 0 3px var(--madeira-escura), inset 0 2px 0 rgba(255, 255, 255, .18), 0 12px 24px rgba(0, 0, 0, .5);
+}
+.reveal-stage.tv.has-captions { padding-top: 62px; }
+.reveal-stage.tv .rv-caption { top: 6px; }
+/* O vidro do ecrã: um rebordo escuro à volta do cenário. */
+.reveal-stage.tv > svg, .reveal-stage.tv > .tgt-board { box-shadow: 0 0 0 4px #141819, 0 0 0 6px rgba(0, 0, 0, .35); border-radius: 10px; }
+/* Legenda da vez e resumo final: em papel, com as letras da casa. */
+.rv-caption-box { background: var(--papel); color: var(--tinta); }
+.rv-caption-name { color: #6a5646; font-family: var(--letra-titulo); font-weight: 400; font-size: 1.25rem; }
+.rv-caption-value { color: var(--tinta); }
+.rv-summary { background: var(--papel); color: var(--tinta); }
+.rv-summary .near b { color: var(--garrafa); }
+.rv-summary .far b { color: var(--tinto); }
+
+/* --- A conta certa: um papelinho de conta, com a resposta em grande --- */
+.answer-box {
+  background: var(--papel); color: var(--tinta);
+  border: 2px dashed rgba(122, 31, 43, .45); outline: 6px solid var(--papel); outline-offset: -1px;
+  margin: 6px; box-shadow: 0 6px 16px rgba(0, 0, 0, .35); border-radius: 6px;
+}
+.answer-box .label {
+  opacity: 1; color: var(--tinto); font-family: var(--letra-titulo); font-size: 1.5rem;
+  text-transform: none; letter-spacing: 0;
+}
+
+/* --- As contas da casa: talão de papel com linhas tracejadas e o total em baixo --- */
+.receipt {
+  padding: 14px 18px 24px;
+  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 16px 100%;
+  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 16px 100%;
+  border-radius: 4px 4px 0 0;
+}
+.receipt-title {
+  margin: 0 0 6px; text-align: center; text-transform: none; letter-spacing: 0;
+  font-family: var(--letra-titulo); font-weight: 400; font-size: 1.6rem; color: var(--tinto);
+  padding-bottom: 6px; border-bottom: 2px dashed var(--line);
+}
+.receipt .scores { gap: 0; }
+.receipt .scores li { background: transparent; border-radius: 0; padding: 8px 2px; border-bottom: 1px dashed var(--line); }
+.receipt .scores li.first { background: linear-gradient(90deg, rgba(230, 193, 90, .45), transparent 85%); }
+.receipt .scores li.me { outline: 0; box-shadow: inset 4px 0 0 var(--tinto); padding-left: 10px; }
+.receipt-total {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  margin: 8px 0 0; padding-top: 8px; border-top: 3px double var(--tinta);
+  font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: .9rem;
+}
+.receipt-total b { font-size: 1.1rem; text-transform: none; letter-spacing: 0; }
+
+/* --- Fecha a conta! --- */
+.end-title { font-size: 2.8rem; text-align: center; color: var(--giz); margin: 4px 0 0; }
+.winner { font-family: var(--letra-titulo); font-weight: 400; font-size: 1.6rem; line-height: 1.2; color: var(--palha); }
+/* Brindes da casa: guardanapos de papel. */
+.award { background: var(--papel); color: var(--tinta); border: 1px solid #cdbb98; box-shadow: 0 4px 12px rgba(0, 0, 0, .3); }
+.award .title { color: var(--tinto); }
+.award .why { color: #6a5646; }
+.award.me { border: 2px solid var(--tinto); }
+
+/* --- Mapa antigo / papel de embrulho: terra cor de pergaminho, mar esverdeado --- */
+.map-box {
+  border: 3px solid var(--madeira);
+  background:
+    radial-gradient(70% 60% at 30% 25%, rgba(255, 255, 255, .22), transparent 70%),
+    radial-gradient(60% 50% at 80% 80%, rgba(62, 39, 22, .12), transparent 70%),
+    #9fbdb8;
+}
+.map-inner path { fill: #f2e3c0; stroke: #8a6a45; }
+.map-inner path.target { fill: var(--near); stroke: var(--garrafa); }
+@media (max-width: 599px) {
+  .map-box { border-left: 0; border-right: 0; }
+}

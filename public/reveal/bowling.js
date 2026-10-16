@@ -106,6 +106,15 @@
       later(() => g.remove(), perfect ? 1500 : 1300);
     }
 
+    // O "mais longe" (bola na caleira): "CALEIRA!", no momento em que a bola chega ao fim.
+    function gutterFx() {
+      const g = s('g', { class: 'bowl-strike gutter', transform: `translate(${VW / 2} 46)` }, [
+        text({ x: 0, y: 5, 'text-anchor': 'middle', class: 'bowl-strike-text' }, 'CALEIRA!'),
+      ]);
+      fxLayer.append(g);
+      later(() => g.remove(), 1300);
+    }
+
     // O boneco de cada jogador desenha-se sempre com o drawCharacter (o tema só escolhe a pose).
     // A versão pequena (sem capa) só com mais de 6 jogadores.
     // Cada jogador só aparece uma vez no cenário: quem está em grande ao lado da pista fica, na
@@ -289,6 +298,7 @@
           ball.classList.add('gone');
           if (n) knock(n, true, speed);
           if (n === 10) strikeFx(player.show.exact);
+          else if (player.show.farthest) gutterFx();
           later(() => { if (!done) { done = true; current = null; ball.remove(); record(player.id, n); } }, (9 * PIN_GAP_MS + FALL_MS) * speed);
         };
         current = { frame: requestAnimationFrame(frame), finish };

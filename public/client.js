@@ -453,29 +453,6 @@
     setTimeout(go, 150);
   }
 
-  // Tema que precisa de explicação (ex.: a malha), na primeira vez que sai neste dispositivo:
-  // a explicação aparece nos ecrãs de responder e votar dessa ronda, ANTES da revelação (nunca
-  // por cima da cena). Fica vista quando a revelação dessa ronda começa.
-  const SEEN_THEMES_KEY = 'pertoOuLonge.temasExplicados';
-  function renderThemeIntro(phase) {
-    const theme = state && state.question && state.question.theme;
-    const intro = theme && window.RevealThemes.introOf(theme);
-    const seen = load(SEEN_THEMES_KEY) || [];
-    if (intro && phase === 'reveal' && !seen.includes(theme)) store(SEEN_THEMES_KEY, [...seen, theme]);
-    const show = Boolean(intro) && !seen.includes(theme) && (phase === 'answering' || phase === 'voting');
-    for (const sel of ['#ans-intro', '#vote-intro']) {
-      const box = $(sel);
-      box.hidden = !show;
-      if (show && box.dataset.theme !== theme) {
-        box.dataset.theme = theme;
-        box.replaceChildren(el('span', { class: 'icon', text: '💡', 'aria-hidden': 'true' }), el('div', {}, [
-          el('b', { text: `Nesta ronda: ${theme.charAt(0).toUpperCase()}${theme.slice(1)}` }),
-          el('p', { text: intro }),
-        ]));
-      }
-    }
-  }
-
   function render() {
     const phase = state ? state.phase : 'home';
     // De volta à sala de espera depois de um jogo: a pergunta antiga já foi usada.
@@ -501,7 +478,6 @@
     }
     // A barra fixa do fundo só existe na sala de espera (o aviso sobe para não a tapar).
     document.body.classList.toggle('has-actions', phase === 'lobby');
-    renderThemeIntro(phase);
     lastPhase = phase;
     trackProgress(); // feitos para os desbloqueáveis do boneco
     for (const sel of new Set(Object.values(SCREENS))) $(sel).hidden = sel !== SCREENS[phase];
@@ -803,7 +779,8 @@
     $('#char-editor').hidden = false;
     document.body.classList.add('sheet-open');
     $('#char-editor-body').scrollTop = 0;
-    $('.char-stage').classList.remove('compact');
+    $('#char-editor-body').classList.remove('compact');
+    keepCompact = false;
     renderCharacterEditor();
     $('#char-save').focus();
   }
@@ -828,9 +805,14 @@
   $('#char-save').addEventListener('click', saveEditor);
   $('#char-cancel').addEventListener('click', closeEditor);
   $('#char-editor').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEditor(); });
-  // No telemóvel, a pré-visualização fixa no topo encolhe um pouco quando se faz scroll.
+  // No telemóvel, a zona fixa no topo (boneco e separadores) encolhe quando se faz scroll e
+  // só volta ao tamanho normal lá em cima (com folga, para não ficar a piscar). Depois de mudar
+  // de separador já encolhida (`keepCompact`), fica encolhida até se voltar a descer.
+  let keepCompact = false;
   $('#char-editor-body').addEventListener('scroll', () => {
-    $('.char-stage').classList.toggle('compact', $('#char-editor-body').scrollTop > 24);
+    const body = $('#char-editor-body');
+    if (body.scrollTop > 24) { body.classList.add('compact'); keepCompact = false; }
+    else if (body.scrollTop < 4 && !keepCompact) body.classList.remove('compact');
   }, { passive: true });
 
   function renderPreview(me, ch) {
@@ -922,7 +904,16 @@
   }
 
   for (const b of $$('.char-tabs [data-tab]')) {
-    b.addEventListener('click', () => { charTab = b.dataset.tab; renderCharacterEditor(); });
+    b.addEventListener('click', () => {
+      charTab = b.dataset.tab;
+      renderCharacterEditor();
+      // Os separadores estão na zona fixa: se já se tinha descido, o separador novo começa do
+      // início, logo por baixo dela, e a zona continua encolhida.
+      const body = $('#char-editor-body');
+      if (!body.classList.contains('compact')) return;
+      keepCompact = true;
+      body.scrollTop = 0;
+    });
   }
   for (const b of $$('#char-number-row [data-step]')) {
     b.addEventListener('click', () => {
@@ -1169,7 +1160,7 @@
 
   // --- Revelação em passos -------------------------------------------------
   // O servidor diz em que passo vamos (r.step de r.steps) e avança sozinho; com n palpites:
-  // passos 1..n mostram os palpites do mais longe para o mais perto, n+1 a resposta certa e
+  // passos 1..n mostram os palpites pela ordem do servidor (r.order), n+1 a resposta certa e
   // n+2 os pontos, a classificação e os votos.
 
   // --- Revelação das perguntas de números: tema escolhido pelo servidor ----------------
@@ -1446,8 +1437,9 @@
     const isMap = state.question.type === 'map';
     $('#rev-question').textContent = state.question.text;
 
-    // Ordem da revelação: do mais longe para o mais perto.
-    const order = Object.keys(r.answers).sort((a, b) => r.distances[b] - r.distances[a]);
+    // Ordem da revelação: a do servidor (aleatória nas perguntas de números, igual para todos;
+    // do mais longe para o mais perto nas de mapa).
+    const order = r.order || Object.keys(r.answers).sort((a, b) => r.distances[b] - r.distances[a]);
     // Passos: n palpites, a resposta certa, os votos (só se houve votação) e os pontos.
     // Sem respostas, o servidor já começa no último passo.
     const n = order.length;
@@ -1465,7 +1457,7 @@
     // acompanha a revelação e dá lugar aos cartões "Esta ronda" no fim.
     $('#rev-map-list').hidden = showPoints;
     $('#rev-progress').textContent = n === 0 ? 'Ninguém respondeu a esta pergunta.'
-      : shown < n ? `Palpite ${shown} de ${n} (do mais longe para o mais perto)` : '';
+      : shown < n ? `Palpite ${shown} de ${n}${isMap ? ' (do mais longe para o mais perto)' : ''}` : '';
 
     // Nas perguntas de mapa o país já aparece pintado desde o início.
     const answerBox = $('#rev-answer');
@@ -1488,10 +1480,11 @@
     // A revelação corre sozinha; o anfitrião pode saltar enquanto ainda há palpites por
     // mostrar. Depois só lhe resta "Próxima pergunta".
     const host = isHost();
-    $('#btn-step').hidden = !host || showCorrect;
-    // Espaço livre no fim da página com a altura do botão "Saltar" (que está fixo ao fundo).
-    $('#screen-reveal').classList.toggle('has-skip', !$('#btn-step').hidden);
-    if (!$('#btn-step').hidden) $('#screen-reveal').style.setProperty('--skip-h', `${$('#btn-step').offsetHeight}px`);
+    // "Saltar" fica logo a seguir ao cenário (no fluxo da página: nunca tapa a lista).
+    const stepBtn = $('#btn-step');
+    const stepAfter = isMap ? $('#rev-map .map-zoom') : $('#rev-stage');
+    if (stepBtn.previousElementSibling !== stepAfter) stepAfter.after(stepBtn);
+    stepBtn.hidden = !host || showCorrect;
     $('#btn-next').hidden = !host || !showPoints;
     $('#rev-hint').textContent = host || showPoints ? '' : 'A revelar os palpites…';
     if (!showPoints) return;

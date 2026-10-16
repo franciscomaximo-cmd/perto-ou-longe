@@ -188,6 +188,17 @@
       timers.add(t);
     }
 
+    // Vencedor (sem ser "em cheio"): anel e "NO CENTRO!" por baixo do alvo, quando a seta crava.
+    function winFx(to) {
+      const g = s('g', { class: 'arco-exact' }, [
+        s('circle', { cx: to.x, cy: to.y, r: 5, class: 'arco-hit' }),
+        s('text', { x: TARGET.x, y: TARGET.y + TARGET.r + 3, 'text-anchor': 'middle', class: 'arco-exact-text win' }, [document.createTextNode('NO CENTRO!')]),
+      ]);
+      fxLayer.append(g);
+      const t = setTimeout(() => { g.remove(); timers.delete(t); }, 1400);
+      timers.add(t);
+    }
+
     return {
       mount(container, { players, kit: k, seed }) {
         kit = k;
@@ -331,6 +342,7 @@
           flights.delete(player.id);
           settle(node, player.id);
           if (player.show.exact) exactFx(node, to);
+          else if (player.show.winner) winFx(to);
           else if (to.where === 'alvo') hitFx(to);
           else missFx(to);
         };

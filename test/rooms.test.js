@@ -198,6 +198,58 @@ test('uma ronda completa: responder, votar, revelar e pontuar', () => {
   assert.equal(room.stateFor(rui).result.answers[eva], correct + 1000);
 });
 
+// Joga uma ronda de números com palpites todos diferentes (o 1.º jogador fica mais perto) e
+// para na revelação.
+function revealNumberRound(room, ids) {
+  room.current.question = NUMBER_QUESTION;
+  ids.forEach((id, i) => room.submitAnswer(id, NUMBER_QUESTION.answer + i * 7));
+  room.forceAdvance(ids[0]);
+  assert.equal(room.phase, 'reveal');
+}
+
+test('ordem da revelação: escolhida pelo servidor, igual para todos os clientes (e ao recarregar)', () => {
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó', 'Lia', 'Zé']);
+  startGame(room, ids[0]);
+  revealNumberRound(room, ids);
+  const order = room.stateFor(ids[0]).result.order;
+  assert.deepEqual([...order].sort(), [...ids].sort(), 'cada palpite aparece uma vez');
+  for (const id of ids) assert.deepEqual(room.stateFor(id).result.order, order, 'todos veem a mesma ordem');
+  assert.deepEqual(room.stateFor(ids[3]).result.order, order, 'quem recarrega vê a mesma ordem');
+  // Não é a antiga ordem previsível (do mais longe para o mais perto).
+  const farToNear = [...ids].reverse();
+  assert.notDeepEqual(order, farToNear);
+  // A ordem não mexe nos pontos: o 1.º jogador continua a ser o mais perto.
+  assert.deepEqual(room.stateFor(ids[0]).result.closest, [ids[0]]);
+  room.destroy();
+});
+
+test('ordem da revelação: muda entre rondas e o último revelado não é sempre o vencedor', () => {
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
+  startGame(room, ids[0]);
+  const orders = [];
+  for (let round = 0; round < 8; round++) {
+    revealNumberRound(room, ids);
+    orders.push(room.stateFor(ids[1]).result.order.join());
+    room.nextQuestion(ids[0]);
+  }
+  for (let i = 1; i < orders.length; i++) assert.notEqual(orders[i], orders[i - 1], `ronda ${i + 1} repetiu a ordem`);
+  assert.ok(new Set(orders).size > 1);
+  assert.ok(orders.some((o) => !o.endsWith(ids[0])), 'o vencedor (Ana) nem sempre é o último');
+  room.destroy();
+});
+
+test('ordem da revelação: nas perguntas de mapa continua do mais longe para o mais perto', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  startWith(room, ana, MAP_QUESTION);
+  room.submitAnswer(ana, { lat: 33.7, lon: 73.0 }); // Islamabad
+  room.submitAnswer(rui, { lat: 28.6, lon: 77.2 }); // Nova Deli
+  room.submitAnswer(eva, { lat: 38.7, lon: -9.1 }); // Lisboa
+  room.forceAdvance(ana);
+  assert.deepEqual(room.stateFor(rui).result.order, [eva, rui, ana]);
+  room.destroy();
+});
+
 test('um jogador desligado não bloqueia a ronda', () => {
   const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
   startWithNumber(room, ids[0]);

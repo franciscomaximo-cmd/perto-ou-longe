@@ -168,6 +168,7 @@ class Room {
     this.questions = [];
     this.usedQuestions = new Set();
     this.themeDeck = new ThemeDeck(); // tema da revelação de cada pergunta de números
+    this.lastRevealOrder = null; // ordem da revelação da ronda anterior (a seguinte é outra)
     this.current = null;
     this.standings = null; // classificação final: [{ ids, settled }], do 1.º lugar para baixo
     this.tiebreak = null;
@@ -577,8 +578,9 @@ class Room {
       if (player) player.score += pts;
     }
     this.recordStats(question, this.current.result, answers.size);
-    // Revelação em passos, automática: um palpite de cada vez (do mais longe para o mais
-    // perto), depois a resposta certa, os votos (se houve votação) e por fim os pontos.
+    this.current.order = this.revealOrder(question, this.current.result.distances);
+    // Revelação em passos, automática: um palpite de cada vez (pela ordem de `order`), depois
+    // a resposta certa, os votos (se houve votação) e por fim os pontos.
     // O anfitrião pode saltar para o fim. Sem respostas, vai direto ao fim da ronda.
     // Passos: um por palpite, a resposta certa e, no fim, os pontos (com os votos juntos).
     this.current.steps = answers.size + 2;
@@ -587,12 +589,38 @@ class Room {
     this.scheduleRevealStep();
   }
 
+  // Ordem em que os palpites são revelados. Nas perguntas de números é ALEATÓRIA (escolhida
+  // aqui, uma vez, e enviada no room:state: todos veem a mesma, e quem recarrega também), para
+  // o último revelado não ser sempre o vencedor. Nunca repete a ordem da ronda anterior (com os
+  // mesmos jogadores) nem é a antiga "do mais longe para o mais perto" (com 3 ou mais palpites).
+  // Nas perguntas de mapa fica do mais longe para o mais perto.
+  revealOrder(question, distances) {
+    const ids = Object.keys(distances);
+    const farToNear = [...ids].sort((a, b) => distances[b] - distances[a]);
+    if (question.type === 'map') return farToNear;
+    const shuffle = () => {
+      const a = [...ids];
+      for (let i = a.length - 1; i > 0; i--) {
+        const j = crypto.randomInt(i + 1);
+        [a[i], a[j]] = [a[j], a[i]];
+      }
+      return a;
+    };
+    // Com distâncias iguais a ordem "do mais longe" não é única: compara as distâncias.
+    const predictable = (a) => a.length >= 3 && a.every((id, i) => distances[id] === distances[farToNear[i]]);
+    const repeated = (a) => a.length >= 2 && this.lastRevealOrder && a.join() === this.lastRevealOrder.join();
+    let order = shuffle();
+    for (let tries = 0; tries < 50 && (predictable(order) || repeated(order)); tries++) order = shuffle();
+    this.lastRevealOrder = order;
+    return order;
+  }
+
   scheduleRevealStep() {
     this.clearRevealTimer();
     if (this.phase !== 'reveal' || this.current.step >= this.current.steps) return;
-    // Ritmo comum (public/reveal/pace.js): os mais longe depressa, os 3 mais perto devagar,
-    // pausa antes do vencedor, e nunca mais de ~12 s até à resposta certa. Os pontos (último
-    // passo) mantêm o tempo normal.
+    // Ritmo comum (public/reveal/pace.js): os primeiros revelados depressa, os últimos 3
+    // devagar, pausa antes do último, e nunca mais de ~12 s até à resposta certa. Os pontos
+    // (último passo) mantêm o tempo normal.
     const guesses = this.current.answers.size;
     const pace = revealPace(guesses, this.revealStepMs / REVEAL_STEP_MS);
     const { step } = this.current;
@@ -862,6 +890,7 @@ class Room {
           votes: Object.fromEntries(cur.votes),
           step: cur.step,
           steps: cur.steps,
+          order: [...cur.order], // ordem da revelação dos palpites (igual para todos)
           voting: Boolean(cur.voting),
           curiosity: cur.question.curiosity || null,
           ...cur.result,

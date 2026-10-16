@@ -3,10 +3,11 @@
 // Ritmo da revelação dos palpites (usado no servidor, que marca os passos, e no browser, para
 // cada tema saber quanto tempo tem para a animação de cada palpite).
 //
-// Os palpites saem do mais longe para o mais perto:
-//   - os mais longe passam depressa (~0,65 s cada);
-//   - os últimos 3 (os mais perto) abrandam (~1,5 s), para criar suspense;
-//   - antes do último (o vencedor) há uma pausa dramática (~1,9 s);
+// Os palpites saem por uma ordem aleatória (escolhida pelo servidor); o ritmo só depende da
+// posição na ordem:
+//   - os primeiros passam depressa (~0,65 s cada);
+//   - os últimos 3 abrandam (~1,5 s), para manter o suspense até ao fim;
+//   - antes do último há uma pausa dramática (~1,9 s);
 //   - depois do último, a resposta certa (~1,4 s).
 // Do primeiro palpite até à resposta certa nunca passa de ~12 s (se passasse, os palpites
 // rápidos encurtam, até 0,45 s; e só depois os lentos). Com 3 ou 4 jogadores fica perto do

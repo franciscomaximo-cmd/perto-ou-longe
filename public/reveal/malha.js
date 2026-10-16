@@ -1,21 +1,23 @@
 'use strict';
 
 // Tema "malha" (jogo tradicional português): um terreiro de terra batida com o meco (pino de
-// madeira) ao fundo e, em baixo, a fila de jogadores (os bonecos na pose "a lançar a malha").
-// Na vez de cada um, o seu boneco lança a malha (disco de metal, da sua cor e com o seu retrato)
-// por cima do terreiro. Onde para vem da posição de apresentação (player.show), relativa à
-// ronda:
+// madeira) ao fundo e, em baixo, a fila de jogadores. Na vez de cada um, o seu boneco sai da
+// fila para a marca de lançamento (o seu lugar na fila fica vazio), prepara-se com a malha na
+// mão e lança-a (disco de metal, da sua cor e com o seu retrato) por cima do terreiro. Onde
+// para vem da posição de apresentação (player.show), relativa à ronda:
 //   - o vencedor derruba o meco; o "em cheio" derruba-o com estilo (o meco gira no ar);
 //   - os outros param mais perto ou mais longe do meco, pela posição na ronda, sem se
 //     sobreporem; quem errou mais de 100% fica curto, lá à frente;
 //   - o "mais longe" atira a malha para fora do terreiro, e o galo foge assustado.
-// Na primeira vez que o tema sai neste dispositivo, o jogo explica o que é a malha ANTES da
-// revelação (nos ecrãs de responder e votar dessa ronda: ver "intro" no fim deste ficheiro).
+// No fim, na marca, quem ganhou a festejar; na fila, as reações dos outros.
+// Na primeira vez que o tema sai neste dispositivo, uma legenda pequena no topo ("Malha · jogo
+// tradicional português") aparece ~2 s e desaparece sozinha, sem tapar nada.
 //
 // Cena SVG de tamanho fixo (viewBox 300 × 300; 300 × 340 com mais de 6 jogadores, com duas
 // filas em baixo), por zonas:
-//   - topo: placa da resposta certa (nenhuma malha vai lá);
+//   - topo: placa da resposta certa e, por baixo, a legenda (nenhuma malha vai lá);
 //   - terreiro em perspetiva, com o meco ao fundo e o galo no canto, fora do terreiro;
+//   - à frente do terreiro, a marca de lançamento (ao meio, entre as malhas curtas);
 //   - em baixo, a fila com o boneco de cada jogador.
 (function () {
   const NS = 'http://www.w3.org/2000/svg';
@@ -26,7 +28,12 @@
   const MECO = { x: 150, y: 74, h: 26, w: 8 }; // y = base do meco
   const AIM = { x: 150, y: 82 }; // à frente do meco: as distâncias contam daqui
   const GALO = { x: 30, y: 60 };
+  // Marca de lançamento: quem lança fica aqui, de pés atrás da linha (as malhas curtas param a
+  // 40 para cada lado do meio, fora do boneco).
+  const THROWER = { cx: 150, bottom: 226, h: 58 };
   const FLIGHT_MS = 680;
+  const WINDUP_MS = 260; // sai da fila e prepara o lançamento, com a malha na mão
+  const SEEN_KEY = 'pertoOuLonge.malhaVista'; // a legenda só aparece da primeira vez
   const GOLDEN = Math.PI * (3 - Math.sqrt(5));
 
   function s(tag, attrs = {}, children = []) {
@@ -122,22 +129,58 @@
     let fxLayer = null;
     let answerText = null;
     let plans = {};
-    let row = {}; // id → { g, player, x, bottom, h, w, small }
+    let row = {}; // id → { g, player, x, bottom, h, w, small, pose }
+    let throwerLayer = null;
+    let throwerId = null; // quem está na marca de lançamento (não aparece na fila)
     let mecoDown = false;
     let galoGone = false;
     const flights = new Map(); // id → { frame, finish }
     const timers = new Set();
     const later = (fn, ms) => { const t = setTimeout(() => { timers.delete(t); fn(); }, ms); timers.add(t); };
 
+    // Cada jogador só aparece uma vez no cenário: quem está na marca deixa o seu lugar na fila
+    // vazio (só a sombra no chão).
     function drawRow(id, pose) {
       const r = row[id];
+      r.pose = pose;
+      if (id === throwerId) {
+        r.g.replaceChildren(s('ellipse', { cx: r.x + r.w / 2, cy: r.bottom - 3, rx: r.w * 0.32, ry: 3, fill: '#000', opacity: 0.2 }));
+        return;
+      }
       const svg = kit.drawCharacter(r.player, pose, { size: r.h, small: r.small });
       svg.setAttribute('x', r.x);
       svg.setAttribute('y', r.bottom - r.h);
       r.g.replaceChildren(svg);
     }
-    // Ponto de onde sai a malha: a mão do boneco (pose "malha").
-    const handPoint = (id) => ({ x: row[id].x + row[id].w * 0.83, y: row[id].bottom - row[id].h + row[id].h * (86 / 130) });
+    // Boneco na marca de lançamento (ao festejar, com o animal). `enter`: acabou de sair da
+    // fila (sobe para a marca). O jogador anterior volta ao seu lugar na fila.
+    function showThrower(player, pose, enter = false) {
+      const svg = kit.drawCharacter(player, pose, { size: THROWER.h, withPet: pose === 'festejar' });
+      svg.setAttribute('x', THROWER.cx - THROWER.h * (50 / 130));
+      svg.setAttribute('y', THROWER.bottom - THROWER.h);
+      const g = s('g', { class: `malha-thrower${enter ? ' enter' : ''}` }, [svg]);
+      throwerLayer.replaceChildren(g);
+      const prev = throwerId;
+      if (prev === player.id) return;
+      throwerId = player.id;
+      if (prev && row[prev]) drawRow(prev, row[prev].pose);
+      if (row[player.id]) drawRow(player.id, row[player.id].pose);
+    }
+    // Ponto de onde sai a malha: a mão de quem lança, já com o braço em frente (pose "malha_solto").
+    const handPoint = () => ({ x: THROWER.cx + THROWER.h * (35 / 130), y: THROWER.bottom - THROWER.h + THROWER.h * (56 / 130) });
+
+    // Legenda pequena no topo, só na primeira vez que o tema sai neste dispositivo.
+    function caption() {
+      let seen = true;
+      try { seen = localStorage.getItem(SEEN_KEY) === '1'; localStorage.setItem(SEEN_KEY, '1'); } catch { seen = true; }
+      if (seen) return;
+      const g = s('g', { class: 'malha-caption' }, [
+        s('rect', { x: 78, y: 27, width: 144, height: 13, rx: 6.5, fill: 'rgba(0,0,0,.45)' }),
+        text({ x: VW / 2, y: 36.2, 'text-anchor': 'middle', class: 'malha-caption-text' }, 'Malha · jogo tradicional português'),
+      ]);
+      fxLayer.append(g);
+      later(() => g.remove(), 2400);
+    }
 
     // Malha deitada no chão: disco na cor do jogador (com rebordo de metal) e o retrato por cima.
     function malhaShape(player) {
@@ -188,6 +231,7 @@
       mount(container, { players, kit: k, seed }) {
         kit = k;
         row = {};
+        throwerId = null;
         mecoDown = false;
         galoGone = false;
         const n = players.length;
@@ -216,6 +260,11 @@
         }
         // Linha de lançamento, à frente.
         scene.append(s('line', { x1: botL + 14, y1: bottom - 6, x2: botR - 14, y2: bottom - 6, stroke: '#f8f9fa', 'stroke-width': 1.5, opacity: 0.6, 'stroke-dasharray': '6 4' }));
+        // Marca de lançamento (riscada no chão, ao meio, atrás da linha).
+        scene.append(
+          s('ellipse', { cx: THROWER.cx, cy: THROWER.bottom - 2, rx: 20, ry: 4.5, fill: '#a37b45', opacity: 0.55 }),
+          s('path', { d: `M${THROWER.cx - 12},${THROWER.bottom - 2} L${THROWER.cx + 12},${THROWER.bottom - 2}`, stroke: '#f8f9fa', 'stroke-width': 1.5, opacity: 0.7 }),
+        );
 
         // O meco: pino de madeira, com a sombra (a parte que cai fica num grupo à parte).
         scene.append(s('ellipse', { cx: MECO.x + 3, cy: MECO.y + 1, rx: 8, ry: 2.5, fill: '#000', opacity: 0.2 }));
@@ -268,38 +317,60 @@
           });
           rowLayer.append(back, front);
         }
-        for (const p of players) drawRow(p.id, 'malha');
+        for (const p of players) drawRow(p.id, 'parado');
 
-        scene.append(rowLayer, malhasLayer, fxLayer);
+        throwerLayer = s('g', { class: 'malha-throwers' });
+        scene.append(rowLayer, throwerLayer, malhasLayer, fxLayer);
         container.append(scene);
         plans = plan(players, seed);
+        caption();
       },
 
-      revealPlayer(player, precision, { instant }) {
+      revealPlayer(player, precision, { instant, duration = WINDUP_MS + FLIGHT_MS + 80 }) {
+        // O lançamento anterior acaba já (a malha fica onde parava).
+        for (const f of [...flights.values()]) f.finish();
         const pl = plans[player.id];
         row[player.id].g.classList.add('shot');
         const node = malhaShape(player);
         malhasLayer.append(node);
         if (instant || kit.reducedMotion()) {
+          showThrower(player, 'malha_solto');
           put(node, pl.x, pl.y, depth(pl.y));
           land(player, pl, false);
           return;
         }
+        // Com os palpites rápidos, a preparação e o voo encurtam para caber antes do seguinte.
+        const speed = Math.min(1, Math.max(0.45, (duration - 80) / (WINDUP_MS + FLIGHT_MS)));
+        const windupMs = WINDUP_MS * speed;
+        const flightMs = FLIGHT_MS * speed;
+        // Sai da fila para a marca, com a malha na mão (a malha que voa ainda não se vê).
+        showThrower(player, 'malha', true);
+        node.style.visibility = 'hidden';
         // Voo em arco por cima do terreiro, a rodar; fica mais pequena ao longe.
-        const from = handPoint(player.id);
+        const from = handPoint();
         const ctrl = { x: (from.x + pl.x) / 2, y: Math.min(from.y, pl.y) - (pl.where === 'fora' ? 70 : 55) };
-        const start = performance.now();
+        const start = performance.now() + windupMs;
+        let released = false;
         let done = false;
+        const release = () => {
+          if (released) return;
+          released = true;
+          showThrower(player, 'malha_solto');
+          node.style.visibility = '';
+        };
         const finish = () => {
           if (done) return;
           done = true;
           cancelAnimationFrame(flights.get(player.id)?.frame);
           flights.delete(player.id);
+          release();
           put(node, pl.x, pl.y, depth(pl.y));
           land(player, pl, true);
         };
         const frame = (now) => {
-          const t = Math.min(1, (now - start) / FLIGHT_MS);
+          if (now < start) { put(node, from.x, from.y, depth(from.y)); flights.get(player.id).frame = requestAnimationFrame(frame); return; }
+          release();
+          const t = Math.min(1, (now - start) / flightMs);
           const e = 1 - (1 - t) ** 1.6;
           const x = (1 - e) ** 2 * from.x + 2 * (1 - e) * e * ctrl.x + e ** 2 * pl.x;
           const y = (1 - e) ** 2 * from.y + 2 * (1 - e) * e * ctrl.y + e ** 2 * pl.y;
@@ -310,12 +381,14 @@
         flights.set(player.id, { frame: requestAnimationFrame(frame), finish });
       },
 
-      // Resposta certa na placa (a rolar até ao valor). Na fila, o mais perto festeja e o mais
-      // longe reage (com as escolhas de cada um); os outros ficam na pose normal.
+      // Resposta certa na placa (a rolar até ao valor). Todos juntos: na marca, quem ganhou a
+      // festejar; na fila, os outros mais perto festejam e o mais longe reage (com as escolhas
+      // de cada um); os outros ficam na pose normal.
       revealAnswer(answer, { closest, farthest, instant }) {
         for (const f of [...flights.values()]) f.finish();
         if (instant) answerText.textContent = kit.fmt(answer);
         else kit.countUp(answerText, answer);
+        if (closest.length && row[closest[0]]) showThrower(row[closest[0]].player, 'festejar');
         for (const id of Object.keys(row)) {
           const near = closest.includes(id);
           const far = farthest.includes(id) && !near;
@@ -345,13 +418,11 @@
         timers.clear();
         if (answerText) kit.stopCount(answerText);
         if (scene) scene.remove();
-        scene = meco = galoNode = malhasLayer = fxLayer = answerText = null;
+        scene = meco = galoNode = malhasLayer = fxLayer = answerText = throwerLayer = null;
+        throwerId = null;
         plans = {};
         row = {};
       },
     };
-  }, {
-    // Explicação para quem não conhece o jogo (mostrada antes da revelação, nunca por cima dela).
-    intro: 'A malha é um jogo tradicional português: lança-se um disco de metal (a malha) para derrubar o pino de madeira (o meco). Quem ficar mais perto da resposta derruba o meco!',
   });
 })();

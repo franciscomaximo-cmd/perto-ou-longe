@@ -10,8 +10,9 @@
  * Interface de cada tema (um ficheiro por tema em public/reveal/<id>.js, registado com
  * RevealThemes.register(id, () => ({ ... }))):
  *   mount(container, { players, answer, unit, kit, result, seed })
- *       Desenha o cenário vazio. `players` vem já na ordem da revelação (do mais longe para o
- *       mais perto), cada um com { id, name, color, character, value, precision,
+ *       Desenha o cenário vazio. `players` vem já na ordem da revelação (ALEATÓRIA, escolhida
+ *       pelo servidor: o último revelado não é forçosamente o vencedor; o resultado de cada um
+ *       vem de `show`, nunca da posição na ordem), cada um com { id, name, color, character, value, precision,
  *       closest, avatar(size) }, para o tema poder planear o espaço de todos desde o início.
  *       `result` = { closest, farthest, exact } (listas de ids) é o que o SERVIDOR calculou:
  *       os temas usam-no tal como vem (ex.: quem marca golo), nunca o recalculam.
@@ -28,19 +29,24 @@
  *   revealPlayer(player, precision, info)
  *       Anima a vez de UM jogador. info = { value, distance, exact, show, index, total,
  *       duration, instant }. `duration` = ms até ao passo seguinte (public/reveal/pace.js): os
- *       mais longe passam depressa (~0,65 s) e os mais perto devagar; uma animação que acabe
+ *       primeiros passam depressa (~0,65 s) e os últimos 3 devagar; uma animação que acabe
  *       quando chega o palpite seguinte tem de caber nesse tempo (encurta-se, não se corta).
+ *       Os efeitos do "em cheio", do vencedor e do "mais longe" acontecem AQUI, quando esse
+ *       jogador é revelado (seja qual for a sua posição na ordem).
  *       Com instant = true mostra o resultado final sem animação.
  *   revealAnswer(answer, info)
  *       Mostra a resposta certa. info = { closest, farthest, exact, instant } (listas de ids).
+ *       Aqui aparecem, todos juntos, os festejos (de quem ficou mais perto) e as reações (do
+ *       mais longe).
  *   skipToEnd()
  *       Mostra tudo de imediato (termina as animações a meio).
  *   destroy()
  *       Limpa animações, temporizadores e eventos.
  *
- * O código COMUM (não cada tema) controla: a ordem (do mais longe para o mais perto), o ritmo
- * (pace.js: rápido nos mais longe, devagar nos 3 mais perto, dado pelo servidor), o botão "Saltar", os sons, o confetti, o cálculo
- * da precisão (precision.js) e a lista ordenada por baixo da animação.
+ * O código COMUM (não cada tema) controla: a ordem (aleatória, dada pelo servidor), o ritmo
+ * (pace.js: rápido nos primeiros, devagar nos últimos 3, dado pelo servidor), o botão
+ * "Saltar", os sons, o confetti, o cálculo da precisão (precision.js) e a lista por baixo da
+ * animação (pela ordem da revelação e, no fim, do mais perto para o mais longe).
  *
  * REGRAS que todos os temas têm de cumprir:
  *   1. Tamanho fixo desde o início, sem saltos de layout. No telemóvel ocupa a largura e no
@@ -138,17 +144,11 @@
   // --- Registo de temas -------------------------------------------------------------------
 
   const factories = new Map();
-  const intros = new Map();
   const DEFAULT_THEME = 'alvo';
 
-  // `meta.intro` (opcional): explicação curta do tema, para quem não o conhece (ex.: a malha).
-  // O jogo mostra-a ANTES da revelação (nos ecrãs de responder e votar dessa ronda), na
-  // primeira vez que o tema sai neste dispositivo; nunca por cima da cena.
-  function register(id, factory, meta = {}) {
+  function register(id, factory) {
     factories.set(id, factory);
-    if (meta.intro) intros.set(id, meta.intro);
   }
-  const introOf = (id) => intros.get(id) || null;
   function create(id) {
     const factory = factories.get(id) || factories.get(DEFAULT_THEME);
     return factory();
@@ -165,6 +165,7 @@
     let key = null;
     let revealed = 0;
     let answerShown = false;
+    let sorted = false; // a lista já foi reordenada do mais perto para o mais longe
     let shows = {}; // posição de apresentação de cada jogador nesta ronda
 
     // Frase de festejo de quem ganhou a ronda (lista fixa, escolhida no boneco), num balão por
@@ -196,7 +197,7 @@
      * r = { key, seed, theme, order, players: { id: {id, name, color, character} }, answers,
      *       distances, correct, unit, shown, showCorrect, closest, farthest, exact }
      * `seed` (igual em todos os telemóveis; por omissão, a key) alimenta a variação dos temas.
-     * `order` vem do mais longe para o mais perto; `shown` = quantos palpites já se veem.
+     * `order` = ordem da revelação (do servidor); `shown` = quantos palpites já se veem.
      */
     function update(r) {
       const fresh = r.key !== key;
@@ -229,9 +230,10 @@
           result,
           seed: String(r.seed ?? r.key),
         });
-        // Lista com uma linha por palpite desde o início (escondida), para não empurrar a página.
-        const byDistance = [...r.order].sort((a, b) => r.distances[a] - r.distances[b]);
-        list.replaceChildren(...byDistance.map((id) => el('li', { 'data-id': id }, [
+        // Lista com uma linha por palpite desde o início (escondida), para não empurrar a página,
+        // pela ordem da revelação; no fim reordena-se do mais perto para o mais longe.
+        sorted = false;
+        list.replaceChildren(...r.order.map((id) => el('li', { 'data-id': id }, [
           avatarOf(id, 'm'),
           el('span', { class: 'nm', text: r.players[id] ? r.players[id].name : '?' }),
           el('span', { class: 'guess', text: `— ${withUnit(r.answers[id], r.unit)}` }),
@@ -278,10 +280,35 @@
           ? (r.distances[id] === 0 ? 'em cheio!' : `falhou por ${fmt(r.distances[id])}`)
           : ' ';
       }
+      if (r.showCorrect && !sorted) {
+        sorted = true;
+        sortList(r.distances, !instant && !reducedMotion());
+      }
+    }
+
+    // Reordena a lista do mais perto para o mais longe. Com animação (técnica FLIP), cada
+    // linha desliza do sítio onde estava para o novo.
+    function sortList(distances, animate) {
+      const items = [...list.children];
+      const before = new Map(items.map((li) => [li, li.offsetTop]));
+      const byDistance = [...items].sort((a, b) => distances[a.dataset.id] - distances[b.dataset.id]);
+      list.append(...byDistance);
+      if (!animate) return;
+      const moved = byDistance.filter((li) => before.get(li) !== li.offsetTop);
+      for (const li of moved) {
+        li.style.transition = 'none';
+        li.style.transform = `translateY(${before.get(li) - li.offsetTop}px)`;
+      }
+      void list.offsetHeight; // aplica a posição inicial antes de animar
+      for (const li of moved) {
+        li.style.transition = 'transform .7s cubic-bezier(.2, .9, .3, 1)';
+        li.style.transform = '';
+        li.addEventListener('transitionend', () => { li.style.transition = ''; }, { once: true });
+      }
     }
 
     return { update, destroy };
   }
 
-  root.RevealThemes = { register, create, introOf, ids: () => [...factories.keys()], createController, kit };
+  root.RevealThemes = { register, create, ids: () => [...factories.keys()], createController, kit };
 })(window);

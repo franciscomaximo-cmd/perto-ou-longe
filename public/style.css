@@ -275,6 +275,7 @@ textarea:focus { border-color: var(--accent); }
 .arco-hit.gold { stroke: #ffd43b; stroke-width: 2; }
 .arco-exact { animation: arco-fade 1.4s ease-out forwards; }
 .arco-exact-text { fill: var(--accent); font-size: 14px; font-weight: 900; stroke: #8a1c1c; stroke-width: 3px; paint-order: stroke; }
+.arco-exact-text.win { fill: #3ddc97; stroke: #0b3d2a; font-size: 12px; }
 @media (prefers-reduced-motion: reduce) {
   .arco-hit, .arco-miss, .arco-exact { display: none; }
   .arco-arrow.quiver .arco-arrow-body { animation: none; }
@@ -308,6 +309,8 @@ textarea:focus { border-color: var(--accent); }
 /* "Em cheio": STRIKE PERFEITO!, maior, a crescer um pouco. */
 .bowl-strike.perfect { animation-duration: 1.45s; }
 .bowl-strike.perfect .bowl-strike-text { font-size: 21px; stroke-width: 3.5px; transform-box: fill-box; transform-origin: center; animation: bowl-grow .5s ease-out both; }
+/* O "mais longe": "CALEIRA!" em vermelho claro. */
+.bowl-strike.gutter .bowl-strike-text { fill: #ffa8a8; stroke: #3b1d1d; font-size: 16px; }
 @keyframes bowl-grow { from { transform: scale(.6); } to { transform: scale(1); } }
 @keyframes bowl-pop { 0% { opacity: 0; } 12% { opacity: 1; } 75% { opacity: 1; } 100% { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
@@ -425,19 +428,23 @@ textarea:focus { border-color: var(--accent); }
 .malha-galo.flee .malha-galo-body { animation: malha-galo 1.1s ease-in forwards; }
 @keyframes malha-galo { 0% { transform: none; } 15% { transform: translateY(-8px) scaleX(-1); } 30% { transform: translate(-6px, 0) scaleX(-1); } 100% { transform: translate(-70px, -14px) scaleX(-1); opacity: 0; } }
 .malha-galo.gone { display: none; }
+/* Quem lança sai da fila e sobe para a marca de lançamento. */
+.malha-thrower.enter { animation: malha-enter .22s ease-out; }
+@keyframes malha-enter { from { transform: translateY(26px); opacity: 0; } to { transform: none; opacity: 1; } }
+/* Legenda da primeira vez ("Malha · jogo tradicional português"): aparece e some sozinha. */
+.malha-caption { animation: malha-caption 2.3s ease-in-out forwards; }
+.malha-caption-text { fill: #fff; font-size: 7px; font-weight: 700; letter-spacing: .02em; }
+@keyframes malha-caption { 0% { opacity: 0; } 12%, 80% { opacity: 1; } 100% { opacity: 0; } }
 .malha-fx-text { font-size: 17px; font-weight: 900; stroke: #3b2410; stroke-width: 3.5px; paint-order: stroke; animation: pen-fx 1.4s ease-out forwards; }
 .malha-fx-text.win { fill: #3ddc97; }
 .malha-fx-text.gold { fill: var(--accent); font-size: 20px; }
 .malha-fx-text.miss { fill: #fff3bf; }
-/* Introdução de um tema novo (ex.: a malha), nos ecrãs de responder e votar da ronda: antes da
-   revelação, nunca por cima da cena. */
-.theme-intro { display: flex; gap: 12px; align-items: flex-start; border-left: 4px solid var(--accent); }
-.theme-intro .icon { font-size: 1.6rem; line-height: 1; }
-.theme-intro b { color: var(--accent); }
-.theme-intro p { margin: 2px 0 0; font-size: .92rem; color: var(--text); }
 @media (prefers-reduced-motion: reduce) {
   .malha-meco.fall .malha-meco-body, .malha-meco.spin .malha-meco-body, .malha-galo.flee .malha-galo-body { animation: none; }
   .malha-galo.flee { display: none; }
+  .malha-thrower.enter { animation: none; }
+  .malha-caption { animation: malha-caption-static 2.3s steps(1, end) forwards; }
+  @keyframes malha-caption-static { 0% { opacity: 1; } 100% { opacity: 0; } }
   .malha-fx-text { display: none; }
 }
 
@@ -580,18 +587,10 @@ textarea:focus { border-color: var(--accent); }
 .target-list .guess { margin-left: 6px; }
 .target-list .miss { margin-left: 4px; color: var(--muted); font-weight: 400; }
 
-/* Botões do anfitrião. "Saltar" fica fixo ao fundo do ecrã durante a revelação; enquanto está
-   visível, o ecrã da revelação ganha no fim um espaço livre com a altura do botão, para a
-   lista de palpites nunca ficar escondida por baixo dele. "Próxima pergunta" fica logo a
-   seguir à classificação, sem tapar os resultados. */
-#btn-step {
-  position: fixed; left: 50%; transform: translateX(-50%);
-  bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 4;
-  width: min(448px, calc(100% - 32px));
-  box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
-}
-#btn-step:active { transform: translateX(-50%) scale(.98); }
-#screen-reveal.has-skip { padding-bottom: calc(var(--skip-h, 56px) + 24px + env(safe-area-inset-bottom)); }
+/* Botões do anfitrião. "Saltar" fica no fluxo da página, logo a seguir ao cenário (nunca por
+   cima da lista de palpites). "Próxima pergunta" fica logo a seguir à classificação, sem tapar
+   os resultados. */
+#btn-step { width: 100%; min-height: 48px; }
 #btn-tb-next {
   position: sticky; bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 4;
   box-shadow: 0 6px 20px rgba(0, 0, 0, .45);
@@ -857,19 +856,26 @@ body.sheet-open { overflow: hidden; }
   #char-editor { padding: 0; }
   #char-editor .sheet-box { width: 100%; height: 100dvh; max-height: none; border: 0; border-radius: 0; padding-top: env(safe-area-inset-top); }
 }
-/* A pré-visualização fica fixa no topo enquanto se percorrem as opções; no telemóvel encolhe
-   um pouco depois de começar o scroll, para dar espaço às opções. */
-.sheet-body .char-stage {
-  position: sticky; top: 0; z-index: 2; margin: 0 -16px; padding: 12px 16px;
-  background: linear-gradient(var(--bg) 85%, rgba(29, 24, 70, 0));
+/* Zona fixa no topo (pré-visualização e separadores), com fundo sólido: as opções passam por
+   baixo sem se verem. No telemóvel encolhe depois de começar o scroll, para dar espaço às
+   opções; o espaço livre a mais no fim compensa o que encolheu (senão, com poucas opções, o
+   scroll voltava ao topo e a zona crescia outra vez, sem parar). */
+#char-editor-body { overflow-anchor: none; }
+#char-editor-body.compact { padding-bottom: calc(220px + env(safe-area-inset-bottom)); }
+.char-top {
+  position: sticky; top: 0; z-index: 2; margin: 0 -16px; padding: 12px 16px 10px;
+  display: flex; flex-direction: column; gap: 10px;
+  background: var(--bg); border-bottom: 1px solid var(--line); box-shadow: 0 6px 12px -8px rgba(0, 0, 0, .6);
 }
-.sheet-body .char-stage .char-preview { transition: width .2s ease, height .2s ease; }
+.char-top .char-preview { transition: width .2s ease, height .2s ease; }
 @media (max-width: 600px) {
-  .sheet-body .char-stage.compact { padding-top: 6px; padding-bottom: 6px; }
-  .sheet-body .char-stage.compact .char-preview { width: 110px; height: 108px; }
-  .sheet-body .char-stage.compact .char-actions button { min-height: 40px; padding: 6px 10px; }
-  /* Encolhido: só o boneco e os dois botões (a cara em grande e a dica voltam lá em cima). */
-  .sheet-body .char-stage.compact .char-face-big, .sheet-body .char-stage.compact #char-pose { display: none; }
+  .compact > .char-top { padding-top: 6px; padding-bottom: 6px; gap: 6px; }
+  .compact > .char-top .char-preview { width: 96px; height: 94px; }
+  .compact > .char-top .char-actions button { min-height: 40px; padding: 6px 8px; font-size: .85rem; }
+  .compact > .char-top .char-tabs button { min-height: 38px; }
+  /* Encolhido: só o boneco, os dois botões e os separadores (a cara em grande e a dica
+     voltam lá em cima). */
+  .compact > .char-top .char-face-big, .compact > .char-top #char-pose { display: none; }
 }
 /* Mudou uma peça: o boneco dá um pequeno salto. */
 .char-preview.pop svg, .char-face-big.pop svg { animation: char-pop .32s cubic-bezier(.2, 1.6, .4, 1); }
@@ -900,7 +906,7 @@ button.danger { background: var(--far); border-color: var(--far); color: #fff; }
 body.has-actions #toast { bottom: calc(132px + env(safe-area-inset-bottom)); }
 @media (prefers-reduced-motion: reduce) {
   .char-preview.pop svg, .char-face-big.pop svg { animation: none; }
-  .sheet-body .char-stage .char-preview { transition: none; }
+  .char-top .char-preview { transition: none; }
 }
 
 /* Cabeçalho: tempo e botão de som */

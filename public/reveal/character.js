@@ -7,7 +7,7 @@
 //     player: { color, character } (peças em public/reveal/character-options.js; as que
 //             faltarem ficam com o valor por omissão)
 //     pose:   'parado' | 'arco' | 'lancar' | 'kart' | 'rematar' | 'dardo' | 'golfe' | 'malha'
-//             | 'basquete'
+//             | 'malha_solto' (acabou de lançar a malha) | 'basquete'
 //             | 'festejar' | 'triste'
 //             | 'kart_festejar' | 'kart_triste' (no kart, no fim da corrida)
 //             "festejar" e "triste" desenham a animação de vitória e a reação de derrota que o
@@ -110,6 +110,12 @@
       head: [53, 32, 6],
       armL: [[39, 55], [30, 64], [22, 70]], armR: [[61, 55], [68, 72], [78, 84]],
       legL: [[45, 82], [37, 100], [26, 118]], legR: [[55, 82], [64, 98], [68, 121]],
+    },
+    // Acabou de lançar a malha: o braço direito segue em frente, à altura do peito, sem o disco.
+    malha_solto: {
+      head: [53, 31, -4],
+      armL: [[39, 55], [30, 66], [24, 76]], armR: [[61, 55], [73, 61], [85, 56]],
+      legL: [[45, 82], [36, 100], [24, 117]], legR: [[55, 82], [65, 98], [70, 121]],
     },
     // A lançar ao cesto: os dois braços no ar, com a bola por cima da cabeça.
     basquete: {
@@ -506,7 +512,7 @@
     const n = parseInt(hex.slice(1), 16);
     return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
   };
-  const ACTION_POSES = new Set(['arco', 'lancar', 'kart', 'rematar', 'dardo', 'golfe', 'malha', 'basquete']);
+  const ACTION_POSES = new Set(['arco', 'lancar', 'kart', 'rematar', 'dardo', 'golfe', 'malha', 'malha_solto', 'basquete']);
   // Chapéus que tapam o alto da cabeça (escondem o carrapito e as pontas do moicano).
   const HAT_COVERS = new Set(['bone', 'capacete', 'gorro', 'cowboy', 'coroa', 'coroa_dourada']);
   function expressionOf(pose, ch) {

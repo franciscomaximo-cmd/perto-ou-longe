@@ -34,6 +34,8 @@
       </div>
 
       <p id="question" class="question small"></p>
+      <!-- Introdução do tema (no jogo aparece antes da revelação, nos ecrãs de responder e votar). -->
+      <p id="intro" class="dev-note" hidden></p>
       <div class="target-wrap">
         <div id="rev-stage" class="reveal-stage"></div>
         <ol id="rev-guess-list" class="target-list"></ol>
@@ -209,6 +211,9 @@
         const s = SCENARIOS[name];
         current = { name, s, r: result(s.answer, s.guesses), shown: 1, showCorrect: false };
         $('#question').textContent = s.q;
+        const intro = window.RevealThemes.introOf($('#theme').value);
+        $('#intro').hidden = !intro;
+        $('#intro').textContent = intro ? `💡 Introdução (no jogo, antes da revelação): ${intro}` : '';
         $('#answer').textContent = '?';
         document.querySelectorAll('#scenarios button').forEach((b) => b.classList.toggle('on', b.textContent === name));
         render();

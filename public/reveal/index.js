@@ -138,9 +138,17 @@
   // --- Registo de temas -------------------------------------------------------------------
 
   const factories = new Map();
+  const intros = new Map();
   const DEFAULT_THEME = 'alvo';
 
-  function register(id, factory) { factories.set(id, factory); }
+  // `meta.intro` (opcional): explicação curta do tema, para quem não o conhece (ex.: a malha).
+  // O jogo mostra-a ANTES da revelação (nos ecrãs de responder e votar dessa ronda), na
+  // primeira vez que o tema sai neste dispositivo; nunca por cima da cena.
+  function register(id, factory, meta = {}) {
+    factories.set(id, factory);
+    if (meta.intro) intros.set(id, meta.intro);
+  }
+  const introOf = (id) => intros.get(id) || null;
   function create(id) {
     const factory = factories.get(id) || factories.get(DEFAULT_THEME);
     return factory();
@@ -275,5 +283,5 @@
     return { update, destroy };
   }
 
-  root.RevealThemes = { register, create, ids: () => [...factories.keys()], createController, kit };
+  root.RevealThemes = { register, create, introOf, ids: () => [...factories.keys()], createController, kit };
 })(window);

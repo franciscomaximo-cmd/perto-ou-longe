@@ -108,8 +108,17 @@
 
     // O boneco de cada jogador desenha-se sempre com o drawCharacter (o tema só escolhe a pose).
     // A versão pequena (sem capa) só com mais de 6 jogadores.
+    // Cada jogador só aparece uma vez no cenário: quem está em grande ao lado da pista fica, na
+    // sua célula do placar, só com o retrato pequeno (em vez do boneco).
+    let throwerId = null;
     function drawCellBoneco(id, pose) {
       const c = cells[id];
+      c.pose = pose;
+      if (id === throwerId) {
+        const r = Math.min(c.h * 0.32, 11);
+        c.boneco.replaceChildren(kit.portraitMark(c.player, r, c.box.x + 3 + c.h * 0.38, c.box.y + c.box.h / 2, 1));
+        return;
+      }
       const svg = kit.drawCharacter(c.player, pose, { size: c.h, small: c.small });
       svg.setAttribute('x', c.box.x + 3);
       svg.setAttribute('y', c.box.y + (c.box.h - c.h) / 2);
@@ -126,17 +135,24 @@
     }
 
     // Ao festejar, o boneco grande ao lado da pista leva o animal de estimação (há espaço).
+    // Quando muda quem está em grande, o anterior volta a ter o boneco na sua célula.
     function showThrower(player, pose = 'lancar') {
       const svg = kit.drawCharacter(player, pose, { size: 70, withPet: pose === 'festejar' });
       svg.setAttribute('x', 4);
       svg.setAttribute('y', LANE.botY - 70);
       thrower.replaceChildren(svg);
+      const prev = throwerId;
+      if (prev === player.id) return;
+      throwerId = player.id;
+      if (prev && cells[prev]) drawCellBoneco(prev, cells[prev].pose);
+      if (cells[player.id]) drawCellBoneco(player.id, cells[player.id].pose);
     }
 
     return {
       mount(container, { players, kit: k }) {
         kit = k;
         cells = {};
+        throwerId = null;
         // Placar: 2 colunas com até 4 jogadores, 3 com 5-6. Com mais de 6, 2 colunas outra vez
         // (nomes maiores) e a cena cresce para baixo o que for preciso (células de 34).
         const n = players.length;

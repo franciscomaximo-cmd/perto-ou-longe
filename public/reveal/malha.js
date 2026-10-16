@@ -9,7 +9,8 @@
 //   - os outros param mais perto ou mais longe do meco, pela posição na ronda, sem se
 //     sobreporem; quem errou mais de 100% fica curto, lá à frente;
 //   - o "mais longe" atira a malha para fora do terreiro, e o galo foge assustado.
-// Na primeira vez que o tema aparece neste dispositivo, uma legenda explica o que é a malha.
+// Na primeira vez que o tema sai neste dispositivo, o jogo explica o que é a malha ANTES da
+// revelação (nos ecrãs de responder e votar dessa ronda: ver "intro" no fim deste ficheiro).
 //
 // Cena SVG de tamanho fixo (viewBox 300 × 300; 300 × 340 com mais de 6 jogadores, com duas
 // filas em baixo), por zonas:
@@ -27,7 +28,6 @@
   const GALO = { x: 30, y: 60 };
   const FLIGHT_MS = 680;
   const GOLDEN = Math.PI * (3 - Math.sqrt(5));
-  const SEEN_KEY = 'pertoOuLonge.malhaVista';
 
   function s(tag, attrs = {}, children = []) {
     const node = document.createElementNS(NS, tag);
@@ -121,7 +121,6 @@
     let malhasLayer = null;
     let fxLayer = null;
     let answerText = null;
-    let caption = null;
     let plans = {};
     let row = {}; // id → { g, player, x, bottom, h, w, small }
     let mecoDown = false;
@@ -183,24 +182,6 @@
         scareGalo(animate);
         if (animate) fxText('Fora do terreiro!', 'miss', VW / 2, 128, 13);
       } else if (pl.where === 'curta' && animate) fxText('Curta!', 'miss', pl.x, pl.y - 18, 11);
-    }
-
-    // Legenda da primeira vez (neste dispositivo): o que é a malha. Some sozinha, e só então
-    // fica marcada como vista (se a ronda acabar antes, aparece outra vez na próxima).
-    function showCaption(container) {
-      let seen = false;
-      try { seen = localStorage.getItem(SEEN_KEY) === '1'; } catch { /* sem armazenamento */ }
-      if (seen) return;
-      caption = kit.el('div', { class: 'theme-caption', role: 'note' }, [
-        kit.el('b', { text: 'Malha' }),
-        ' — jogo tradicional português: lança-se um disco de metal (a malha) para derrubar o pino de madeira (o meco).',
-      ]);
-      caption.addEventListener('animationend', () => {
-        try { localStorage.setItem(SEEN_KEY, '1'); } catch { /* sem armazenamento */ }
-        if (caption) caption.remove();
-        caption = null;
-      });
-      container.append(caption);
     }
 
     return {
@@ -292,7 +273,6 @@
         scene.append(rowLayer, malhasLayer, fxLayer);
         container.append(scene);
         plans = plan(players, seed);
-        showCaption(container);
       },
 
       revealPlayer(player, precision, { instant }) {
@@ -365,11 +345,13 @@
         timers.clear();
         if (answerText) kit.stopCount(answerText);
         if (scene) scene.remove();
-        if (caption) caption.remove();
-        scene = meco = galoNode = malhasLayer = fxLayer = answerText = caption = null;
+        scene = meco = galoNode = malhasLayer = fxLayer = answerText = null;
         plans = {};
         row = {};
       },
     };
+  }, {
+    // Explicação para quem não conhece o jogo (mostrada antes da revelação, nunca por cima dela).
+    intro: 'A malha é um jogo tradicional português: lança-se um disco de metal (a malha) para derrubar o pino de madeira (o meco). Quem ficar mais perto da resposta derruba o meco!',
   });
 })();

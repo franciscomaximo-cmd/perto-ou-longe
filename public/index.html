@@ -65,97 +65,14 @@
       <ul id="lobby-players" class="players"></ul>
 
       <!-- Boneco do jogador: é o boneco que aparece nos temas de revelação e no fim do jogo.
-           Só se muda aqui, na sala de espera. Separadores: uma secção de cada vez, para a sala
-           de espera não ficar comprida no telemóvel. -->
-      <div class="card char-card">
-        <h2>O teu boneco</h2>
-        <div class="char-stage">
-          <button id="char-preview" class="char-preview idle" type="button" aria-label="O teu boneco. Toca para ver as poses."></button>
-          <div class="char-actions">
-            <button id="char-action" type="button">▶ Ver em ação</button>
-            <button id="char-random" type="button">🎲 Aleatório</button>
-            <span id="char-pose" class="hint"></span>
-            <!-- Nos separadores Cara e Cabelo: a cara em grande, para se verem os pormenores. -->
-            <div id="char-face-big" class="char-face-big" aria-hidden="true" hidden></div>
-          </div>
+           Só se muda aqui, na sala de espera, no editor (painel próprio, abaixo). -->
+      <div class="card char-summary">
+        <button id="char-card-preview" class="char-preview small idle" type="button" aria-label="O teu boneco. Toca para o editar."></button>
+        <div class="char-summary-side">
+          <h2>O teu boneco</h2>
+          <p class="hint">Cara, cabelo, roupa, acessórios e festejo.</p>
+          <button id="btn-edit-char" class="primary" type="button">✏️ Editar boneco</button>
         </div>
-        <div class="char-tabs" role="tablist" aria-label="Partes do boneco">
-          <button type="button" role="tab" data-tab="cara" aria-selected="true">Cara</button>
-          <button type="button" role="tab" data-tab="cabelo" aria-selected="false">Cabelo</button>
-          <button type="button" role="tab" data-tab="roupa" aria-selected="false">Roupa</button>
-          <button type="button" role="tab" data-tab="acessorios" aria-selected="false">Acessórios</button>
-          <button type="button" role="tab" data-tab="festejo" aria-selected="false">Festejo</button>
-        </div>
-
-        <div class="char-panel" data-panel="cara" role="tabpanel">
-          <span class="group-title">Tom de pele</span>
-          <div id="char-skin" class="swatches one-row"></div>
-          <span class="group-title">Forma da cara</span>
-          <div id="char-face" class="chips"></div>
-          <span class="group-title">Olhos</span>
-          <div id="char-eyes" class="chips"></div>
-          <span class="group-title">Sobrancelhas</span>
-          <div id="char-brows" class="chips"></div>
-          <span class="group-title">Boca</span>
-          <div id="char-mouth" class="chips"></div>
-          <span class="group-title">Extras da cara</span>
-          <div id="char-faceExtra" class="chips"></div>
-        </div>
-
-        <div class="char-panel" data-panel="cabelo" role="tabpanel" hidden>
-          <span class="group-title">Cabelo</span>
-          <div id="char-hair" class="chips"></div>
-          <span class="group-title">Cor do cabelo</span>
-          <div id="char-hairColor" class="swatches one-row"></div>
-          <span class="group-title">Pelos faciais</span>
-          <div id="char-facial" class="chips"></div>
-          <span class="group-title">Chapéu ou acessório</span>
-          <div id="char-hat" class="chips"></div>
-        </div>
-
-        <div class="char-panel" data-panel="roupa" role="tabpanel" hidden>
-          <span class="group-title">Cor da camisola</span>
-          <div id="char-outfit" class="swatches"></div>
-          <span class="group-title">Padrão</span>
-          <div id="char-pattern" class="chips"></div>
-          <div id="char-number-row" class="char-number" hidden>
-            <span class="group-title">Número</span>
-            <button type="button" data-step="-1" aria-label="Número anterior">−</button>
-            <output id="char-number"></output>
-            <button type="button" data-step="1" aria-label="Número seguinte">+</button>
-          </div>
-          <span class="group-title">Calças</span>
-          <div id="char-pants" class="swatches one-row"></div>
-          <span class="group-title">Sapatilhas</span>
-          <div id="char-shoes" class="swatches one-row"></div>
-          <span class="group-title">Extra</span>
-          <div id="char-extra" class="chips"></div>
-        </div>
-
-        <div class="char-panel" data-panel="acessorios" role="tabpanel" hidden>
-          <span class="group-title">Na mão</span>
-          <div id="char-hand" class="chips"></div>
-          <div id="char-scarf-row" hidden>
-            <span class="group-title">Cores do cachecol</span>
-            <div id="char-scarf0" class="swatches one-row"></div>
-            <div id="char-scarf1" class="swatches one-row"></div>
-          </div>
-          <span class="group-title">Animal de estimação</span>
-          <div id="char-pet" class="chips"></div>
-          <span class="group-title">Aura</span>
-          <div id="char-aura" class="chips"></div>
-        </div>
-
-        <div class="char-panel" data-panel="festejo" role="tabpanel" hidden>
-          <span class="group-title">Quando ganha a ronda</span>
-          <div id="char-win" class="chips"></div>
-          <span class="group-title">Quando fica mais longe</span>
-          <div id="char-lose" class="chips"></div>
-          <span class="group-title">Frase de festejo</span>
-          <div id="char-phrase" class="chips"></div>
-        </div>
-        <!-- Como desbloquear as peças com cadeado da secção aberta. -->
-        <ul id="char-locks" class="char-locks"></ul>
       </div>
 
       <div class="card">
@@ -208,17 +125,25 @@
         <p id="custom-status" class="hint center"></p>
       </form>
 
-      <!-- Jogadores (não o anfitrião): dizer que estão prontos. O anfitrião só pode começar
-           quando todos os jogadores ligados estiverem prontos. -->
-      <button id="btn-ready" class="primary big-toggle" type="button" hidden></button>
-      <button id="btn-start" class="primary"></button>
-      <p id="lobby-hint" class="hint center"></p>
       <button class="ghost btn-leave">Sair da sala</button>
+
+      <!-- Barra fixa no fundo do ecrã: o botão principal (jogadores: "Estou pronto"; anfitrião:
+           "Começar jogo") com a mensagem "Faltam X…" logo acima. A sala de espera tem espaço
+           livre no fim para a barra não tapar nada. O anfitrião só pode começar quando todos
+           os jogadores ligados estiverem prontos. -->
+      <div class="lobby-actions">
+        <p id="lobby-hint" class="hint center"></p>
+        <button id="btn-ready" class="primary" type="button" hidden></button>
+        <button id="btn-start" class="primary"></button>
+      </div>
     </section>
 
     <!-- Responder -->
     <section id="screen-answer" class="screen" hidden>
       <p id="ans-tiebreak" class="card center" hidden></p>
+      <!-- Primeira vez que sai um tema que precisa de explicação (ex.: a malha): explica-o aqui,
+           antes da revelação. -->
+      <div id="ans-intro" class="card theme-intro" hidden></div>
       <p id="ans-cat" class="cat-label"></p>
       <p id="ans-question" class="question"></p>
       <p id="ans-unit" class="unit"></p>
@@ -250,6 +175,9 @@
 
     <!-- Votar -->
     <section id="screen-vote" class="screen" hidden>
+      <!-- Primeira vez que sai um tema que precisa de explicação (ex.: a malha): explica-o aqui,
+           antes da revelação. -->
+      <div id="vote-intro" class="card theme-intro" hidden></div>
       <p id="vote-question" class="question small"></p>
       <h2 class="center">Quem ficou mais longe?</h2>
       <p class="hint center">Os palpites só são revelados no fim. Confia no teu instinto.</p>
@@ -345,6 +273,119 @@
       <button class="ghost btn-leave">Sair da sala</button>
     </section>
   </main>
+
+  <!-- Editor do boneco: painel próprio (ecrã inteiro no telemóvel). As alterações só ficam
+       quando se carrega em "Guardar"; "Cancelar" deixa tudo como estava. A pré-visualização
+       fica fixa no topo enquanto se percorrem as opções (e encolhe um pouco no telemóvel). -->
+  <div id="char-editor" class="sheet" role="dialog" aria-modal="true" aria-labelledby="char-editor-title" hidden>
+    <div class="sheet-box">
+      <header class="sheet-head">
+        <button id="char-cancel" type="button" class="ghost">Cancelar</button>
+        <h2 id="char-editor-title">O teu boneco</h2>
+        <button id="char-save" type="button" class="primary">Guardar</button>
+      </header>
+      <div id="char-editor-body" class="sheet-body">
+        <div class="char-stage">
+          <button id="char-preview" class="char-preview idle" type="button" aria-label="O teu boneco. Toca para ver as poses."></button>
+          <div class="char-actions">
+            <button id="char-action" type="button">▶ Ver em ação</button>
+            <button id="char-random" type="button">🎲 Aleatório</button>
+            <span id="char-pose" class="hint"></span>
+            <!-- Nos separadores Cara e Cabelo: a cara em grande, para se verem os pormenores. -->
+            <div id="char-face-big" class="char-face-big" aria-hidden="true" hidden></div>
+          </div>
+        </div>
+        <div class="char-tabs" role="tablist" aria-label="Partes do boneco">
+          <button type="button" role="tab" data-tab="cara" aria-selected="true">Cara</button>
+          <button type="button" role="tab" data-tab="cabelo" aria-selected="false">Cabelo</button>
+          <button type="button" role="tab" data-tab="roupa" aria-selected="false">Roupa</button>
+          <button type="button" role="tab" data-tab="acessorios" aria-selected="false">Acessórios</button>
+          <button type="button" role="tab" data-tab="festejo" aria-selected="false">Festejo</button>
+        </div>
+
+        <div class="char-panel" data-panel="cara" role="tabpanel">
+          <span class="group-title">Tom de pele</span>
+          <div id="char-skin" class="swatches one-row"></div>
+          <span class="group-title">Forma da cara</span>
+          <div id="char-face" class="chips"></div>
+          <span class="group-title">Olhos</span>
+          <div id="char-eyes" class="chips"></div>
+          <span class="group-title">Sobrancelhas</span>
+          <div id="char-brows" class="chips"></div>
+          <span class="group-title">Boca</span>
+          <div id="char-mouth" class="chips"></div>
+          <span class="group-title">Extras da cara</span>
+          <div id="char-faceExtra" class="chips"></div>
+        </div>
+
+        <div class="char-panel" data-panel="cabelo" role="tabpanel" hidden>
+          <span class="group-title">Cabelo</span>
+          <div id="char-hair" class="chips"></div>
+          <span class="group-title">Cor do cabelo</span>
+          <div id="char-hairColor" class="swatches one-row"></div>
+          <span class="group-title">Pelos faciais</span>
+          <div id="char-facial" class="chips"></div>
+          <span class="group-title">Chapéu ou acessório</span>
+          <div id="char-hat" class="chips"></div>
+        </div>
+
+        <div class="char-panel" data-panel="roupa" role="tabpanel" hidden>
+          <span class="group-title">Cor da camisola</span>
+          <div id="char-outfit" class="swatches"></div>
+          <span class="group-title">Padrão</span>
+          <div id="char-pattern" class="chips"></div>
+          <div id="char-number-row" class="char-number" hidden>
+            <span class="group-title">Número</span>
+            <button type="button" data-step="-1" aria-label="Número anterior">−</button>
+            <output id="char-number"></output>
+            <button type="button" data-step="1" aria-label="Número seguinte">+</button>
+          </div>
+          <span class="group-title">Calças</span>
+          <div id="char-pants" class="swatches one-row"></div>
+          <span class="group-title">Sapatilhas</span>
+          <div id="char-shoes" class="swatches one-row"></div>
+          <span class="group-title">Extra</span>
+          <div id="char-extra" class="chips"></div>
+        </div>
+
+        <div class="char-panel" data-panel="acessorios" role="tabpanel" hidden>
+          <span class="group-title">Na mão</span>
+          <div id="char-hand" class="chips"></div>
+          <div id="char-scarf-row" hidden>
+            <span class="group-title">Cores do cachecol</span>
+            <div id="char-scarf0" class="swatches one-row"></div>
+            <div id="char-scarf1" class="swatches one-row"></div>
+          </div>
+          <span class="group-title">Animal de estimação</span>
+          <div id="char-pet" class="chips"></div>
+          <span class="group-title">Aura</span>
+          <div id="char-aura" class="chips"></div>
+        </div>
+
+        <div class="char-panel" data-panel="festejo" role="tabpanel" hidden>
+          <span class="group-title">Quando ganha a ronda</span>
+          <div id="char-win" class="chips"></div>
+          <span class="group-title">Quando fica mais longe</span>
+          <div id="char-lose" class="chips"></div>
+          <span class="group-title">Frase de festejo</span>
+          <div id="char-phrase" class="chips"></div>
+        </div>
+        <!-- Como desbloquear as peças com cadeado da secção aberta. -->
+        <ul id="char-locks" class="char-locks"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirmação no estilo do jogo (ex.: "Expulsar Ana?"), em vez do confirm() do browser. -->
+  <div id="confirm" class="sheet confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-text" hidden>
+    <div class="confirm-box">
+      <p id="confirm-text"></p>
+      <div class="confirm-buttons">
+        <button id="confirm-cancel" type="button">Cancelar</button>
+        <button id="confirm-ok" type="button" class="danger"></button>
+      </div>
+    </div>
+  </div>
 
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <div id="offline" role="status" aria-live="polite" hidden>

@@ -193,8 +193,17 @@
     const setKeeper = ({ x, y, deg }) => keeper.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${deg.toFixed(0)})`);
     const standKeeper = () => setKeeper({ x: KEEPER.x, y: KEEPER.y, deg: 0 });
 
+    let shooterId = null; // quem está em grande na marca de penálti (não aparece na fila)
+
+    // Cada jogador só aparece uma vez no cenário: quem está em grande deixa o seu lugar na
+    // fila vazio (só a sombra no chão).
     function drawRow(id, pose) {
       const r = row[id];
+      r.pose = pose;
+      if (id === shooterId) {
+        r.g.replaceChildren(s('ellipse', { cx: r.x + r.w / 2, cy: r.bottom - 3, rx: r.w * 0.32, ry: 3, fill: '#000', opacity: 0.2 }));
+        return;
+      }
       const svg = kit.drawCharacter(r.player, pose, { size: r.h, small: r.small });
       svg.setAttribute('x', r.x);
       svg.setAttribute('y', r.bottom - r.h);
@@ -202,6 +211,7 @@
     }
 
     // Boneco grande de quem remata, com o pé de remate encostado à bola na marca de penálti.
+    // Quando muda quem está em grande, o anterior volta ao seu lugar na fila.
     function showShooter(player, pose = 'rematar', dx = 0) {
       const h = 64;
       const w = h * (100 / 130);
@@ -210,6 +220,11 @@
       svg.setAttribute('x', (SPOT.x - w * 0.86 + dx).toFixed(1));
       svg.setAttribute('y', (SPOT.y + 7 - h * 0.86).toFixed(1));
       shooterLayer.replaceChildren(svg);
+      const prev = shooterId;
+      if (prev === player.id) return;
+      shooterId = player.id;
+      if (prev && row[prev]) drawRow(prev, row[prev].pose);
+      if (row[player.id]) drawRow(player.id, row[player.id].pose);
     }
 
     function addMark(player, plan) {
@@ -251,6 +266,7 @@
       mount(container, { players, kit: k, seed }) {
         kit = k;
         row = {};
+        shooterId = null;
         // Com mais de 6 jogadores a cena é mais alta: a fila de baixo passa a duas filas
         // desencontradas, com bonecos maiores.
         const n = players.length;

@@ -23,7 +23,9 @@
   const FLOOR = 198; // linha do chão (vista de lado)
   const RIM = { x: 242, y: 104, rx: 20 };
   const BOARD = { x: 262, top: 50, bottom: 112 };
-  const SHOOTER = { x: 30, bottom: 202, h: 66 };
+  // Quem lança: de pés no chão do campo (a meio da faixa do chão, não na linha do fundo, que
+  // fica junto à bancada).
+  const SHOOTER = { x: 30, bottom: 224, h: 66 };
   const LANES = [205, 221]; // profundidades no chão onde as bolas ficam paradas
   const BALL_R = 7;
   const MIN_GAP = 15; // (as duas profundidades estão a 16: palpites iguais ficam lado a lado)
@@ -66,7 +68,8 @@
       }
       const kind = p.show.miss || p.show.level >= 0.62 ? 'curta' : p.show.level >= 0.38 ? 'tabela' : 'aro';
       // Mais perto do cesto quanto melhor o nível (palpites iguais: o mesmo sítio pedido).
-      const x = RIM.x - 16 - 150 * Math.max(0, (p.show.level - 0.15) / 0.7);
+      // (Até x 106: mais para a esquerda ficavam nos pés de quem lança.)
+      const x = RIM.x - 16 - 120 * Math.max(0, (p.show.level - 0.15) / 0.7);
       out[p.id] = { kind, rest: spot(x, k) };
     });
     return out;
@@ -123,19 +126,34 @@
     const timers = new Set();
     const later = (fn, ms) => { const t = setTimeout(() => { timers.delete(t); fn(); }, ms); timers.add(t); };
 
+    let shooterId = null; // quem está em grande na linha de lance livre (não aparece na fila)
+
+    // Cada jogador só aparece uma vez no cenário: quem está em grande deixa o seu lugar na
+    // fila vazio (só a sombra no chão).
     function drawRow(id, pose) {
       const r = row[id];
+      r.pose = pose;
+      if (id === shooterId) {
+        r.g.replaceChildren(s('ellipse', { cx: r.x + r.w / 2, cy: r.bottom - 3, rx: r.w * 0.32, ry: 3, fill: '#000', opacity: 0.2 }));
+        return;
+      }
       const svg = kit.drawCharacter(r.player, pose, { size: r.h, small: r.small });
       svg.setAttribute('x', r.x);
       svg.setAttribute('y', r.bottom - r.h);
       r.g.replaceChildren(svg);
     }
-    // Boneco grande na linha de lance livre (ao festejar, com o animal de estimação).
+    // Boneco grande na linha de lance livre, de pés no chão do campo (ao festejar, com o
+    // animal de estimação). O jogador anterior volta ao seu lugar na fila.
     function showShooter(player, pose = 'basquete') {
       const svg = kit.drawCharacter(player, pose, { size: SHOOTER.h, withPet: pose === 'festejar' });
       svg.setAttribute('x', SHOOTER.x);
       svg.setAttribute('y', SHOOTER.bottom - SHOOTER.h);
       shooterLayer.replaceChildren(svg);
+      const prev = shooterId;
+      if (prev === player.id) return;
+      shooterId = player.id;
+      if (prev && row[prev]) drawRow(prev, row[prev].pose);
+      if (row[player.id]) drawRow(player.id, row[player.id].pose);
     }
     const handPoint = () => ({ x: SHOOTER.x + SHOOTER.h * (51 / 130), y: SHOOTER.bottom - SHOOTER.h + SHOOTER.h * (9 / 130) });
 
@@ -185,6 +203,7 @@
       mount(container, { players, kit: k }) {
         kit = k;
         row = {};
+        shooterId = null;
         const n = players.length;
         const twoRows = n > 6;
         const vh = twoRows ? VH_TALL : VH;

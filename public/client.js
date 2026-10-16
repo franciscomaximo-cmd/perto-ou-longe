@@ -453,6 +453,29 @@
     setTimeout(go, 150);
   }
 
+  // Tema que precisa de explicação (ex.: a malha), na primeira vez que sai neste dispositivo:
+  // a explicação aparece nos ecrãs de responder e votar dessa ronda, ANTES da revelação (nunca
+  // por cima da cena). Fica vista quando a revelação dessa ronda começa.
+  const SEEN_THEMES_KEY = 'pertoOuLonge.temasExplicados';
+  function renderThemeIntro(phase) {
+    const theme = state && state.question && state.question.theme;
+    const intro = theme && window.RevealThemes.introOf(theme);
+    const seen = load(SEEN_THEMES_KEY) || [];
+    if (intro && phase === 'reveal' && !seen.includes(theme)) store(SEEN_THEMES_KEY, [...seen, theme]);
+    const show = Boolean(intro) && !seen.includes(theme) && (phase === 'answering' || phase === 'voting');
+    for (const sel of ['#ans-intro', '#vote-intro']) {
+      const box = $(sel);
+      box.hidden = !show;
+      if (show && box.dataset.theme !== theme) {
+        box.dataset.theme = theme;
+        box.replaceChildren(el('span', { class: 'icon', text: '💡', 'aria-hidden': 'true' }), el('div', {}, [
+          el('b', { text: `Nesta ronda: ${theme.charAt(0).toUpperCase()}${theme.slice(1)}` }),
+          el('p', { text: intro }),
+        ]));
+      }
+    }
+  }
+
   function render() {
     const phase = state ? state.phase : 'home';
     // De volta à sala de espera depois de um jogo: a pergunta antiga já foi usada.
@@ -470,6 +493,15 @@
     }
     // Fora da revelação, o tema da ronda é desmontado (para as animações e os eventos).
     if (phase !== 'reveal') revealCtl.destroy();
+    // Fora da sala de espera (o jogo começou, ou saiu), fecham o editor do boneco (sem
+    // guardar) e a confirmação.
+    if (phase !== 'lobby') {
+      if (draft) closeEditor();
+      closeConfirm(false);
+    }
+    // A barra fixa do fundo só existe na sala de espera (o aviso sobe para não a tapar).
+    document.body.classList.toggle('has-actions', phase === 'lobby');
+    renderThemeIntro(phase);
     lastPhase = phase;
     trackProgress(); // feitos para os desbloqueáveis do boneco
     for (const sel of new Set(Object.values(SCREENS))) $(sel).hidden = sel !== SCREENS[phase];
@@ -552,11 +584,34 @@
       p.connected ? el('span', { class: `ready-badge ${p.ready ? 'on' : ''}`, text: p.ready ? '✓ Pronto' : 'A preparar…' }) : null,
       isHost() && p.id !== state.me ? el('button', {
         type: 'button', class: 'kick', 'aria-label': `Expulsar ${p.name}`, title: `Expulsar ${p.name}`, text: '✕',
-        onclick: () => { if (confirm(`Expulsar ${p.name}?`)) act('player:kick', { playerId: p.id }); },
+        onclick: () => askConfirm(`Expulsar ${p.name}?`, 'Expulsar').then((ok) => { if (ok) act('player:kick', { playerId: p.id }); }),
       }) : null,
     ]);
     return playerRow(p, extras);
   }
+
+  // Confirmação no estilo do jogo (em vez do confirm() do browser): devolve uma promessa com
+  // true (o botão principal) ou false (Cancelar, tocar fora da caixa ou Esc).
+  let confirmResolve = null;
+  function askConfirm(text, okLabel) {
+    closeConfirm(false);
+    $('#confirm-text').textContent = text;
+    $('#confirm-ok').textContent = okLabel;
+    $('#confirm').hidden = false;
+    $('#confirm-cancel').focus();
+    return new Promise((resolve) => { confirmResolve = resolve; });
+  }
+  function closeConfirm(ok) {
+    if (!confirmResolve) return;
+    const resolve = confirmResolve;
+    confirmResolve = null;
+    $('#confirm').hidden = true;
+    resolve(ok);
+  }
+  $('#confirm-ok').addEventListener('click', () => closeConfirm(true));
+  $('#confirm-cancel').addEventListener('click', () => closeConfirm(false));
+  $('#confirm').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeConfirm(false); });
+  $('#confirm').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeConfirm(false); });
 
   // Aviso curto quando o anfitrião muda as regras (todos voltam a "não pronto").
   let seenRules = null; // [código da sala, versão das regras]
@@ -577,7 +632,8 @@
     $('#lobby-players').replaceChildren(...state.players.map((p) => lobbyRow(p, custom)));
     noticeRules();
 
-    renderCharacterEditor();
+    renderCharacterCard();
+    renderCharacterEditor(); // só se o editor estiver aberto
     renderQr();
 
     const host = isHost();
@@ -678,12 +734,18 @@
   }
 
   // --- Boneco (sala de espera) -------------------------------------------------------------
-  // Separadores Cara / Cabelo / Roupa / Acessórios / Festejo (uma secção de cada vez). A
-  // pré-visualização muda logo ao tocar (sem esperar pelo servidor); as escolhas ficam no
-  // localStorage e são reaplicadas ao entrar numa sala.
+  // Na sala de espera há só um cartão com o boneco e "Editar boneco". O editor abre num painel
+  // próprio (ecrã inteiro no telemóvel), com os separadores Cara / Cabelo / Roupa /
+  // Acessórios / Festejo (uma secção de cada vez). As mudanças ficam num rascunho e a
+  // pré-visualização (fixa no topo do painel) muda logo ao tocar, com um pequeno salto; só
+  // "Guardar" as envia ao servidor e as guarda no localStorage (reaplicadas ao entrar numa
+  // sala). "Cancelar" deixa o boneco como estava.
   const CO = window.CharacterOptions;
   const { POSES: CHAR_POSES, POSE_LABELS, cleanCharacter, randomCharacter, isUnlocked, unlockOf } = CO;
-  let pendingCharacter = null; // escolha enviada e ainda não confirmada pelo servidor
+  let pendingCharacter = null; // boneco guardado e ainda não confirmado pelo servidor
+  let draft = null; // rascunho do editor (null = editor fechado)
+  let popNext = false; // a próxima pré-visualização dá o salto ("pop")
+  let cardKey = null;
   let previewPose = 0;
   let previewAction = null; // 'festejar' | 'triste' durante o "Ver em ação"
   let actionTimers = [];
@@ -704,16 +766,72 @@
     return o ? o.label : u.id;
   }
 
+  // O boneco que os outros veem (o guardado; o enviado e ainda não confirmado conta já).
+  function savedCharacter(me) {
+    if (pendingCharacter && JSON.stringify(pendingCharacter) === JSON.stringify(me.character)) pendingCharacter = null;
+    return cleanCharacter(pendingCharacter || me.character || {}) || CO.DEFAULT_CHARACTER;
+  }
+
+  // Uma peça mudou no editor: só o rascunho (e a pré-visualização dá o salto).
   function setCharacter(change) {
+    if (!draft) return;
+    const next = cleanCharacter(change, draft);
+    if (!next) return;
+    if (JSON.stringify(next) !== JSON.stringify(draft)) popNext = true;
+    draft = next;
+    renderCharacterEditor();
+  }
+
+  // Cartão da sala de espera: o boneco guardado (só se redesenha quando muda).
+  function renderCharacterCard() {
     const me = player(state.me);
     if (!me) return;
-    const next = cleanCharacter(change, pendingCharacter || me.character);
-    if (!next) return;
+    const ch = savedCharacter(me);
+    const key = JSON.stringify([ch, me.color]);
+    if (key === cardKey) return;
+    cardKey = key;
+    $('#char-card-preview').replaceChildren(window.drawCharacter({ ...me, character: ch }, 'parado', { size: 112, withPet: true }));
+  }
+
+  // Abrir / guardar / cancelar o editor.
+  function openEditor() {
+    const me = player(state.me);
+    if (!me || state.phase !== 'lobby') return;
+    draft = savedCharacter(me);
+    previewKey = null;
+    popNext = false;
+    $('#char-editor').hidden = false;
+    document.body.classList.add('sheet-open');
+    $('#char-editor-body').scrollTop = 0;
+    $('.char-stage').classList.remove('compact');
+    renderCharacterEditor();
+    $('#char-save').focus();
+  }
+  function closeEditor() {
+    stopAction();
+    draft = null;
+    $('#char-editor').hidden = true;
+    document.body.classList.remove('sheet-open');
+    $('#btn-edit-char').focus();
+  }
+  function saveEditor() {
+    if (!draft) return;
+    const next = draft;
     pendingCharacter = next;
     store(CHAR_KEY, next);
-    renderCharacterEditor();
     act('player:character', next);
+    closeEditor();
+    renderCharacterCard();
   }
+  $('#btn-edit-char').addEventListener('click', openEditor);
+  $('#char-card-preview').addEventListener('click', openEditor);
+  $('#char-save').addEventListener('click', saveEditor);
+  $('#char-cancel').addEventListener('click', closeEditor);
+  $('#char-editor').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeEditor(); });
+  // No telemóvel, a pré-visualização fixa no topo encolhe um pouco quando se faz scroll.
+  $('#char-editor-body').addEventListener('scroll', () => {
+    $('.char-stage').classList.toggle('compact', $('#char-editor-body').scrollTop > 24);
+  }, { passive: true });
 
   function renderPreview(me, ch) {
     const pose = previewAction || CHAR_POSES[previewPose % CHAR_POSES.length];
@@ -728,6 +846,15 @@
     previewKey = key;
     if (bigFace) $('#char-face-big').replaceChildren(window.drawFace({ ...me, character: ch }, 'neutro', { size: 92 }));
     $('#char-preview').replaceChildren(window.drawCharacter({ ...me, character: ch }, pose, { size: 150, withPet: true }));
+    // Mudou uma peça: o boneco (e a cara em grande) dão um pequeno salto.
+    if (popNext) {
+      popNext = false;
+      for (const node of [$('#char-preview'), $('#char-face-big')]) {
+        node.classList.remove('pop');
+        void node.offsetWidth;
+        node.classList.add('pop');
+      }
+    }
     $('#char-pose').textContent = previewAction
       ? (previewAction === 'festejar' ? `A festejar: ${CO.WINS.find((w) => w.id === ch.win).label}` : `Reação: ${CO.LOSES.find((l) => l.id === ch.lose).label}`)
       : `${POSE_LABELS[pose]} · toca no boneco para mudar a pose`;
@@ -735,9 +862,8 @@
 
   function renderCharacterEditor() {
     const me = player(state.me);
-    if (!me) return;
-    if (pendingCharacter && JSON.stringify(pendingCharacter) === JSON.stringify(me.character)) pendingCharacter = null;
-    const ch = cleanCharacter(pendingCharacter || me.character || {}) || CO.DEFAULT_CHARACTER;
+    if (!me || !draft) return;
+    const ch = draft;
     const prog = progress();
     renderPreview(me, ch);
 
@@ -800,9 +926,8 @@
   }
   for (const b of $$('#char-number-row [data-step]')) {
     b.addEventListener('click', () => {
-      const me = player(state.me);
-      const ch = cleanCharacter(pendingCharacter || me.character || {}) || CO.DEFAULT_CHARACTER;
-      const n = ((ch.number - 1 + Number(b.dataset.step) + 99) % 99) + 1; // 1..99, dá a volta
+      if (!draft) return;
+      const n = ((draft.number - 1 + Number(b.dataset.step) + 99) % 99) + 1; // 1..99, dá a volta
       setCharacter({ number: n });
     });
   }

@@ -264,17 +264,23 @@
 
   // --- Configuração da sala (só o anfitrião mexe) --------------------------
 
+  // Tempos: o regulador anda de 5 em 5 segundos (10, 15, 20… até 180). A primeira posição (5)
+  // quer dizer "Sem limite" (0 no servidor), para se poder desligar o tempo arrastando até ao início.
+  const TIME_OFF = 5;
+  const timeFromSlider = (n) => (n <= TIME_OFF ? 0 : n);
+  const timeToSlider = (s) => (s > 0 ? s : TIME_OFF);
   const SETTINGS = [
     { input: '#set-rounds', out: '#out-rounds', key: 'rounds', format: (n) => String(n) },
-    { input: '#set-answer', out: '#out-answer', key: 'answerTime', format: formatTime },
-    { input: '#set-vote', out: '#out-vote', key: 'voteTime', format: formatTime },
+    { input: '#set-answer', out: '#out-answer', key: 'answerTime', format: formatTime, fromSlider: timeFromSlider, toSlider: timeToSlider },
+    { input: '#set-vote', out: '#out-vote', key: 'voteTime', format: formatTime, fromSlider: timeFromSlider, toSlider: timeToSlider },
   ];
+  const sliderValue = (s) => (s.fromSlider ? s.fromSlider(Number($(s.input).value)) : Number($(s.input).value));
 
   for (const s of SETTINGS) {
     const input = $(s.input);
-    input.addEventListener('input', () => { $(s.out).textContent = s.format(Number(input.value)); });
+    input.addEventListener('input', () => { $(s.out).textContent = s.format(sliderValue(s)); });
     input.addEventListener('change', () => {
-      act('settings:update', Object.fromEntries(SETTINGS.map((x) => [x.key, Number($(x.input).value)])));
+      act('settings:update', Object.fromEntries(SETTINGS.map((x) => [x.key, sliderValue(x)])));
     });
   }
 
@@ -693,7 +699,7 @@
       if (document.activeElement !== input) {
         // O número de perguntas nunca fica abaixo do mínimo (que sobe com as perguntas dos jogadores).
         const value = s.key === 'rounds' ? Math.max(state.settings.rounds, state.minRounds) : state.settings[s.key];
-        input.value = value;
+        input.value = s.toSlider ? s.toSlider(value) : value;
         $(s.out).textContent = s.format(value);
       }
     }

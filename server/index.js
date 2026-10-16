@@ -115,7 +115,6 @@ io.on('connection', (socket) => {
     'round:force': (room, id, p) => room.forceAdvance(id, p),
     'round:next': (room, id, p) => room.nextQuestion(id, p),
     'reveal:skip': (room, id, p) => room.revealSkip(id, p),
-    'player:emoji': (room, id, p) => room.setEmoji(id, p.emoji),
     'player:character': (room, id, p) => room.setCharacter(id, p),
     'game:lobby': (room, id) => room.backToLobby(id),
   };

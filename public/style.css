@@ -220,7 +220,9 @@ textarea:focus { border-color: var(--accent); }
   white-space: nowrap; font-size: .72rem; font-weight: 700;
   background: var(--bg); color: var(--text); border-radius: 6px; padding: 1px 6px;
   border: 2px solid var(--c, var(--line)); /* cor do jogador: lê-se a quem pertence */
+  display: inline-flex; align-items: center; padding-left: 2px;
 }
+.pin-label .avatar { margin-right: 4px; }
 
 /* Revelação em passos */
 .stack { display: flex; flex-direction: column; gap: 14px; }
@@ -367,9 +369,9 @@ textarea:focus { border-color: var(--accent); }
 .golf-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
 .golf-ball { filter: drop-shadow(1px 2px 0 rgba(0, 0, 0, .3)); }
 .golf-ball.sunk { opacity: .75; filter: none; }
-.golf-ball.sunk circle { stroke: #a5d8ff; stroke-dasharray: 2 2; }
+.golf-ball.sunk > .portrait-mark > circle { stroke: #a5d8ff; stroke-dasharray: 2 2; }
 .golf-ball.near, .golf-badge.near { filter: drop-shadow(0 0 3px #3ddc97) drop-shadow(0 0 2px #3ddc97); }
-.golf-ball.far circle { stroke: #ff6b6b; stroke-width: 2; }
+.golf-ball.far > .portrait-mark > circle { stroke: #ff6b6b; stroke-width: 2; }
 .golf-row-player.near { filter: drop-shadow(0 0 5px rgba(61, 220, 151, .95)); }
 .golf-row-player.far { filter: drop-shadow(0 0 4px rgba(255, 107, 107, .95)); }
 .golf-fx-text { font-size: 17px; font-weight: 900; stroke: #1d1846; stroke-width: 3.5px; paint-order: stroke; animation: pen-fx 1.4s ease-out forwards; }
@@ -396,7 +398,7 @@ textarea:focus { border-color: var(--accent); }
 .malha-answer { fill: var(--accent-ink); font-size: 13px; font-weight: 800; }
 .malha-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
 .malha.near { filter: drop-shadow(0 0 3px #3ddc97) drop-shadow(0 0 2px #3ddc97); }
-.malha.far ellipse:first-child { stroke: #ff6b6b; stroke-dasharray: 3 2; }
+.malha.far > ellipse:first-child { stroke: #ff6b6b; stroke-dasharray: 3 2; }
 .malha-row-player.near { filter: drop-shadow(0 0 5px rgba(61, 220, 151, .95)); }
 .malha-row-player.far { filter: drop-shadow(0 0 4px rgba(255, 107, 107, .95)); }
 /* O meco cai (ou, no "em cheio", gira no ar e cai) e fica deitado. */
@@ -439,7 +441,7 @@ textarea:focus { border-color: var(--accent); }
 .basq-answer { fill: var(--accent-ink); font-size: 14px; font-weight: 800; }
 .basq-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
 .basq-ball.near { filter: drop-shadow(0 0 3px #3ddc97) drop-shadow(0 0 2px #3ddc97); }
-.basq-ball.far circle { stroke-dasharray: 3 2; }
+.basq-ball.far > circle { stroke-dasharray: 3 2; }
 .basq-row-player.near { filter: drop-shadow(0 0 5px rgba(61, 220, 151, .95)); }
 .basq-row-player.far { filter: drop-shadow(0 0 4px rgba(255, 107, 107, .95)); }
 /* Rede: abana no swish; no "em cheio" pega fogo (chamas a tremer umas vezes) e fica chamuscada. */
@@ -469,10 +471,11 @@ textarea:focus { border-color: var(--accent); }
 .pen-answer { fill: var(--accent-ink); font-size: 13px; font-weight: 800; }
 .pen-emoji { font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif; }
 /* Marcas: golo (anel verde), defesa (anel branco), fora (anel vermelho tracejado). */
-.pen-mark circle { stroke-width: 1.8; }
-.pen-mark.golo circle { stroke: #3ddc97; stroke-width: 2.4; }
-.pen-mark.defesa circle { stroke: #f8f9fa; }
-.pen-mark.ferro circle, .pen-mark.fora circle, .pen-mark.bancada circle { stroke: #ff6b6b; stroke-dasharray: 3 2; }.pen-mark.golo { filter: drop-shadow(0 0 3px rgba(61, 220, 151, .9)); }
+.pen-mark > .portrait-mark > circle { stroke-width: 1.8; }
+.pen-mark.golo > .portrait-mark > circle { stroke: #3ddc97; stroke-width: 2.4; }
+.pen-mark.defesa > .portrait-mark > circle { stroke: #f8f9fa; }
+.pen-mark.ferro > .portrait-mark > circle, .pen-mark.fora > .portrait-mark > circle, .pen-mark.bancada > .portrait-mark > circle { stroke: #ff6b6b; stroke-dasharray: 3 2; }
+.pen-mark.golo { filter: drop-shadow(0 0 3px rgba(61, 220, 151, .9)); }
 .pen-row-player.near { filter: drop-shadow(0 0 5px rgba(61, 220, 151, .95)); }
 .pen-row-player.far { filter: drop-shadow(0 0 4px rgba(255, 107, 107, .95)); }
 /* Rede a abanar no golo (algumas vezes, e para). */
@@ -682,8 +685,10 @@ html, body { overflow-anchor: none; }
 @media (prefers-reduced-motion: reduce) { .award { animation: none; } }
 
 /* --- Avatares: o mesmo componente em todo o lado ----------------------- */
-/* Emoji grande num círculo com gradiente da cor do jogador, borda branca fina e sombra.
-   Tamanhos: .s ~26 px (etiquetas), .m ~40 px (listas), .l ~56 px (alvo, fim do jogo). */
+/* O retrato do boneco (cabeça e ombros, desenhado em SVG por drawPortrait) num círculo com a
+   cor do jogador, borda branca fina e sombra.
+   Tamanhos: .xs ~18 px (etiquetas do mapa), .s ~26 px (etiquetas), .m ~40 px (listas),
+   .l ~56 px (alvo, fim do jogo). */
 .avatar {
   --size: 40px;
   position: relative; display: inline-grid; place-items: center; flex: none;
@@ -695,11 +700,9 @@ html, body { overflow-anchor: none; }
   box-shadow: 0 3px 8px rgba(0, 0, 0, .35);
   line-height: 1; vertical-align: middle;
 }
-.avatar .emoji {
-  font-size: calc(var(--size) * .56); line-height: 1;
-  transform: translateY(.04em); filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .3));
-}
+.avatar .portrait { display: block; width: 100%; height: 100%; border-radius: 50%; }
 .avatar.s { --size: 26px; margin-right: 6px; border-width: 1.5px; box-shadow: 0 1px 4px rgba(0, 0, 0, .35); }
+.avatar.xs { --size: 18px; margin-right: 4px; border-width: 1px; box-shadow: none; }
 .avatar.l { --size: 56px; }
 /* "Tu": anel brilhante na tua cor. */
 .avatar.me { box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--c), 0 0 14px 2px var(--c); }
@@ -710,18 +713,8 @@ html, body { overflow-anchor: none; }
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, .5));
 }
 .avatar.off { filter: grayscale(1); opacity: .5; }
-.avatar.pop { animation: avatar-pop .45s cubic-bezier(.2, 1.6, .4, 1); }
-@keyframes avatar-pop { 0% { transform: scale(.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
 .who { display: inline-flex; align-items: center; min-width: 0; }
 .options button { display: flex; align-items: center; justify-content: center; }
-
-/* Seletor de emoji: os ocupados mostram o mini-avatar de quem os tem. */
-.emoji-picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(46px, 1fr)); gap: 6px; margin-top: 10px; }
-.emoji-picker button { display: grid; place-items: center; padding: 6px 0; font-size: 1.4rem; line-height: 1.2; border-radius: 12px; min-height: 46px; }
-.emoji-picker button .avatar { margin: 0; }
-.emoji-picker button.on { background: var(--c); border-color: #fff; }
-.emoji-picker button.taken:disabled { opacity: .75; background: transparent; border-style: dashed; }
-.emoji-picker button.pop { animation: avatar-pop .45s cubic-bezier(.2, 1.6, .4, 1); }
 
 /* --- Boneco: editor na sala de espera ----------------------------------- */
 .char-card { display: flex; flex-direction: column; gap: 10px; }
@@ -736,13 +729,15 @@ html, body { overflow-anchor: none; }
 .char-actions { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .char-actions button { min-height: 46px; padding: 8px 10px; }
 .char-actions .hint { font-size: .75rem; }
+.char-face-big { display: grid; place-items: center; min-height: 70px; }
+.char-face-big[hidden] { display: none; }
+.char-face-big svg { max-height: 92px; }
 /* Separadores: botões grandes; só a secção escolhida aparece. */
-.char-tabs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; background: var(--bg); padding: 4px; border-radius: 14px; }
-.char-tabs button { min-height: 44px; padding: 6px 2px; font-size: .85rem; border: 0; background: transparent; border-radius: 10px; }
+.char-tabs { display: flex; gap: 3px; background: var(--bg); padding: 4px; border-radius: 14px; }
+.char-tabs button { flex: 1 1 auto; min-width: 0; min-height: 44px; padding: 6px 4px; font-size: .8rem; border: 0; background: transparent; border-radius: 10px; }
 .char-tabs button[aria-selected="true"] { background: var(--accent); color: var(--accent-ink); }
 .char-panel { display: flex; flex-direction: column; gap: 8px; }
 .char-panel[hidden] { display: none; }
-.char-panel .emoji-picker { margin-top: 0; }
 .chips button.locked { opacity: .6; border-style: dashed; }
 .char-number { display: flex; align-items: center; gap: 10px; }
 .char-number button { width: 46px; height: 46px; padding: 0; font-size: 1.3rem; }
@@ -900,7 +895,7 @@ html, body { overflow-anchor: none; }
 .confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
 
 @media (prefers-reduced-motion: reduce) {
-  .results li.shake, .avatar.pop, .emoji-picker button.pop { animation: none; }
+  .results li.shake { animation: none; }
   .scores li { transition: none !important; }
   .spinner { animation-duration: 3s; }
 }

@@ -171,7 +171,7 @@
       return { x: a.x + a.w * 0.8, y: a.bottom - a.h + a.h * (32 / 130) };
     }
 
-    // Dardo: ponta de metal, corpo na cor do jogador, penas e, na cauda, o emoji num círculo.
+    // Dardo: ponta de metal, corpo na cor do jogador, penas e, na cauda, o retrato do jogador.
     // O desenho fica num grupo interior, para a vibração do "em cheio" (CSS) não apagar a posição.
     function dartShape(player, len) {
       const f = len - 6;
@@ -179,8 +179,7 @@
         s('line', { x1: -8, y1: 0, x2: 0, y2: 0, stroke: '#ced4da', 'stroke-width': 1.4, 'stroke-linecap': 'round' }),
         s('line', { x1: -f, y1: 0, x2: -7, y2: 0, stroke: player.color, 'stroke-width': 3, 'stroke-linecap': 'round' }),
         s('path', { d: `M${-f},0 L${-f - 6},-4.5 L${-f - 3},0 L${-f - 6},4.5 Z`, fill: player.color, stroke: 'rgba(0,0,0,.4)', 'stroke-width': 0.6 }),
-        s('circle', { cx: -len, cy: 0, r: 6.2, fill: player.color, stroke: '#fff', 'stroke-width': 1.2 }),
-        text({ x: -len, y: 0.4, 'font-size': 7.5, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'dart-emoji' }, player.emoji || ''),
+        kit.portraitMark(player, 6.6, -len, 0),
       ])]);
     }
 
@@ -193,7 +192,7 @@
     function settle(node, id) {
       const { to } = flightOf(id);
       node.setAttribute('transform', `translate(${to.x.toFixed(1)} ${to.y.toFixed(1)}) rotate(${to.deg.toFixed(1)})`);
-      node.querySelector('text').setAttribute('transform', `rotate(${(-to.deg).toFixed(1)} ${-to.len} 0)`);
+      node.querySelector('.portrait-mark').setAttribute('transform', `rotate(${(-to.deg).toFixed(1)} ${-to.len} 0)`);
     }
 
     // Texto curto que aparece e desaparece (uma vez).
@@ -356,7 +355,7 @@
           const dy = 2 * (1 - e) * (ctrl.y - from.y) + 2 * e * (to.y - ctrl.y);
           const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
           node.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${deg.toFixed(1)})`);
-          node.querySelector('text').setAttribute('transform', `rotate(${(-deg).toFixed(1)} ${-to.len} 0)`);
+          node.querySelector('.portrait-mark').setAttribute('transform', `rotate(${(-deg).toFixed(1)} ${-to.len} 0)`);
           flights.get(player.id).frame = requestAnimationFrame(frameFn);
         };
         flights.set(player.id, { frame: requestAnimationFrame(frameFn), finish });

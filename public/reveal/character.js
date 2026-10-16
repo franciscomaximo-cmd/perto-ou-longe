@@ -4,7 +4,7 @@
 // boneco: os temas de revelação só escolhem a pose, nunca o desenham por conta própria.
 //
 //   drawCharacter(player, pose, { size, small, title, kartColor, withPet })
-//     player: { emoji, color, character } (peças em public/reveal/character-options.js; as que
+//     player: { color, character } (peças em public/reveal/character-options.js; as que
 //             faltarem ficam com o valor por omissão)
 //     pose:   'parado' | 'arco' | 'lancar' | 'kart' | 'rematar' | 'dardo' | 'golfe' | 'malha'
 //             | 'basquete'
@@ -16,8 +16,14 @@
 //             e param (nunca para sempre); com movimento reduzido, nem começam.
 //     size:   altura em px (a largura é ~0,77 da altura; ~1,08 com o animal)
 //     small:  versão simplificada (traços mais grossos, sem extras, objeto na mão, número da
-//             camisola, nem pormenores), para quando há muitos jogadores no ecrã. A cor, o
-//             emoji, o chapéu e o padrão da camisola continuam lá, para se reconhecer.
+//             camisola, nem pormenores da cara), para quando há muitos jogadores no ecrã. A
+//             cor, o tom de pele, o cabelo (forma e cor), o chapéu e o padrão da camisola
+//             continuam lá, para se reconhecer.
+//     A cabeça é uma cara desenhada (peças da cara no boneco) e muda de expressão com a pose:
+//     contente ao festejar, triste ou chocada na derrota, concentrada antes de lançar.
+//
+//   drawPortrait(player, { size, small }): o retrato (cabeça e ombros) num círculo com a cor
+//     do jogador. É o avatar das listas e as marcas dos temas (uma só função para o retrato).
 //     kartColor: cor do kart nas poses de kart (por omissão, vermelho)
 //     withPet: desenha o animal de estimação ao lado (o desenho fica mais largo); só onde
 //             couber (editor, ecrã final, festejos em grande).
@@ -27,7 +33,6 @@
   const W = 100;
   const H = 130;
   const PET_W = 40; // largura extra com o animal
-  const SKIN = '#ffd8a8';
   const Options = root.CharacterOptions;
 
   function svgEl(tag, attrs = {}, children = []) {
@@ -189,7 +194,7 @@
         ]);
       case 'capacete':
         return svgEl('g', {}, [
-          // Só a calote, acima dos olhos (não tapa a cara do emoji), com uma risca ao meio.
+          // Só a calote, acima dos olhos (não tapa os olhos), com uma risca ao meio.
           svgEl('path', { d: 'M-17,-8 Q-17,-29 0,-29 Q17,-29 17,-8 Z', fill: outfit, stroke: dark, 'stroke-width': 1.5 }),
           svgEl('path', { d: 'M-2,-29 L2,-29 L2,-8 L-2,-8 Z', fill: '#ffffff', opacity: 0.85 }),
           svgEl('rect', { x: -18, y: -10, width: 36, height: 3.5, rx: 1.75, fill: dark }),
@@ -490,6 +495,315 @@
     }
   }
 
+  // --- Cara desenhada (centro da cabeça em 0,0; raio ~15) ------------------------------------
+  // A expressão muda com a pose (o estilo escolhido mantém-se): contente ao festejar, triste ou
+  // chocada na derrota, concentrada antes de lançar.
+  // Cor dos traços (olhos, boca, sobrancelhas). Na pele escura fica quase preta e um pouco
+  // mais grossa, para se ver bem (é escolhida no início de cada face()).
+  let INK = '#2b1d14';
+  let INK_BOOST = 0;
+  const lum = (hex) => {
+    const n = parseInt(hex.slice(1), 16);
+    return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
+  };
+  const ACTION_POSES = new Set(['arco', 'lancar', 'kart', 'rematar', 'dardo', 'golfe', 'malha', 'basquete']);
+  // Chapéus que tapam o alto da cabeça (escondem o carrapito e as pontas do moicano).
+  const HAT_COVERS = new Set(['bone', 'capacete', 'gorro', 'cowboy', 'coroa', 'coroa_dourada']);
+  function expressionOf(pose, ch) {
+    if (pose === 'festejar' || pose === 'kart_festejar') return 'feliz';
+    if (pose === 'triste' || pose === 'kart_triste') return ch.lose === 'cair' ? 'chocado' : 'triste';
+    if (ACTION_POSES.has(pose)) return 'concentrado';
+    return 'neutro';
+  }
+
+  // Cabelo de trás (por trás da cabeça): comprido, rabo-de-cavalo e tranças.
+  function hairBack(id, color, dark) {
+    const stroke = { fill: color, stroke: dark, 'stroke-width': 0.8, 'stroke-linejoin': 'round' };
+    switch (id) {
+      case 'comprido':
+        return svgEl('path', { d: 'M-16.5,-4 Q-18.5,-19.5 0,-20 Q18.5,-19.5 16.5,-4 L17.5,19 Q13,24 9.5,19.5 L10.5,4 Q0,8 -10.5,4 L-9.5,19.5 Q-13,24 -17.5,19 Z', ...stroke });
+      case 'rabo':
+        return svgEl('g', {}, [
+          svgEl('path', { d: 'M9,-13 Q23,-11 22,5 Q21,16 15,21 Q17,8 10,-3 Z', ...stroke }),
+          svgEl('circle', { cx: 12.5, cy: -9.5, r: 2.2, fill: dark }),
+        ]);
+      case 'trancas':
+        return svgEl('g', {}, [-1, 1].flatMap((side) => [0, 1, 2, 3, 4].map((k) => svgEl('ellipse', {
+          cx: side * (14 + k * 0.4), cy: 0 + k * 4.6, rx: 2.9, ry: 2.6, ...stroke,
+        }))));
+      default:
+        return null;
+    }
+  }
+  // Cabelo da frente (por cima da testa).
+  function hairFront(id, color, dark, hatCovers, small) {
+    const st = { fill: color, stroke: dark, 'stroke-width': 0.8, 'stroke-linejoin': 'round' };
+    const cap = () => svgEl('path', { d: 'M-15.2,-1 Q-16.5,-17.5 0,-17.8 Q16.5,-17.5 15.2,-1 Q13,-9 6,-11.5 Q0,-13 -6,-11.5 Q-13,-9 -15.2,-1 Z', ...st });
+    switch (id) {
+      case 'careca':
+        return small ? null : svgEl('ellipse', { cx: -5, cy: -10, rx: 3, ry: 1.6, fill: '#fff', opacity: 0.3, transform: 'rotate(-20 -5 -10)' });
+      case 'curto':
+      case 'comprido':
+      case 'trancas':
+        return cap();
+      case 'rapado':
+        return svgEl('path', { d: 'M-14.6,-3 Q-15.5,-16.5 0,-16.8 Q15.5,-16.5 14.6,-3 Q12,-11 0,-12.8 Q-12,-11 -14.6,-3 Z', fill: color, opacity: 0.5 });
+      case 'rabo':
+        return svgEl('path', { d: 'M-15.2,-1 Q-16.5,-17.5 0,-17.8 Q16.5,-17.5 15.2,-1 Q12,-10 2,-12.5 Q-6,-13.5 -12,-8 Q-14,-5 -15.2,-1 Z', ...st });
+      case 'carrapito':
+        return svgEl('g', {}, [
+          hatCovers ? null : svgEl('circle', { cx: 0, cy: -19, r: 5.6, ...st }),
+          cap(),
+        ]);
+      case 'encaracolado': {
+        const curls = [];
+        const n = small ? 6 : 9;
+        for (let i = 0; i < n; i++) {
+          const a = Math.PI + (i * Math.PI) / (n - 1);
+          curls.push(svgEl('circle', { cx: (Math.cos(a) * 15.5).toFixed(1), cy: (Math.sin(a) * 15 - 3).toFixed(1), r: small ? 5 : 4.4, ...st }));
+        }
+        return svgEl('g', {}, [svgEl('path', { d: 'M-15,-2 Q-16,-18 0,-18.5 Q16,-18 15,-2 Q12,-10 0,-11 Q-12,-10 -15,-2 Z', ...st }), ...curls]);
+      }
+      case 'moicano':
+        return svgEl('g', {}, [
+          svgEl('path', { d: 'M-14.6,-3 Q-15.5,-16.5 0,-16.8 Q15.5,-16.5 14.6,-3 Q12,-11 0,-12.8 Q-12,-11 -14.6,-3 Z', fill: color, opacity: 0.3 }),
+          svgEl('path', { d: hatCovers ? 'M-3.5,-11.5 L-3.8,-17.5 L3.8,-17.5 L3.5,-11.5 Z' : 'M-3.5,-11.5 L-5,-19 L-1.8,-17.5 L0,-25 L1.8,-17.5 L5,-19 L3.5,-11.5 Z', ...st }),
+        ]);
+      case 'franja':
+        return svgEl('path', { d: 'M-15.2,-1 Q-16.5,-17.5 0,-17.8 Q16.5,-17.5 15.2,-1 L12.5,-5 L9.5,-2.5 L6.5,-6.5 L3.2,-3.5 L0,-7.5 L-3.2,-3.5 L-6.5,-6.5 L-9.5,-2.5 L-12.5,-5 Z', ...st });
+      default:
+        return null;
+    }
+  }
+
+  // Um olho no estilo escolhido, com a expressão por cima (pálpebras, tamanho).
+  function eye(style, x, side, expr, skin, small) {
+    const y = -1.5;
+    if (small) {
+      if (style === 'estrelas') return svgEl('polygon', { points: starPath(x, y, 2.8), fill: '#ffd43b', stroke: '#e67700', 'stroke-width': 0.6 });
+      if (style === 'sorridentes' || expr === 'feliz') return svgEl('path', { d: `M${x - 2.4},${y + 0.8} Q${x},${y - 2.4} ${x + 2.4},${y + 0.8}`, fill: 'none', stroke: INK, 'stroke-width': 1.8 + INK_BOOST, 'stroke-linecap': 'round' });
+      // Branco à volta da pupila: lê-se em qualquer tom de pele, mesmo em ponto pequeno.
+      return svgEl('g', {}, [svgEl('circle', { cx: x, cy: y, r: 2.6, fill: '#fff' }), svgEl('circle', { cx: x, cy: y + 0.2, r: 1.6, fill: INK })]);
+    }
+    const parts = [];
+    const closedArc = (down) => svgEl('path', {
+      d: down ? `M${x - 2.6},${y} Q${x},${y + 2} ${x + 2.6},${y}` : `M${x - 2.6},${y + 0.8} Q${x},${y - 2.4} ${x + 2.6},${y + 0.8}`,
+      fill: 'none', stroke: INK, 'stroke-width': 1.4 + INK_BOOST, 'stroke-linecap': 'round',
+    });
+    const open = (rx, ry, pr, cy = y) => [
+      svgEl('ellipse', { cx: x, cy, rx, ry, fill: '#fff', stroke: INK, 'stroke-width': 0.5 }),
+      svgEl('circle', { cx: x + 0.2, cy: cy + 0.3, r: pr, fill: INK }),
+      svgEl('circle', { cx: x + 0.2 + pr * 0.35, cy: cy + 0.3 - pr * 0.4, r: Math.max(0.4, pr * 0.32), fill: '#fff' }),
+    ];
+    let lid = 0; // altura da pálpebra de cima (0 = aberto)
+    switch (style) {
+      case 'sorridentes': parts.push(closedArc(false)); break;
+      case 'piscar': parts.push(side > 0 ? closedArc(true) : null, ...(side > 0 ? [] : open(2.4, 2.9, 1.4))); break;
+      case 'estrelas': parts.push(svgEl('polygon', { points: starPath(x, y, 3.3), fill: '#ffd43b', stroke: '#e67700', 'stroke-width': 0.6 })); break;
+      case 'grandes': parts.push(...open(3.4, 3.6, 2)); break;
+      case 'sonolentos': parts.push(...open(2.5, 2.3, 1.3, y + 0.5)); lid = 2.3; break;
+      default: parts.push(...open(2.4, 2.9, 1.4));
+    }
+    const isOpen = style === 'normais' || style === 'grandes' || style === 'sonolentos' || (style === 'piscar' && side < 0);
+    if (isOpen) {
+      if (expr === 'concentrado') lid = Math.max(lid, 2.6);
+      if (expr === 'triste') lid = Math.max(lid, 1.6);
+      if (lid) {
+        // Pálpebra de cima (cor da pele, com o contorno), descaída para fora na tristeza.
+        const tilt = expr === 'triste' ? side * 0.9 : 0;
+        parts.push(svgEl('path', {
+          d: `M${x - 4},${y - 4.2} L${x + 4},${y - 4.2} L${x + 4},${y - 4 + lid + tilt} L${x - 4},${y - 4 + lid - tilt} Z`,
+          fill: skin,
+        }), svgEl('path', { d: `M${x - 3},${y - 4 + lid - tilt * 0.75} L${x + 3},${y - 4 + lid + tilt * 0.75}`, stroke: INK, 'stroke-width': 0.9 + INK_BOOST, 'stroke-linecap': 'round' }));
+      }
+      // Olhos contentes: a bochecha sobe por baixo do olho.
+      if (expr === 'feliz') parts.push(svgEl('path', { d: `M${x - 3.6},${y + 4} Q${x},${y + 0.6} ${x + 3.6},${y + 4} Z`, fill: skin }));
+    }
+    const g = svgEl('g', {}, parts.filter(Boolean));
+    // Chocado: olhos maiores.
+    if (expr === 'chocado' && isOpen) g.setAttribute('transform', `translate(${x} ${y}) scale(1.25) translate(${-x} ${-y})`);
+    return g;
+  }
+
+  function brow(style, x, side, expr, color) {
+    const by = -6.6;
+    const w = style === 'grossas' ? 2.4 : style === 'zangadas' ? 1.7 : 1.3;
+    const d = style === 'zangadas'
+      ? `M${x - 2.8 * -side},${by + 1.2} L${x + 2.8 * -side},${by - 0.8}`
+      : style === 'levantadas'
+        ? `M${x - 2.6},${by - 0.8} Q${x},${by - 3.4} ${x + 2.6},${by - 0.8}`
+        : `M${x - 2.6},${by + 0.4} Q${x},${by - 1.1} ${x + 2.6},${by + 0.4}`;
+    // A expressão inclina e levanta as sobrancelhas (o estilo mantém-se).
+    const angle = { triste: 14, concentrado: -12 }[expr] || 0;
+    const dy = { chocado: -1.8, feliz: -0.6, triste: -0.4 }[expr] || 0;
+    return svgEl('path', {
+      d, fill: 'none', stroke: color, 'stroke-width': w, 'stroke-linecap': 'round',
+      transform: `translate(0 ${dy}) rotate(${(-side * angle).toFixed(0)} ${x} ${by})`,
+    });
+  }
+
+  function mouth(style, expr, small) {
+    let m = style;
+    if (expr === 'feliz' && !['lingua', 'dentes', 'aberto'].includes(style)) m = 'aberto';
+    if (expr === 'triste') m = 'triste';
+    if (expr === 'chocado') m = 'chocado';
+    if (expr === 'concentrado' && style !== 'lingua') m = 'concentrado';
+    const line = (d, w = 1.4) => svgEl('path', { d, fill: 'none', stroke: INK, 'stroke-width': (small ? 2 : w) + INK_BOOST, 'stroke-linecap': 'round' });
+    if (small) {
+      if (m === 'aberto' || m === 'dentes' || m === 'lingua') return svgEl('path', { d: 'M-4.6,6 Q0,12.5 4.6,6 Z', fill: '#7a1f2b' });
+      if (m === 'surpresa' || m === 'chocado') return svgEl('ellipse', { cx: 0, cy: 8, rx: 2.4, ry: 3, fill: '#7a1f2b' });
+      if (m === 'triste') return line('M-3.8,9.4 Q0,6 3.8,9.4');
+      if (m === 'serio' || m === 'concentrado') return line('M-3.2,7.6 L3.2,7.6');
+      return line('M-4,6.4 Q0,10.4 4,6.4');
+    }
+    switch (m) {
+      case 'aberto':
+        return svgEl('g', {}, [
+          svgEl('path', { d: 'M-4.6,6 Q0,12.5 4.6,6 Z', fill: '#7a1f2b', stroke: INK, 'stroke-width': 0.8, 'stroke-linejoin': 'round' }),
+          svgEl('ellipse', { cx: 0.6, cy: 9.4, rx: 2, ry: 1.1, fill: '#ff8787' }),
+        ]);
+      case 'lingua':
+        return svgEl('g', {}, [
+          svgEl('path', { d: 'M-1.4,7.4 Q0.4,13 2.2,7.4 Z', fill: '#ff6b81', stroke: '#c92a2a', 'stroke-width': 0.5 }),
+          line('M-4,6.4 Q0,9.6 4,6.4'),
+        ]);
+      case 'surpresa':
+        return svgEl('ellipse', { cx: 0, cy: 8, rx: 2.2, ry: 2.8, fill: '#7a1f2b', stroke: INK, 'stroke-width': 0.6 });
+      case 'chocado':
+        return svgEl('ellipse', { cx: 0, cy: 8.4, rx: 2.8, ry: 3.6, fill: '#7a1f2b', stroke: INK, 'stroke-width': 0.6 });
+      case 'serio':
+        return line('M-3.4,7.6 L3.4,7.6');
+      case 'triste':
+        return line('M-3.8,9.4 Q0,6 3.8,9.4');
+      case 'concentrado':
+        return line('M-1.2,8 Q1.4,7.2 3.4,7.6', 1.3);
+      case 'dentes':
+        return svgEl('g', {}, [
+          svgEl('path', { d: 'M-4.6,6 Q0,11.6 4.6,6 Z', fill: '#fff', stroke: INK, 'stroke-width': 0.9, 'stroke-linejoin': 'round' }),
+          svgEl('path', { d: 'M-4,7.2 L4,7.2 M-1.5,6.3 L-1.5,8.8 M1.5,6.3 L1.5,8.8', stroke: '#ced4da', 'stroke-width': 0.5 }),
+        ]);
+      default:
+        return line('M-4,6.4 Q0,10 4,6.4');
+    }
+  }
+
+  function facialHair(id, color, dark) {
+    const st = { fill: color, stroke: dark, 'stroke-width': 0.6, 'stroke-linejoin': 'round' };
+    const moustache = svgEl('path', { d: 'M-5,5.4 Q-2.5,3.4 0,4.8 Q2.5,3.4 5,5.4 Q2.5,6.6 0,5.8 Q-2.5,6.6 -5,5.4 Z', ...st });
+    switch (id) {
+      case 'bigode': return moustache;
+      case 'barba-curta':
+        return svgEl('g', {}, [svgEl('path', { d: 'M-13.5,1.5 Q-12.5,13.5 0,15.6 Q12.5,13.5 13.5,1.5 L11.4,3 Q10,10.4 0,11.8 Q-10,10.4 -11.4,3 Z', ...st, opacity: 0.92 }), moustache]);
+      case 'barba-comprida':
+        return svgEl('g', {}, [svgEl('path', { d: 'M-13.5,1.5 Q-14,18 0,25 Q14,18 13.5,1.5 L11.4,3 Q9.5,11.2 0,12.2 Q-9.5,11.2 -11.4,3 Z', ...st }), moustache]);
+      default: return null;
+    }
+  }
+
+  function faceExtra(id) {
+    switch (id) {
+      case 'sardas':
+        return svgEl('g', { fill: '#a0522d', opacity: 0.7 }, [[-7.5, 3], [-9.5, 4.6], [-6, 5], [7.5, 3], [9.5, 4.6], [6, 5]]
+          .map(([x, y]) => svgEl('circle', { cx: x, cy: y, r: 0.6 })));
+      case 'bochechas':
+        return svgEl('g', { fill: '#ff8787', opacity: 0.45 }, [-1, 1].map((s) => svgEl('ellipse', { cx: s * 8.6, cy: 4.4, rx: 2.8, ry: 1.7 })));
+      case 'oculos-redondos':
+      case 'oculos-quadrados': {
+        const round = id === 'oculos-redondos';
+        const lens = (x) => (round
+          ? svgEl('circle', { cx: x, cy: -1.5, r: 3.9 })
+          : svgEl('rect', { x: x - 4, y: -4.6, width: 8, height: 6.4, rx: 1.3 }));
+        return svgEl('g', { fill: 'rgba(255,255,255,.18)', stroke: '#343a40', 'stroke-width': 1.1 }, [
+          lens(-5.5), lens(5.5),
+          svgEl('path', { d: 'M-1.6,-1.8 Q0,-3 1.6,-1.8 M-9.4,-2 L-14.2,-3 M9.4,-2 L14.2,-3', fill: 'none' }),
+        ]);
+      }
+      case 'pala':
+        return svgEl('g', {}, [
+          svgEl('path', { d: 'M-14.6,-7.5 L2.2,-3.6 M9,-2.4 L14.6,-1.2', stroke: INK, 'stroke-width': 1 }),
+          svgEl('ellipse', { cx: 5.6, cy: -1.4, rx: 3.8, ry: 3.3, fill: INK }),
+        ]);
+      default:
+        return null;
+    }
+  }
+
+  // Cara completa: cabelo de trás, orelhas, cabeça, bochechas, olhos, sobrancelhas, nariz,
+  // boca, pelos faciais, cabelo da frente e extras (óculos, pala). Versão pequena (muitos
+  // jogadores no ecrã): só a pele, o cabelo, os olhos e a boca.
+  function face(ch, expr = 'neutro', small = false) {
+    const skin = ch.skin;
+    const darkSkin = lum(skin) < 0.42;
+    INK = darkSkin ? '#0b0604' : '#2b1d14';
+    INK_BOOST = darkSkin ? 0.4 : 0;
+    const skinDark = shade(skin, darkSkin ? 0.4 : 0.28);
+    const hairDark = shade(ch.hairColor, 0.35);
+    const browColor = darkSkin && lum(ch.hairColor) < 0.35 ? INK : hairDark;
+    const hatCovers = HAT_COVERS.has(ch.hat);
+    const head = ch.face === 'oval'
+      ? svgEl('ellipse', { cx: 0, cy: 0.5, rx: 13.6, ry: 16, fill: skin, stroke: skinDark, 'stroke-width': 1 })
+      : ch.face === 'quadrada'
+        ? svgEl('rect', { x: -14, y: -14.5, width: 28, height: 30, rx: 8, fill: skin, stroke: skinDark, 'stroke-width': 1 })
+        : svgEl('circle', { cx: 0, cy: 0, r: 15, fill: skin, stroke: skinDark, 'stroke-width': 1 });
+    const parts = [
+      hairBack(ch.hair, ch.hairColor, hairDark),
+      small ? null : svgEl('circle', { cx: -14.2, cy: 1.5, r: 3.2, fill: skin, stroke: skinDark, 'stroke-width': 0.9 }),
+      small ? null : svgEl('circle', { cx: 14.2, cy: 1.5, r: 3.2, fill: skin, stroke: skinDark, 'stroke-width': 0.9 }),
+      head,
+      small || !['sardas', 'bochechas'].includes(ch.faceExtra) ? null : faceExtra(ch.faceExtra),
+      small ? null : brow(ch.brows, -5.5, -1, expr, browColor),
+      small ? null : brow(ch.brows, 5.5, 1, expr, browColor),
+      eye(ch.eyes, -5.5, -1, expr, skin, small),
+      eye(ch.eyes, 5.5, 1, expr, skin, small),
+      small ? null : svgEl('path', { d: 'M-1.2,2.4 Q0,3.8 1.2,2.4', fill: 'none', stroke: skinDark, 'stroke-width': 1.1, 'stroke-linecap': 'round' }),
+      mouth(ch.mouth, expr, small),
+      facialHair(ch.facial, ch.hairColor, hairDark),
+      hairFront(ch.hair, ch.hairColor, hairDark, hatCovers, small),
+      small || ['sardas', 'bochechas', 'nenhum'].includes(ch.faceExtra) ? null : faceExtra(ch.faceExtra),
+    ];
+    return svgEl('g', { class: 'char-face' }, parts.filter(Boolean));
+  }
+
+  // Retrato (cabeça e ombros) num círculo com a cor do jogador: o avatar das listas e as
+  // marcas dos temas. É a ÚNICA função que desenha o retrato. Abaixo de ~30 px, a cara simples.
+  let portraitId = 0;
+  function drawPortrait(player, { size = 40, small = size < 30 } = {}) {
+    const ch = (Options && Options.cleanCharacter(player.character || {}, Options.DEFAULT_CHARACTER)) || Options.DEFAULT_CHARACTER;
+    const outfit = ch.outfit || player.color || '#4dabf7';
+    const svg = svgEl('svg', { viewBox: '0 0 40 40', width: size, height: size, class: 'portrait', 'aria-hidden': 'true' });
+    const head = svgEl('g', { transform: 'translate(20 20.5) scale(0.78)' }, [face(ch, 'neutro', small), hat(ch.hat, outfit, small)]);
+    svg.append(
+      svgEl('circle', { cx: 20, cy: 20, r: 20, fill: player.color || outfit }),
+      svgEl('circle', { cx: 14, cy: 11, r: 14, fill: '#fff', opacity: 0.18 }),
+    );
+    if (small) {
+      // Pequeno (marcas dos temas, que se mexem): sem recorte, que é o que pesa a animar com
+      // muitos jogadores. Os ombros já são desenhados dentro do círculo.
+      svg.append(svgEl('path', { d: 'M4,32 Q20,28 36,32 A20,20 0 0 1 4,32 Z', fill: outfit }), head);
+      return svg;
+    }
+    // Grande (listas): recortado no círculo (o chapéu não sai da moldura).
+    const id = `portrait-${++portraitId}`;
+    svg.append(
+      svgEl('defs', {}, [svgEl('clipPath', { id }, [svgEl('circle', { cx: 20, cy: 20, r: 20 })])]),
+      svgEl('g', { 'clip-path': `url(#${id})` }, [
+        svgEl('path', { d: 'M3,42 Q5,33.2 20,32.6 Q35,33.2 37,42 Z', fill: outfit, stroke: shade(outfit, 0.35), 'stroke-width': 1 }),
+        head,
+      ]),
+    );
+    return svg;
+  }
+
+  // Só a cara (com o chapéu), numa expressão: 'neutro' | 'feliz' | 'triste' | 'chocado' |
+  // 'concentrado'. Para a página de desenvolvimento.
+  const EXPRESSIONS = ['neutro', 'feliz', 'triste', 'chocado', 'concentrado'];
+  function drawFace(player, expr = 'neutro', { size = 60, small = false } = {}) {
+    const ch = (Options && Options.cleanCharacter(player.character || {}, Options.DEFAULT_CHARACTER)) || Options.DEFAULT_CHARACTER;
+    const svg = svgEl('svg', { viewBox: '-22 -30 44 56', width: Math.round(size * (44 / 56)), height: size, overflow: 'visible', 'aria-hidden': 'true' });
+    svg.append(face(ch, expr, small), hat(ch.hat, ch.outfit || player.color || '#4dabf7', small));
+    return svg;
+  }
+
   // Lágrimas (reação "chorar"): caem algumas vezes e param.
   function tears(head) {
     const [hx, hy] = head;
@@ -564,9 +878,12 @@
       if (!g.seated) body.append(svgEl('ellipse', { cx: leg[2][0] + 2, cy: leg[2][1] + 1, rx: small ? 5.5 : 5, ry: 3, fill: ch.shoes, stroke: 'rgba(0,0,0,.35)', 'stroke-width': 0.6 }));
     }
 
-    // Tronco (camisola na cor da roupa, com o padrão escolhido).
+    // Pescoço (por trás do tronco e da cabeça).
     const top = g.seated ? 52 : 48;
     const bottom = g.seated ? 88 : 84;
+    body.append(svgEl('rect', { x: g.head[0] - 3.5, y: g.head[1] + 11, width: 7, height: top - g.head[1] - 9, rx: 2, fill: ch.skin, stroke: shade(ch.skin, 0.25), 'stroke-width': 0.8 }));
+
+    // Tronco (camisola na cor da roupa, com o padrão escolhido).
     body.append(svgEl('path', {
       d: `M38,${top + 4} Q38,${top} 44,${top} L56,${top} Q62,${top} 62,${top + 4} L59,${bottom} Q50,${bottom + 3} 41,${bottom} Z`,
       fill: outfit, stroke: outfitDark, 'stroke-width': 1.5, 'stroke-linejoin': 'round',
@@ -582,7 +899,7 @@
     for (const arm of [g.armL, g.armR]) {
       body.append(poly(arm, { stroke: outfit, 'stroke-width': limb }));
       body.append(poly(arm, { stroke: outfitDark, 'stroke-width': 1, opacity: 0.25 }));
-      if (!small) body.append(svgEl('circle', { cx: arm[2][0], cy: arm[2][1], r: 3.6, fill: SKIN, stroke: '#e0a96d', 'stroke-width': 0.8 }));
+      if (!small) body.append(svgEl('circle', { cx: arm[2][0], cy: arm[2][1], r: 3.6, fill: ch.skin, stroke: shade(ch.skin, 0.25), 'stroke-width': 0.8 }));
     }
 
     // Objetos da pose (no kart, os confetis do festejo). Nas poses de mãos livres, o objeto
@@ -596,14 +913,11 @@
     const scarf = extraFront(extra);
     if (scarf) body.append(scarf);
 
-    // Cabeça = emoji do jogador, com o chapéu/acessório por cima (inclinam juntos).
+    // Cabeça = a cara desenhada, com a expressão da pose e o chapéu/acessório por cima
+    // (inclinam juntos). Os chapéus ficam acima dos olhos e o cabelo comprido aparece por baixo.
     const [hx, hy, tilt] = g.head;
-    // Os chapéus ficam acima dos olhos, para nunca taparem a cara do emoji.
     body.append(svgEl('g', { transform: `translate(${hx} ${hy}) rotate(${tilt})` }, [
-      svgEl('text', {
-        x: 0, y: 1, 'font-size': 31, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-        style: 'font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif',
-      }, [document.createTextNode(player.emoji || '🙂')]),
+      face(ch, expressionOf(requested, ch), small),
       hat(ch.hat, outfit, small),
     ]));
     // Lágrimas: na reação "chorar" (também no kart).
@@ -612,4 +926,7 @@
   }
 
   root.drawCharacter = drawCharacter;
+  root.drawPortrait = drawPortrait;
+  root.drawFace = drawFace;
+  root.FACE_EXPRESSIONS = EXPRESSIONS;
 })(window);

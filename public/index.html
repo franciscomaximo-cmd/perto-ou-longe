@@ -75,18 +75,40 @@
             <button id="char-action" type="button">▶ Ver em ação</button>
             <button id="char-random" type="button">🎲 Aleatório</button>
             <span id="char-pose" class="hint"></span>
+            <!-- Nos separadores Cara e Cabelo: a cara em grande, para se verem os pormenores. -->
+            <div id="char-face-big" class="char-face-big" aria-hidden="true" hidden></div>
           </div>
         </div>
         <div class="char-tabs" role="tablist" aria-label="Partes do boneco">
-          <button type="button" role="tab" data-tab="cabeca" aria-selected="true">Cabeça</button>
+          <button type="button" role="tab" data-tab="cara" aria-selected="true">Cara</button>
+          <button type="button" role="tab" data-tab="cabelo" aria-selected="false">Cabelo</button>
           <button type="button" role="tab" data-tab="roupa" aria-selected="false">Roupa</button>
           <button type="button" role="tab" data-tab="acessorios" aria-selected="false">Acessórios</button>
           <button type="button" role="tab" data-tab="festejo" aria-selected="false">Festejo</button>
         </div>
 
-        <div class="char-panel" data-panel="cabeca" role="tabpanel">
-          <span class="group-title">Cabeça (emoji)</span>
-          <div id="emoji-picker" class="emoji-picker" aria-label="Cabeça (emoji)"></div>
+        <div class="char-panel" data-panel="cara" role="tabpanel">
+          <span class="group-title">Tom de pele</span>
+          <div id="char-skin" class="swatches one-row"></div>
+          <span class="group-title">Forma da cara</span>
+          <div id="char-face" class="chips"></div>
+          <span class="group-title">Olhos</span>
+          <div id="char-eyes" class="chips"></div>
+          <span class="group-title">Sobrancelhas</span>
+          <div id="char-brows" class="chips"></div>
+          <span class="group-title">Boca</span>
+          <div id="char-mouth" class="chips"></div>
+          <span class="group-title">Extras da cara</span>
+          <div id="char-faceExtra" class="chips"></div>
+        </div>
+
+        <div class="char-panel" data-panel="cabelo" role="tabpanel" hidden>
+          <span class="group-title">Cabelo</span>
+          <div id="char-hair" class="chips"></div>
+          <span class="group-title">Cor do cabelo</span>
+          <div id="char-hairColor" class="swatches one-row"></div>
+          <span class="group-title">Pelos faciais</span>
+          <div id="char-facial" class="chips"></div>
           <span class="group-title">Chapéu ou acessório</span>
           <div id="char-hat" class="chips"></div>
         </div>

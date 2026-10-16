@@ -2,9 +2,9 @@
 
 // Tema "golfe" (putt): um green visto de cima, com o buraco e a bandeira, um lago ao lado e,
 // em baixo, a fila de jogadores. Na vez de cada um, o seu boneco (em grande, na pose "a dar a
-// tacada") bate a bola, da sua cor e com o seu emoji, e ela rola até parar. Onde para vem da
+// tacada") bate a bola, da sua cor e com o seu retrato, e ela rola até parar. Onde para vem da
 // posição de apresentação (player.show), relativa à ronda:
-//   - o vencedor mete a bola no buraco (fica com o emoji na bandeira); o "em cheio" faz
+//   - o vencedor mete a bola no buraco (fica com o retrato na bandeira); o "em cheio" faz
 //     "HOLE IN ONE!" com um efeito especial dourado;
 //   - os outros param à volta do buraco, mais perto ou mais longe pela posição na ronda, sem
 //     bolas sobrepostas;
@@ -121,10 +121,8 @@
       shooterLayer.replaceChildren(svg);
     }
 
-    const ballShape = (player) => s('g', { class: 'golf-ball', 'data-id': player.id }, [
-      s('circle', { r: BALL_R, fill: player.color, stroke: '#fff', 'stroke-width': 1.4 }),
-      text({ y: 0.5, 'font-size': 7.5, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'golf-emoji' }, player.emoji || ''),
-    ]);
+    // Bola: o retrato do jogador num círculo da sua cor, com um anel branco.
+    const ballShape = (player) => s('g', { class: 'golf-ball', 'data-id': player.id }, [kit.portraitMark(player, BALL_R, 0, 0, 1.4)]);
     const put = (node, x, y, scale = 1) => node.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)})${scale !== 1 ? ` scale(${scale.toFixed(2)})` : ''}`);
 
     // Emblema de quem meteu a bola no buraco: na bandeira, por baixo do pano.

@@ -40,6 +40,13 @@
       </div>
       <div class="answer-box"><span class="label">Resposta certa</span><strong id="answer">?</strong></div>
 
+      <h2>Caras</h2>
+      <p class="dev-note">12 caras ao calhas (as mesmas dos jogadores falsos dos temas acima), com o retrato
+        das listas (grande e pequeno) e a cara em todas as expressões; a última coluna é a versão
+        simplificada (muitos jogadores no ecrã).</p>
+      <div class="dev-bar"><button id="reroll" type="button">🎲 Outras caras</button></div>
+      <div id="faces" class="dev-chars"></div>
+
       <h2>Bonecos</h2>
       <p class="dev-note">Todos os bonecos dos jogadores falsos em todas as poses (arrasta para o lado para ver
         as poses todas). Entre eles estão todas as peças: chapéus, extras, padrões, objetos na mão,
@@ -82,17 +89,19 @@
       const $ = (s) => document.querySelector(s);
 
       const COLORS = ['#4dabf7', '#f783ac', '#ff922b', '#9775fa', '#3bc9db', '#a9e34b', '#e599f7', '#ffd43b', '#c49a6c', '#f1f3f5', '#5c7cfa', '#adb5bd'];
-      const EMOJIS = ['🦊', '🐼', '🐸', '🐙', '🦉', '🐢', '🦁', '🐧', '🐨', '🦄', '🐝', '🐳'];
       const NAMES = ['Ana', 'Rui', 'Eva', 'Tiago', 'Inês', 'João', 'Marta', 'Pedro', 'Sofia', 'Diogo', 'Rita', 'Hugo'];
-      // Bonecos variados: passam por todas as peças (chapéus, extras, padrões, calças,
-      // sapatilhas, objetos na mão, animais, auras, festejos, reações e frases), e alguns com
-      // roupa de outra cor da paleta.
+      // Bonecos variados: cada um com uma cara ao calhas (o botão "Outras caras" troca-as) e,
+      // no resto, passam por todas as peças (chapéus, extras, padrões, calças, sapatilhas,
+      // objetos na mão, animais, auras, festejos, reações e frases), alguns com roupa de outra
+      // cor da paleta.
       const CO = window.CharacterOptions;
       const { POSES, POSE_LABELS } = CO;
       const at = (list, i) => list[i % list.length];
+      let faceSeed = 1;
       const fakePlayers = (n) => Array.from({ length: n }, (_, i) => ({
-        id: `p${i}`, name: NAMES[i], color: COLORS[i], emoji: EMOJIS[i],
+        id: `p${i}`, name: NAMES[i], color: COLORS[i],
         character: {
+          ...CO.randomFace(window.RevealSeeded.seeded(`caras|${faceSeed}|${i}`)),
           outfit: i % 3 === 2 ? COLORS[(i + 5) % COLORS.length] : null,
           hat: at(CO.HATS, i).id, extra: at(CO.EXTRAS, i).id,
           pattern: at(CO.PATTERNS, i).id, number: 7 + i * 3,
@@ -109,11 +118,28 @@
         $('#characters').replaceChildren(...fakePlayers(12).map((p) => {
           const c = p.character;
           return kit.el('div', { class: 'dev-row' }, [
-            kit.el('h3', { text: `${p.emoji} ${p.name} · ${c.hat} · ${c.extra} · ${label(CO.PATTERNS, c.pattern)} · mão: ${label(CO.HAND_ITEMS, c.hand)} · ${label(CO.PETS, c.pet)} · aura: ${label(CO.AURAS, c.aura)} · ${label(CO.WINS, c.win)} / ${label(CO.LOSES, c.lose)} · “${CO.PHRASES[c.phrase]}”` }),
+            kit.el('h3', { text: `${p.name} · ${c.hat} · ${c.extra} · ${label(CO.PATTERNS, c.pattern)} · mão: ${label(CO.HAND_ITEMS, c.hand)} · ${label(CO.PETS, c.pet)} · aura: ${label(CO.AURAS, c.aura)} · ${label(CO.WINS, c.win)} / ${label(CO.LOSES, c.lose)} · “${CO.PHRASES[c.phrase]}”` }),
             kit.el('div', { class: 'dev-poses' }, POSES.map((pose) => kit.el('figure', {}, [
               window.drawCharacter(p, pose, { size: small ? 46 : 96, small, withPet: !small && (pose === 'parado' || pose === 'festejar') }),
               kit.el('figcaption', { text: POSE_LABELS[pose] }),
             ]))),
+          ]);
+        }));
+      }
+
+      // Caras: retrato (listas) grande e pequeno e a cara em todas as expressões.
+      const EXPR_LABELS = { neutro: 'Normal', feliz: 'A festejar', triste: 'Triste', chocado: 'Chocada', concentrado: 'Concentrada' };
+      function renderFaces() {
+        $('#faces').replaceChildren(...fakePlayers(12).map((p) => {
+          const c = p.character;
+          return kit.el('div', { class: 'dev-row' }, [
+            kit.el('h3', { text: `${p.name} · ${label(CO.FACE_SHAPES, c.face)} · olhos ${label(CO.EYES, c.eyes)} · sobrancelhas ${label(CO.BROWS, c.brows)} · boca ${label(CO.MOUTHS, c.mouth)} · ${label(CO.HAIRS, c.hair)} · ${label(CO.FACIAL, c.facial)} · ${label(CO.FACE_EXTRAS, c.faceExtra)}` }),
+            kit.el('div', { class: 'dev-poses' }, [
+              kit.el('figure', {}, [kit.avatar(p, 'l'), kit.el('figcaption', { text: 'Retrato' })]),
+              kit.el('figure', {}, [kit.avatar(p, 's'), kit.el('figcaption', { text: 'Pequeno' })]),
+              ...window.FACE_EXPRESSIONS.map((e) => kit.el('figure', {}, [window.drawFace(p, e, { size: 70 }), kit.el('figcaption', { text: EXPR_LABELS[e] })])),
+              kit.el('figure', {}, [window.drawFace(p, 'neutro', { size: 40, small: true }), kit.el('figcaption', { text: 'Simplificada' })]),
+            ]),
           ]);
         }));
       }
@@ -213,6 +239,14 @@
       start('3 jogadores');
       $('#char-small').addEventListener('change', renderCharacters);
       renderCharacters();
+      renderFaces();
+      // Outras caras: nos temas (o cenário recomeça), nas caras e nos bonecos.
+      $('#reroll').addEventListener('click', () => {
+        faceSeed += 1;
+        renderFaces();
+        renderCharacters();
+        start(current.name);
+      });
     })();
   </script>
 </body>

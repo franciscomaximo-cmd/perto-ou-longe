@@ -2,7 +2,7 @@
 
 // Tema "malha" (jogo tradicional português): um terreiro de terra batida com o meco (pino de
 // madeira) ao fundo e, em baixo, a fila de jogadores (os bonecos na pose "a lançar a malha").
-// Na vez de cada um, o seu boneco lança a malha (disco de metal, da sua cor e com o seu emoji)
+// Na vez de cada um, o seu boneco lança a malha (disco de metal, da sua cor e com o seu retrato)
 // por cima do terreiro. Onde para vem da posição de apresentação (player.show), relativa à
 // ronda:
 //   - o vencedor derruba o meco; o "em cheio" derruba-o com estilo (o meco gira no ar);
@@ -140,12 +140,12 @@
     // Ponto de onde sai a malha: a mão do boneco (pose "malha").
     const handPoint = (id) => ({ x: row[id].x + row[id].w * 0.83, y: row[id].bottom - row[id].h + row[id].h * (86 / 130) });
 
-    // Malha deitada no chão: disco na cor do jogador (com rebordo de metal) e o emoji por cima.
+    // Malha deitada no chão: disco na cor do jogador (com rebordo de metal) e o retrato por cima.
     function malhaShape(player) {
       return s('g', { class: 'malha', 'data-id': player.id }, [
         s('ellipse', { rx: 11, ry: 6, fill: player.color, stroke: '#495057', 'stroke-width': 1.6 }),
         s('ellipse', { rx: 4.5, ry: 2.2, cy: -0.5, fill: 'rgba(255,255,255,.35)' }),
-        text({ y: -8, 'font-size': 9, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'malha-emoji' }, player.emoji || ''),
+        kit.portraitMark(player, 6, 0, -8, 1),
       ]);
     }
     const put = (node, x, y, scale, rot = 0) => node.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${scale.toFixed(2)})${rot ? ` rotate(${rot.toFixed(0)})` : ''}`);

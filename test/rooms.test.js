@@ -374,18 +374,27 @@ test('saltar a revelação: só o anfitrião, e mostra tudo de uma vez', () => {
   room.destroy();
 });
 
-test('cada jogador tem uma cor diferente e um emoji que pode trocar na sala de espera', () => {
+test('cada jogador tem uma cor diferente e uma cara (que não tem de ser única), sem emoji', () => {
   const { room, ids } = setup();
   const players = ids.map((id) => room.players.get(id));
   assert.equal(new Set(players.map((p) => p.color)).size, 3);
-  assert.equal(new Set(players.map((p) => p.emoji)).size, 3);
-  const free = room.stateFor(ids[0]).emojis.find((e) => !players.some((p) => p.emoji === e));
-  room.setEmoji(ids[0], free);
-  assert.equal(room.players.get(ids[0]).emoji, free);
-  assert.throws(() => room.setEmoji(ids[1], free), /outro jogador/);
-  assert.throws(() => room.setEmoji(ids[1], 'x'), /disponível/);
-  startWithNumber(room, ids[0]);
-  assert.throws(() => room.setEmoji(ids[1], free), /antes de começar/);
+  for (const p of players) {
+    assert.equal(p.emoji, undefined);
+    assert.ok(p.character.skin && p.character.hair, 'cada jogador novo recebe uma cara');
+  }
+  const state = room.stateFor(ids[0]);
+  assert.equal(state.emojis, undefined);
+  assert.ok(state.players.every((p) => p.character.skin && !('emoji' in p)), 'a cara vai no room:state');
+  // Dois jogadores podem ter exatamente a mesma cara.
+  const same = {
+    skin: '#d9a066', face: 'oval', eyes: 'estrelas', brows: 'grossas', mouth: 'dentes',
+    hair: 'moicano', hairColor: '#4dabf7', facial: 'nenhum', faceExtra: 'sardas',
+  };
+  room.setCharacter(ids[0], same);
+  room.setCharacter(ids[1], same);
+  assert.deepEqual(room.players.get(ids[0]).character, room.players.get(ids[1]).character);
+  assert.equal(typeof room.setEmoji, 'undefined', 'já não há regra de emoji único');
+  room.destroy();
 });
 
 test('pergunta de mapa: dentro do país conta como acerto em cheio', () => {

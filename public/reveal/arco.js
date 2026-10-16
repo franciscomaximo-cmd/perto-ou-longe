@@ -61,7 +61,7 @@
       return { id: p.id, exact: false, rad: 0.12 + 0.9 * p.show.level, ang: rnd() * 2 * Math.PI + i * GOLDEN };
     });
     const pos = (it) => ({ x: TARGET.x + it.rad * TARGET.r * Math.cos(it.ang), y: TARGET.y + it.rad * TARGET.r * Math.sin(it.ang) });
-    const MIN = 11; // distância mínima entre pontas de setas (cauda com emoji ~12)
+    const MIN = 11; // distância mínima entre pontas de setas (cauda com o retrato ~13)
     for (let iter = 0; iter < 200; iter++) {
       let clash = false;
       for (let i = 0; i < items.length; i++) {
@@ -123,7 +123,7 @@
       return { x: a.x + a.w * 0.86, y: a.bottom - a.h + a.h * (50 / 130) };
     }
 
-    // Seta: haste na cor do jogador, penas e, na cauda, um círculo com o emoji do jogador.
+    // Seta: haste na cor do jogador, penas e, na cauda, o retrato do jogador num círculo.
     // `len` = distância da ponta ao centro da cauda (30 por omissão; mais comprida para afastar
     // caudas que ficariam juntas). O desenho fica num grupo interior (.arco-arrow-body), para a
     // vibração do "em cheio" (CSS) não apagar a posição (atributo transform do grupo de fora).
@@ -133,8 +133,7 @@
         s('line', { x1: -f, y1: 0, x2: 0, y2: 0, stroke: player.color, 'stroke-width': 2.4, 'stroke-linecap': 'round' }),
         s('path', { d: 'M0,0 L-5,-2.6 L-5,2.6 Z', fill: '#495057' }),
         s('path', { d: `M${-f},0 L${-f - 5},-4 L${-f - 2},0 L${-f - 5},4 Z`, fill: player.color, stroke: 'rgba(0,0,0,.35)', 'stroke-width': 0.6 }),
-        s('circle', { cx: -len, cy: 0, r: 6.2, fill: player.color, stroke: '#fff', 'stroke-width': 1.2 }),
-        s('text', { x: -len, y: 0.4, 'font-size': 7.5, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'arco-emoji' }, [document.createTextNode(player.emoji || '')]),
+        kit.portraitMark(player, 6.6, -len, 0),
       ])]);
     }
 
@@ -151,8 +150,8 @@
       const { to } = flightOf(id);
       const deg = to.deg;
       node.setAttribute('transform', `translate(${to.x.toFixed(1)} ${to.y.toFixed(1)}) rotate(${deg.toFixed(1)})`);
-      // O emoji da cauda fica sempre direito.
-      node.querySelector('text').setAttribute('transform', `rotate(${(-deg).toFixed(1)} ${-to.len} 0)`);
+      // O retrato da cauda fica sempre direito.
+      node.querySelector('.portrait-mark').setAttribute('transform', `rotate(${(-deg).toFixed(1)} ${-to.len} 0)`);
     }
 
     function missFx(to) {
@@ -282,7 +281,7 @@
           to.deg = to.where === 'chão' ? 70 + ((to.x * 7) % 20) : (Math.atan2(to.y - from.y, to.x - from.x) * 180) / Math.PI;
           to.len = 30;
         }
-        // Caudas (com o emoji) demasiado juntas: rodam as duas em sentidos opostos e, se não
+        // Caudas (com o retrato) demasiado juntas: rodam as duas em sentidos opostos e, se não
         // chegar, uma fica um pouco mais comprida, até se verem todas.
         const rad = (d) => (d * Math.PI) / 180;
         const tail = (pt) => ({ x: pt.x - pt.len * Math.cos(rad(pt.deg)), y: pt.y - pt.len * Math.sin(rad(pt.deg)) });
@@ -345,7 +344,7 @@
           const dy = 2 * (1 - e) * (ctrl.y - from.y) + 2 * e * (to.y - ctrl.y);
           const deg = (Math.atan2(dy, dx) * 180) / Math.PI;
           node.setAttribute('transform', `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${deg.toFixed(1)})`);
-          node.querySelector('text').setAttribute('transform', `rotate(${(-deg).toFixed(1)} ${-to.len} 0)`);
+          node.querySelector('.portrait-mark').setAttribute('transform', `rotate(${(-deg).toFixed(1)} ${-to.len} 0)`);
           flights.get(player.id).frame = requestAnimationFrame(frame);
         };
         flights.set(player.id, { frame: requestAnimationFrame(frame), finish });

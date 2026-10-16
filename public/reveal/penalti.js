@@ -215,8 +215,8 @@
     function addMark(player, plan) {
       if (plan.kind === 'golo' && plan.exact) tearNet(plan.pt);
       const g = s('g', { class: `pen-mark ${plan.kind}`, 'data-id': player.id, transform: `translate(${plan.pt.x.toFixed(1)} ${plan.pt.y.toFixed(1)})` }, [
-        s('circle', { r: MARK_R, fill: player.color }),
-        text({ y: 0.5, 'font-size': 8.5, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'pen-emoji' }, player.emoji || ''),
+        // O retrato do jogador; o anel mostra o tipo (golo, defesa, fora) — ver style.css.
+        kit.portraitMark(player, MARK_R, 0, 0, 1.8),
       ]);
       marksLayer.append(g);
     }

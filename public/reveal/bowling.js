@@ -244,12 +244,9 @@
           return;
         }
 
-        // Bola da cor do jogador, com o emoji, a rolar da frente para os pinos (fica mais
+        // Bola da cor do jogador, com o seu retrato, a rolar da frente para os pinos (fica mais
         // pequena com a distância). Na caleira, desvia-se para o lado.
-        const ball = s('g', { class: 'bowl-ball' }, [
-          s('circle', { cx: 0, cy: 0, r: 9, fill: player.color, stroke: 'rgba(0,0,0,.45)', 'stroke-width': 1.2 }),
-          text({ x: 0, y: 0.5, 'font-size': 9, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'bowl-emoji' }, player.emoji || ''),
-        ]);
+        const ball = s('g', { class: 'bowl-ball' }, [kit.portraitMark(player, 9, 0, 0, 1.2)]);
         ballLayer.append(ball);
         const side = Object.keys(cells).indexOf(player.id) % 2 ? 1 : -1;
         const start = performance.now();

@@ -2,7 +2,7 @@
 
 // Tema "basquetebol": um cesto visto de lado, a bancada atrás e, em baixo, a fila de
 // jogadores. Na vez de cada um, o seu boneco (em grande, na linha de lance livre, na pose "a
-// lançar ao cesto") lança a bola (laranja, com o anel na cor do jogador e o seu emoji). O que
+// lançar ao cesto") lança a bola (laranja, com o anel na cor do jogador e o seu retrato). O que
 // acontece vem da posição de apresentação (player.show), relativa à ronda:
 //   - o vencedor faz "swish" (entra sem tocar no aro); o "em cheio" faz a rede pegar fogo;
 //   - os outros, pela posição na ronda: batem no aro (os melhores), na tabela, ou ficam curtos
@@ -139,10 +139,10 @@
     }
     const handPoint = () => ({ x: SHOOTER.x + SHOOTER.h * (51 / 130), y: SHOOTER.bottom - SHOOTER.h + SHOOTER.h * (9 / 130) });
 
+    // Bola laranja com o anel na cor do jogador e, ao meio, o seu retrato.
     const ballShape = (player) => s('g', { class: 'basq-ball', 'data-id': player.id }, [
       s('circle', { r: BALL_R, fill: '#f76707', stroke: player.color, 'stroke-width': 2.4 }),
-      s('path', { d: `M${-BALL_R + 1},0 L${BALL_R - 1},0`, stroke: '#7a2e00', 'stroke-width': 0.7, opacity: 0.6 }),
-      text({ y: 0.5, 'font-size': 7.5, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'basq-emoji' }, player.emoji || ''),
+      kit.portraitMark(player, BALL_R - 1.8, 0, 0, 0),
     ]);
     const put = (node, p, rot = 0) => node.setAttribute('transform', `translate(${p.x.toFixed(1)} ${p.y.toFixed(1)})${rot ? ` rotate(${rot.toFixed(0)})` : ''}`);
 

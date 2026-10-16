@@ -54,13 +54,10 @@ const HOST_GRACE_MS = 20_000;
 // Revelação automática: ritmo base (o dos pontos, no fim); o dos palpites vem de
 // public/reveal/pace.js, à escala deste valor.
 const REVEAL_STEP_MS = 1500;
-// Cada jogador recebe uma cor fixa (a primeira livre) e um emoji, que pode trocar na sala de espera.
-// A paleta e as peças do boneco são partilhadas com o cliente (public/reveal/character-options.js).
+// Cada jogador recebe uma cor fixa (a primeira livre) e um boneco com uma cara ao calhas, que
+// muda na sala de espera. A paleta e as peças do boneco são partilhadas com o cliente
+// (public/reveal/character-options.js).
 const PLAYER_COLORS = CharacterOptions.COLORS;
-const PLAYER_EMOJIS = [
-  '🦊', '🐼', '🐸', '🐙', '🦉', '🐢', '🦁', '🐧', '🐨', '🦄', '🐝', '🐳',
-  '🦖', '🐯', '🐰', '🦜', '🐌', '🦀', '🐷', '🐶', '🐱', '🦒', '🐞', '🦦',
-];
 const ROOM_IDLE_MS = 10 * 60_000;
 const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // sem I nem O, para não confundir com 1 e 0
 
@@ -205,11 +202,11 @@ class Room {
 
     const used = [...this.players.values()];
     const color = PLAYER_COLORS.find((c) => !used.some((p) => p.color === c)) || PLAYER_COLORS[used.length % PLAYER_COLORS.length];
-    const freeEmojis = PLAYER_EMOJIS.filter((e) => !used.some((p) => p.emoji === e));
-    const emoji = freeEmojis[crypto.randomInt(freeEmojis.length)];
     const player = {
-      id: crypto.randomUUID(), name, score: 0, connected: false, socketId: null, color, emoji,
-      character: CharacterOptions.cleanCharacter({}), // boneco (peças por omissão)
+      id: crypto.randomUUID(), name, score: 0, connected: false, socketId: null, color,
+      // Boneco: uma cara ao calhas (o cliente troca-a logo pelo boneco guardado, se houver) e
+      // o resto por omissão.
+      character: CharacterOptions.cleanCharacter(CharacterOptions.randomFace(() => crypto.randomInt(1e9) / 1e9)),
     };
     this.players.set(player.id, player);
     if (!this.hostId) this.hostId = player.id;
@@ -290,21 +287,8 @@ class Room {
     this.touch();
   }
 
-  // Troca de emoji na sala de espera (cada emoji só pode ser de um jogador).
-  setEmoji(playerId, emoji) {
-    if (this.phase !== 'lobby') throw new GameError('Só podes trocar de emoji antes de começar.');
-    const player = this.players.get(playerId);
-    if (!player) throw new GameError('Não estás nesta sala.');
-    if (!PLAYER_EMOJIS.includes(emoji)) throw new GameError('Esse emoji não está disponível.');
-    if ([...this.players.values()].some((p) => p.id !== playerId && p.emoji === emoji)) {
-      throw new GameError('Esse emoji já é de outro jogador.');
-    }
-    player.emoji = emoji;
-    this.touch();
-  }
-
-  // Boneco do jogador (roupa, chapéu, extra): só na sala de espera e só com peças que existem.
-  // Combinações iguais são permitidas (só o emoji é único).
+  // Boneco do jogador (cara, roupa, acessórios, festejo): só na sala de espera e só com peças
+  // que existem. Combinações iguais são permitidas (a cara não tem de ser única).
   setCharacter(playerId, raw) {
     if (this.phase !== 'lobby') throw new GameError('Só podes mudar o boneco antes de começar.');
     const player = this.players.get(playerId);
@@ -786,11 +770,9 @@ class Room {
         score: p.score,
         connected: p.connected,
         color: p.color,
-        emoji: p.emoji,
-        character: { ...p.character },
+        character: { ...p.character, scarf: [...p.character.scarf] }, // boneco completo, com a cara
       })),
     };
-    if (this.phase === 'lobby') state.emojis = PLAYER_EMOJIS;
 
     if (cur && this.phase !== 'lobby') {
       state.question = {

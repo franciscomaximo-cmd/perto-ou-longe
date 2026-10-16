@@ -10,7 +10,7 @@
 // Cena SVG de tamanho fixo (viewBox 300 × 300; com mais de 9 jogadores mais alta, para cada
 // faixa ter pelo menos 30), por zonas:
 //   - faixa de cima: placa da resposta certa junto à meta e a bandeira (nenhum kart passa lá);
-//   - pista: uma faixa por jogador. No início de cada faixa, uma "box" com o emoji do jogador
+//   - pista: uma faixa por jogador. No início de cada faixa, uma "box" com o retrato do jogador
 //     num círculo da sua cor, para se ler bem de quem é cada faixa mesmo com 12 jogadores.
 (function () {
   const NS = 'http://www.w3.org/2000/svg';
@@ -165,7 +165,7 @@
         scene.append(flagNode);
 
         // Karts: um por faixa, parados atrás da linha de partida. Com muitos jogadores ficam
-        // mais pequenos (versão simplificada do boneco), mas a "box" com o emoji continua grande.
+        // mais pequenos (versão simplificada do boneco), mas a "box" com o retrato continua grande.
         const karts = s('g', { class: 'kart-karts' });
         fxLayer = s('g', { class: 'kart-fx' });
         players.forEach((p, i) => {
@@ -175,16 +175,13 @@
           const h = Math.min(62, laneH * (many ? 1.32 : 1.12));
           const w = h * (100 / 130);
           const r = Math.min(12, laneH / 2 - 1.5);
-          // "Box" de partida: círculo da cor do jogador com o emoji.
-          scene.append(
-            s('circle', { cx: 18, cy: laneTop + laneH / 2, r, fill: p.color, stroke: '#fff', 'stroke-width': 1.2 }),
-            text({ x: 18, y: laneTop + laneH / 2 + 0.5, 'font-size': r * 1.15, 'text-anchor': 'middle', 'dominant-baseline': 'central', class: 'kart-emoji' }, p.emoji || ''),
-          );
+          // "Box" de partida: o retrato do jogador num círculo da sua cor.
+          scene.append(kit.portraitMark(p, r, 18, laneTop + laneH / 2, 1.2));
           const g = s('g', { class: 'kart-lane', 'data-id': p.id });
           const kart = s('g', { class: 'kart' });
           g.append(kart);
           karts.append(g);
-          // Estacionado logo a seguir à linha de partida (não tapa a "box" com o emoji).
+          // Estacionado logo a seguir à linha de partida (não tapa a "box" com o retrato).
           const parked = START_X + w * 0.92 + 2;
           lanes[p.id] = { g, kart, player: p, h, w, small: many, y: laneTop + laneH - h * 0.97, parked, to: finalX(p.show, parked) };
           drawKart(p.id, 'kart');

@@ -5,7 +5,10 @@ const assert = require('node:assert/strict');
 const {
   cleanCharacter, randomCharacter, isUnlocked, COLORS, HATS, EXTRAS, PATTERNS, HAND_ITEMS, PETS, AURAS, WINS, LOSES,
   PHRASES, PANTS_COLORS, SHOE_COLORS, SCARF_COLORS, UNLOCKS, EMPTY_PROGRESS, DEFAULT_CHARACTER,
+  SKINS, HAIR_COLORS, FACE_SHAPES, EYES, BROWS, MOUTHS, HAIRS, FACIAL, FACE_EXTRAS, DEFAULT_FACE, randomFace, upgradeCharacter,
 } = require('../public/reveal/character-options');
+const { seeded } = require('../public/reveal/seeded');
+const seededRandom = (i) => seeded(`teste|${i}`);
 const { Room } = require('../server/rooms');
 
 function setup(names = ['Ana', 'Rui', 'Eva']) {
@@ -32,10 +35,12 @@ test('boneco: só aceita peças que existem (e muda só o que vem no pedido)', (
 test('boneco no servidor: guardado, enviado no estado e só na sala de espera', () => {
   const { room, ids } = setup();
   const [ana, rui] = ids;
-  assert.deepEqual(room.stateFor(rui).players.find((p) => p.id === ana).character, DEFAULT_CHARACTER);
+  const initial = room.players.get(ana).character;
+  assert.deepEqual(room.stateFor(rui).players.find((p) => p.id === ana).character, initial);
+  assert.deepEqual(cleanCharacter(initial), initial, 'a cara inicial (ao calhas) é válida');
   room.setCharacter(ana, { outfit: COLORS[5], hat: 'cowboy', extra: 'mochila', pet: 'gato', win: 'robo', phrase: 3 });
   const seen = room.stateFor(rui).players.find((p) => p.id === ana).character;
-  assert.deepEqual(seen, { ...DEFAULT_CHARACTER, outfit: COLORS[5], hat: 'cowboy', extra: 'mochila', pet: 'gato', win: 'robo', phrase: 3 });
+  assert.deepEqual(seen, { ...initial, outfit: COLORS[5], hat: 'cowboy', extra: 'mochila', pet: 'gato', win: 'robo', phrase: 3 });
   assert.throws(() => room.setCharacter(ana, { number: 100 }), /não existe/);
   assert.throws(() => room.setCharacter(ana, { hat: 'tiara' }), /não existe/);
   assert.deepEqual(room.players.get(ana).character.hat, 'cowboy', 'um pedido inválido não muda nada');
@@ -44,12 +49,67 @@ test('boneco no servidor: guardado, enviado no estado e só na sala de espera', 
   room.destroy();
 });
 
-test('boneco: combinações iguais são permitidas (só o emoji é único)', () => {
+test('boneco: combinações iguais são permitidas (também a cara)', () => {
   const { room, ids } = setup();
-  const same = { outfit: COLORS[0], hat: HATS[3].id, extra: EXTRAS[1].id };
+  const same = { ...DEFAULT_FACE, outfit: COLORS[0], hat: HATS[3].id, extra: EXTRAS[1].id };
   for (const id of ids) room.setCharacter(id, same);
   for (const id of ids) assert.deepEqual(room.players.get(id).character, { ...DEFAULT_CHARACTER, ...same });
   room.destroy();
+});
+
+test('cara: peças validadas (pele, forma, olhos, sobrancelhas, boca, cabelo e cor, pelos, extras)', () => {
+  assert.equal(SKINS.length, 8);
+  assert.deepEqual(FACE_SHAPES.map((o) => o.id), ['redonda', 'oval', 'quadrada']);
+  assert.equal(EYES.length, 6);
+  assert.equal(BROWS.length, 4);
+  assert.equal(MOUTHS.length, 6);
+  assert.equal(HAIRS.length, 10);
+  assert.equal(HAIR_COLORS.length, 10);
+  assert.deepEqual(FACIAL.map((o) => o.id), ['nenhum', 'bigode', 'barba-curta', 'barba-comprida']);
+  assert.deepEqual(FACE_EXTRAS.map((o) => o.id), ['nenhum', 'sardas', 'bochechas', 'oculos-redondos', 'oculos-quadrados', 'pala']);
+  const face = { skin: SKINS[7], face: 'quadrada', eyes: 'piscar', brows: 'zangadas', mouth: 'lingua', hair: 'trancas', hairColor: HAIR_COLORS[8], facial: 'barba-comprida', faceExtra: 'pala' };
+  assert.deepEqual(cleanCharacter(face), { ...DEFAULT_CHARACTER, ...face });
+  for (const bad of [{ skin: '#123456' }, { face: 'triangular' }, { eyes: 'laser' }, { brows: 'nenhumas' }, { mouth: 'assobio' },
+    { hair: 'afro-gigante' }, { hairColor: '#000000' }, { facial: 'patilhas' }, { faceExtra: 'monóculo' }]) {
+    assert.equal(cleanCharacter(bad), null, JSON.stringify(bad));
+  }
+});
+
+test('cara: o "Aleatório" dá caras variadas, válidas e sem combinações estranhas', () => {
+  const faces = Array.from({ length: 400 }, (_, i) => randomFace(seededRandom(i)));
+  for (const f of faces) {
+    assert.ok(cleanCharacter(f), JSON.stringify(f));
+    const bold = (f.eyes === 'estrelas') + (f.faceExtra === 'pala') + HAIR_COLORS.slice(6).includes(f.hairColor);
+    assert.ok(bold <= 1, `mais de uma peça "marcada": ${JSON.stringify(f)}`);
+    if (HAIR_COLORS.slice(6).includes(f.hairColor)) {
+      assert.equal(f.facial, 'nenhum', 'barba só com cabelo de cor natural');
+      assert.ok(!['careca', 'rapado'].includes(f.hair));
+    }
+  }
+  // Variadas: todos os cabelos, peles e formas aparecem.
+  for (const [key, list] of [['hair', HAIRS.map((h) => h.id)], ['skin', SKINS], ['face', FACE_SHAPES.map((s) => s.id)]]) {
+    assert.deepEqual(new Set(faces.map((f) => f[key])).size, list.length, key);
+  }
+});
+
+test('cara: escolhas antigas (com emoji) recebem uma cara gerada a partir delas, sem erros', () => {
+  const old = { outfit: COLORS[4], hat: 'cowboy', extra: 'capa', emoji: '🦊' };
+  const a = upgradeCharacter(old);
+  assert.ok(a && a.skin && a.hair, 'tem cara');
+  assert.equal(a.hat, 'cowboy');
+  assert.equal(a.extra, 'capa');
+  assert.equal(a.outfit, COLORS[4]);
+  assert.equal('emoji' in a, false);
+  assert.deepEqual(upgradeCharacter(old), a, 'sempre a mesma cara para as mesmas escolhas');
+  // Escolhas antigas diferentes dão (quase sempre) caras diferentes.
+  const faceKey = (c) => [c.skin, c.face, c.eyes, c.hair, c.hairColor].join();
+  const variety = new Set(COLORS.map((c) => faceKey(upgradeCharacter({ ...old, outfit: c }))));
+  assert.ok(variety.size >= 8, `só ${variety.size} caras diferentes em 12`);
+  // Quem já tem cara fica com ela; lixo não rebenta.
+  const withFace = { ...DEFAULT_CHARACTER, skin: SKINS[0], hair: 'moicano' };
+  assert.deepEqual(upgradeCharacter(withFace), withFace);
+  assert.equal(upgradeCharacter(null), null);
+  assert.ok(upgradeCharacter({ hat: 'tiara', outfit: '#000' }), 'peças inválidas são ignoradas, não dão erro');
 });
 
 test('boneco: peças novas validadas (padrão, número, calças, sapatilhas, mão, cachecol, animal, aura, festejo, frase)', () => {
@@ -57,7 +117,7 @@ test('boneco: peças novas validadas (padrão, número, calças, sapatilhas, mã
     outfit: COLORS[3], pattern: 'futebol', number: 99, pants: PANTS_COLORS[1], shoes: SHOE_COLORS[2], hat: 'bone', extra: 'capa',
     hand: 'cachecol', scarf: [SCARF_COLORS[2], SCARF_COLORS[3]], pet: 'tartaruga', aura: 'arco-iris', win: 'siuuu', lose: 'cair', phrase: PHRASES.length - 1,
   };
-  assert.deepEqual(cleanCharacter(full), full);
+  assert.deepEqual(cleanCharacter(full), { ...DEFAULT_CHARACTER, ...full });
   for (const bad of [
     { pattern: 'bolinhas' }, { number: 0 }, { number: 100 }, { number: 7.5 }, { number: '7' }, { pants: '#123456' },
     { shoes: '#000001' }, { hand: 'espada' }, { scarf: [SCARF_COLORS[0]] },

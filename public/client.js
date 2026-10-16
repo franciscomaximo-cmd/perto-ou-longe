@@ -71,10 +71,11 @@
   const player = (id) => (state && state.players.find((p) => p.id === id)) || null;
   const nameOf = (id) => (player(id) ? player(id).name : '?');
   const colorOf = (id) => (player(id) ? player(id).color : 'var(--muted)');
-  // Avatar de um jogador (o mesmo em todo o lado): emoji grande num círculo com gradiente da
-  // sua cor, borda branca fina e sombra. "Tu" tem um anel brilhante, o anfitrião uma coroa e
-  // quem está desligado fica a cinzento. Tamanhos: 's' (~26 px, dentro de etiquetas),
-  // 'm' (~40 px, listas) e 'l' (~56 px, alvo e ecrã final).
+  // Avatar de um jogador (o mesmo em todo o lado): o retrato do boneco (cabeça e ombros) num
+  // círculo com gradiente da sua cor, borda branca fina e sombra. "Tu" tem um anel brilhante,
+  // o anfitrião uma coroa e quem está desligado fica a cinzento. Tamanhos: 'xs' (~18 px,
+  // etiquetas do mapa), 's' (~26 px, dentro de etiquetas), 'm' (~40 px, listas) e 'l'
+  // (~56 px, alvo e ecrã final).
   // (O desenho está em public/reveal/index.js, partilhado com os temas de revelação.)
   function avatar(p, size = 'm') {
     return window.RevealThemes.kit.avatar(p, size, {
@@ -122,9 +123,15 @@
     store(NAME_KEY, res.name);
     history.replaceState(null, '', location.pathname);
     // Volta a vestir o boneco guardado. A meio de um jogo o servidor recusa (só na sala de
-    // espera se muda o boneco): aí ignora-se a resposta, sem aviso.
-    const saved = window.CharacterOptions.cleanCharacter(load(CHAR_KEY));
-    if (saved) socket.emit('player:character', saved, () => {});
+    // espera se muda o boneco): aí ignora-se a resposta, sem aviso. Um boneco guardado por
+    // uma versão antiga (cabeça = emoji) recebe uma cara gerada a partir dessas escolhas, que
+    // fica guardada. Sem nada guardado, fica a cara ao calhas que o servidor deu.
+    const stored = load(CHAR_KEY);
+    const saved = window.CharacterOptions.upgradeCharacter(stored);
+    if (saved) {
+      if (JSON.stringify(saved) !== JSON.stringify(stored)) store(CHAR_KEY, saved);
+      socket.emit('player:character', saved, () => {});
+    }
   }
 
   function rejoin() {
@@ -262,10 +269,11 @@
     y: ((MAP_TOP - lat) / (MAP_TOP - MAP_BOTTOM)) * 100,
   });
 
-  function pin(point, cls = '', label = '', color = null) {
+  // `face` (opcional): o mini-retrato do jogador, antes do texto da etiqueta.
+  function pin(point, cls = '', label = '', color = null, face = null) {
     const { x, y } = toPercent(point);
     return el('span', { class: `pin ${cls}`, style: `left:${x}%;top:${y}%${color ? `;--c:${color}` : ''}` },
-      label ? el('span', { class: 'pin-label', text: label }) : null);
+      label ? el('span', { class: 'pin-label' }, [face, label]) : null);
   }
 
   // Muda o zoom e põe o ponto (cx, cy), em frações do mapa, no centro da vista.
@@ -531,7 +539,6 @@
       ? el('span', { class: 'state', text: state.customReady.includes(p.id) ? 'pergunta ✓' : 'a escrever…' })
       : null)));
 
-    renderEmojiPicker();
     renderCharacterEditor();
     renderQr();
 
@@ -575,34 +582,6 @@
       : host ? '' : 'À espera que o anfitrião comece o jogo…';
   }
 
-  // Emojis: o meu fica marcado; os dos outros mostram o mini-avatar de quem o tem e ficam
-  // indisponíveis. Ao trocar de emoji, o meu avatar faz um "pop".
-  let lastMyEmoji = null;
-  function renderEmojiPicker() {
-    const me = player(state.me);
-    const owners = new Map(state.players.filter((p) => p.id !== state.me).map((p) => [p.emoji, p]));
-    $('#emoji-picker').style.setProperty('--c', me ? me.color : 'var(--accent)');
-    $('#emoji-picker').replaceChildren(...(state.emojis || []).map((e) => {
-      const owner = owners.get(e);
-      return el('button', {
-        type: 'button',
-        class: [me && me.emoji === e ? 'on' : '', owner ? 'taken' : ''].join(' '),
-        'aria-label': owner ? `${e} (de ${owner.name})` : `Escolher ${e}`,
-        title: owner ? `De ${owner.name}` : '',
-        ...(owner ? { disabled: '' } : {}),
-        onclick: () => act('player:emoji', { emoji: e }),
-      }, owner ? avatar(owner, 's') : el('span', { class: 'emoji', text: e }));
-    }));
-    if (me && lastMyEmoji && me.emoji !== lastMyEmoji && !reducedMotion()) {
-      for (const node of $$(`#screen-lobby .avatar[data-player="${me.id}"], #emoji-picker button.on`)) {
-        node.classList.remove('pop');
-        void node.offsetWidth;
-        node.classList.add('pop');
-      }
-    }
-    lastMyEmoji = me ? me.emoji : null;
-  }
-
   // --- Progresso e desbloqueáveis (só neste dispositivo, sem contas) ------------------------
   // Feitos guardados no localStorage: "em cheio", jogos ganhos (e com 6 ou mais jogadores) e
   // jogos jogados até ao fim. Cada feito conta uma vez por ronda/jogo (as chaves já contadas
@@ -639,7 +618,7 @@
   }
 
   // --- Boneco (sala de espera) -------------------------------------------------------------
-  // Separadores Cabeça / Roupa / Acessórios / Festejo (uma secção de cada vez). A
+  // Separadores Cara / Cabelo / Roupa / Acessórios / Festejo (uma secção de cada vez). A
   // pré-visualização muda logo ao tocar (sem esperar pelo servidor); as escolhas ficam no
   // localStorage e são reaplicadas ao entrar numa sala.
   const CO = window.CharacterOptions;
@@ -649,10 +628,17 @@
   let previewAction = null; // 'festejar' | 'triste' durante o "Ver em ação"
   let actionTimers = [];
   let previewKey = null;
-  let charTab = 'cabeca';
+  let charTab = 'cara';
 
-  const LIST_OF = { hat: CO.HATS, pattern: CO.PATTERNS, extra: CO.EXTRAS, hand: CO.HAND_ITEMS, pet: CO.PETS, aura: CO.AURAS, win: CO.WINS, lose: CO.LOSES };
-  const TAB_KEYS = { cabeca: ['hat'], roupa: ['pattern', 'extra'], acessorios: ['hand', 'pet', 'aura'], festejo: ['win', 'lose'] };
+  const LIST_OF = {
+    face: CO.FACE_SHAPES, eyes: CO.EYES, brows: CO.BROWS, mouth: CO.MOUTHS, faceExtra: CO.FACE_EXTRAS,
+    hair: CO.HAIRS, facial: CO.FACIAL, hat: CO.HATS,
+    pattern: CO.PATTERNS, extra: CO.EXTRAS, hand: CO.HAND_ITEMS, pet: CO.PETS, aura: CO.AURAS, win: CO.WINS, lose: CO.LOSES,
+  };
+  const TAB_KEYS = {
+    cara: ['face', 'eyes', 'brows', 'mouth', 'faceExtra'], cabelo: ['hair', 'facial', 'hat'],
+    roupa: ['pattern', 'extra'], acessorios: ['hand', 'pet', 'aura'], festejo: ['win', 'lose'],
+  };
   function unlockLabel(u) {
     const o = LIST_OF[u.key].find((x) => x.id === u.id);
     return o ? o.label : u.id;
@@ -671,11 +657,16 @@
 
   function renderPreview(me, ch) {
     const pose = previewAction || CHAR_POSES[previewPose % CHAR_POSES.length];
+    // Nos separadores da cabeça, a cara em grande (em vez da dica da pose).
+    const bigFace = (charTab === 'cara' || charTab === 'cabelo') && !previewAction;
+    $('#char-face-big').hidden = !bigFace;
+    $('#char-pose').hidden = bigFace;
     // Só se redesenha quando algo muda (senão cada atualização do servidor recomeçava a
     // animação).
-    const key = JSON.stringify([ch, me.emoji, me.color, pose]);
+    const key = JSON.stringify([ch, me.color, pose, bigFace]);
     if (key === previewKey) return;
     previewKey = key;
+    if (bigFace) $('#char-face-big').replaceChildren(window.drawFace({ ...me, character: ch }, 'neutro', { size: 92 }));
     $('#char-preview').replaceChildren(window.drawCharacter({ ...me, character: ch }, pose, { size: 150, withPet: true }));
     $('#char-pose').textContent = previewAction
       ? (previewAction === 'festejar' ? `A festejar: ${CO.WINS.find((w) => w.id === ch.win).label}` : `Reação: ${CO.LOSES.find((l) => l.id === ch.lose).label}`)
@@ -703,6 +694,9 @@
       title: labelOf(value),
       onclick: () => onPick(value),
     }, value === null ? el('span', { text: '★', 'aria-hidden': 'true' }) : null)));
+    // Cara: tom de pele e cor do cabelo.
+    swatches('#char-skin', CO.SKINS.map((c) => [c, c]), ch.skin, (v) => setCharacter({ skin: v }), (v) => `Pele ${v}`);
+    swatches('#char-hairColor', CO.HAIR_COLORS.map((c) => [c, c]), ch.hairColor, (v) => setCharacter({ hairColor: v }), (v) => `Cabelo ${v}`);
     // Camisola: a cor do jogador (por omissão) ou outra da paleta.
     swatches('#char-outfit', [[null, me.color], ...CO.COLORS.filter((c) => c !== me.color).map((c) => [c, c])],
       ch.outfit || null, (v) => setCharacter({ outfit: v }), (v) => (v === null ? 'A tua cor' : `Roupa ${v}`));
@@ -1011,7 +1005,7 @@
       seed: `${state.code}|${state.round}`,
       theme: state.question.theme,
       order,
-      players: Object.fromEntries(state.players.map((p) => [p.id, { id: p.id, name: p.name, color: p.color, emoji: p.emoji, character: p.character }])),
+      players: Object.fromEntries(state.players.map((p) => [p.id, { id: p.id, name: p.name, color: p.color, character: p.character }])),
       answers: r.answers,
       distances: r.distances,
       correct: r.correct,
@@ -1094,10 +1088,11 @@
     }) : []));
     wrap.querySelector('.pins').replaceChildren(
       center ? pin(r.center, 'target') : null,
-      // A etiqueta leva o emoji e uma borda na cor do jogador: lê-se a quem pertence mesmo
+      // A etiqueta leva o retrato e uma borda na cor do jogador: lê-se a quem pertence mesmo
       // quando fica afastada do pino.
       ...ids.map((id, i) => pin(r.answers[id], `${clsOf(id)} ${i >= before ? 'appear' : ''}`,
-        `${player(id) ? player(id).emoji : ''} ${nameOf(id)} · ${fmt(r.distances[id])} km`, colorOf(id))),
+        // (Sem o anel de "tu" nem a coroa: na etiqueta pequena só atrapalhavam.)
+        `${nameOf(id)} · ${fmt(r.distances[id])} km`, colorOf(id), player(id) ? window.RevealThemes.kit.avatar(player(id), 'xs') : null)),
     );
     wrap.relayout = () => layoutPinLabels(wrap);
 
@@ -1443,7 +1438,7 @@
     // animação não recomeçar a cada atualização).
     const top = standingGroups()[0].slice(0, 3);
     const stage = $('#end-stage');
-    const stageKey = JSON.stringify(top.map((p) => [p.id, p.emoji, p.character]));
+    const stageKey = JSON.stringify(top.map((p) => [p.id, p.character]));
     if (stage.dataset.key !== stageKey) {
       stage.dataset.key = stageKey;
       const size = top.length > 2 ? 104 : 132;

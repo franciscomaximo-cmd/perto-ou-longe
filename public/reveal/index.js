@@ -11,7 +11,7 @@
  * RevealThemes.register(id, () => ({ ... }))):
  *   mount(container, { players, answer, unit, kit, result, seed })
  *       Desenha o cenário vazio. `players` vem já na ordem da revelação (do mais longe para o
- *       mais perto), cada um com { id, name, color, emoji, character, value, precision,
+ *       mais perto), cada um com { id, name, color, character, value, precision,
  *       closest, avatar(size) }, para o tema poder planear o espaço de todos desde o início.
  *       `result` = { closest, farthest, exact } (listas de ids) é o que o SERVIDOR calculou:
  *       os temas usam-no tal como vem (ex.: quem marca golo), nunca o recalculam.
@@ -78,13 +78,33 @@
   const fmt = (n) => numberFormat.format(n);
   const withUnit = (n, unit) => (unit ? `${fmt(n)} ${unit}` : fmt(n));
 
-  // Avatar de um jogador (o mesmo componente em todo o lado): emoji num círculo com gradiente
-  // da sua cor. Tamanhos 's' | 'm' | 'l'; flags { me, host, off } dão o anel, a coroa e o cinzento.
+  // Avatar de um jogador (o mesmo componente em todo o lado): o retrato do boneco (cabeça e
+  // ombros, public/reveal/character.js) num círculo com a sua cor. Tamanhos 'xs' | 's' | 'm' |
+  // 'l'; flags { me, host, off } dão o anel, a coroa e o cinzento.
+  const AVATAR_PX = { xs: 18, s: 26, m: 40, l: 56 };
   function avatar(p, size = 'm', flags = {}) {
     const cls = ['avatar', size, flags.me ? 'me' : '', flags.host ? 'host' : '', flags.off ? 'off' : '']
       .filter(Boolean).join(' ');
     return el('span', { class: cls, style: `--c:${p.color}`, 'data-player': p.id, 'aria-hidden': 'true' },
-      el('span', { class: 'emoji', text: p.emoji || '' }));
+      root.drawPortrait(p, { size: AVATAR_PX[size] || 40 }));
+  }
+
+  // Retrato para as marcas dentro das cenas SVG dos temas (cauda da seta, bola, malha…):
+  // grupo centrado em (cx, cy), com raio r e um anel branco. Fica num <g> para se poder rodar.
+  function portraitMark(p, r, cx = 0, cy = 0, ring = 1.2) {
+    const svg = root.drawPortrait(p, { size: r * 2, small: r < 9 });
+    svg.setAttribute('x', cx - r);
+    svg.setAttribute('y', cy - r);
+    const NS = 'http://www.w3.org/2000/svg';
+    const g = document.createElementNS(NS, 'g');
+    g.setAttribute('class', 'portrait-mark');
+    g.append(svg);
+    if (ring) {
+      const c = document.createElementNS(NS, 'circle');
+      for (const [k, v] of Object.entries({ cx, cy, r, fill: 'none', stroke: '#fff', 'stroke-width': ring })) c.setAttribute(k, v);
+      g.append(c);
+    }
+    return g;
   }
 
   // Número que "rola" do zero até ao valor final (~1 s), com as mesmas casas decimais.
@@ -113,7 +133,7 @@
   }
 
   // drawCharacter(player, pose, opções) vem de character.js: os temas só escolhem a pose.
-  const kit = { el, fmt, withUnit, avatar, countUp, stopCount, reducedMotion, precisionOf, sizeScene, drawCharacter: root.drawCharacter };
+  const kit = { el, fmt, withUnit, avatar, portraitMark, countUp, stopCount, reducedMotion, precisionOf, sizeScene, drawCharacter: root.drawCharacter, drawPortrait: root.drawPortrait };
 
   // --- Registo de temas -------------------------------------------------------------------
 
@@ -165,7 +185,7 @@
     }
 
     /**
-     * r = { key, seed, theme, order, players: { id: {id, name, color, emoji} }, answers,
+     * r = { key, seed, theme, order, players: { id: {id, name, color, character} }, answers,
      *       distances, correct, unit, shown, showCorrect, closest, farthest, exact }
      * `seed` (igual em todos os telemóveis; por omissão, a key) alimenta a variação dos temas.
      * `order` vem do mais longe para o mais perto; `shown` = quantos palpites já se veem.

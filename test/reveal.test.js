@@ -233,7 +233,7 @@ test('o tema é escolhido pelo servidor e é igual para todos os jogadores', () 
     return p.id;
   });
   room.themeDeck = new ThemeDeck(['a', 'b', 'c']);
-  room.updateSettings(ids[0], { categories: ['historia'] }); // só perguntas de números
+  room.updateSettings(ids[0], { categories: ['corpo'] }); // só perguntas de números
   startGame(room, ids[0]);
   const themes = ids.map((id) => room.stateFor(id).question.theme);
   assert.ok(['a', 'b', 'c'].includes(themes[0]));

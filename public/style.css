@@ -157,6 +157,12 @@ button.ghost { background: transparent; border-color: transparent; color: var(--
 .chips button.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .chips button:disabled { opacity: .75; }
 .chips small { font-weight: 400; opacity: .8; }
+/* Categorias (14 e "Todas"): no telemóvel, duas por linha, para a lista não ficar comprida;
+   os nomes grandes passam para duas linhas dentro do chip. */
+@media (max-width: 480px) {
+  #set-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  #set-cats button { min-height: 44px; padding: 6px 10px; font-size: .84rem; line-height: 1.2; border-radius: 16px; }
+}
 .switch {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
   margin-top: 16px; cursor: pointer;

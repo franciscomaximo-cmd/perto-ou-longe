@@ -610,7 +610,8 @@ test('todas as perguntas têm categoria e cada categoria tem pelo menos 15', () 
   const questions = require('../server/questions.json');
   const counts = {};
   for (const q of questions) counts[q.category] = (counts[q.category] || 0) + 1;
-  assert.deepEqual(Object.keys(counts).sort(), ['ciencia', 'cultura', 'desporto', 'geografia', 'historia', 'precos']);
+  const { CATEGORIES } = require('../server/rooms');
+  assert.deepEqual(Object.keys(counts).sort(), CATEGORIES.map((c) => c.id).sort(), 'todas as categorias têm perguntas');
   for (const [cat, n] of Object.entries(counts)) assert.ok(n >= 15, `${cat}: ${n}`);
   for (const q of questions.filter((x) => x.category === 'precos')) {
     assert.equal(q.unit, 'euros', q.text);
@@ -625,14 +626,51 @@ test('só saem perguntas das categorias escolhidas', () => {
   startGame(room, ids[0]);
   assert.equal(room.questions.length, 12);
   assert.ok(room.questions.every((q) => ['desporto', 'historia'].includes(q.category)));
-  assert.ok(room.questions.every((q) => q.type !== 'map'), 'sem Geografia não há mapas');
+  // Desporto e História também têm algumas perguntas de mapa (cerca de 1 em cada 4 rondas).
+  assert.equal(room.questions.filter((q) => q.type === 'map').length, 3);
   assert.equal(room.stateFor(ids[1]).question.category === 'Desporto' || room.stateFor(ids[1]).question.category === 'História', true);
 });
 
-test('escolher todas as categorias é o mesmo que "Todas"', () => {
+test('escolher todas as categorias é o mesmo que "Todas", e "Todas" inclui as novas', () => {
+  const { CATEGORIES, QUESTIONS } = require('../server/rooms');
   const { room, ids } = setup();
-  room.updateSettings(ids[0], { categories: ['geografia', 'desporto', 'historia', 'cultura', 'precos', 'ciencia'] });
+  room.updateSettings(ids[0], { categories: CATEGORIES.map((c) => c.id) });
   assert.deepEqual(room.settings.categories, []);
+  assert.equal(room.questionPool().length, QUESTIONS.length);
+  for (const id of ['musica', 'cinema', 'comida', 'animais', 'espaco', 'corpo', 'tecnologia', 'recordes']) {
+    assert.ok(room.questionPool().some((q) => q.category === id), id);
+  }
+  // Sem as novas, já não é "Todas".
+  room.updateSettings(ids[0], { categories: ['geografia', 'desporto', 'historia', 'cultura', 'precos', 'ciencia'] });
+  assert.equal(room.settings.categories.length, 6);
+});
+
+test('perguntas de mapa fora da Geografia: texto próprio e o país como resposta', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  const { QUESTIONS } = require('../server/rooms');
+  const machu = QUESTIONS.find((q) => q.type === 'map' && /Machu Picchu/.test(q.text));
+  assert.equal(machu.text, 'Onde fica Machu Picchu, a cidade inca?');
+  startWith(room, ana, machu);
+  room.submitAnswer(ana, { lat: -13.16, lon: -72.55 }); // Machu Picchu
+  room.submitAnswer(rui, { lat: -16.5, lon: -68.15 }); // La Paz
+  room.submitAnswer(eva, { lat: 38.7, lon: -9.1 }); // Lisboa
+  room.forceAdvance(ana);
+  const r = room.stateFor(rui).result;
+  assert.equal(r.correct, 'Peru');
+  assert.equal(r.distances[ana], 0);
+  assert.ok(r.distances[rui] > 0 && r.distances[rui] < r.distances[eva]);
+});
+
+test('uma categoria nova com mapas também mistura perguntas de mapa; sem mapas, só números', () => {
+  const { room, ids } = setup();
+  room.updateSettings(ids[0], { categories: ['historia'], rounds: 8 });
+  startGame(room, ids[0]);
+  assert.equal(room.questions.filter((q) => q.type === 'map').length, 2);
+  const other = setup();
+  other.room.updateSettings(other.ids[0], { categories: ['corpo'], rounds: 8 });
+  startGame(other.room, other.ids[0]);
+  assert.equal(other.room.questions.filter((q) => q.type === 'map').length, 0);
 });
 
 test('se a categoria não chega para as rondas, o jogo fica mais curto e avisa', () => {

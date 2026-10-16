@@ -8,7 +8,10 @@ const CharacterOptions = require('../public/reveal/character-options');
 const { revealPace } = require('../public/reveal/pace');
 // Perguntas de mapa: o texto é montado com o artigo guardado de cada país
 // ("os Camarões", "as Filipinas" → "Onde ficam…"; "Angola", sem artigo → "Onde fica Angola?").
+// Fora da Geografia a pergunta traz o seu próprio texto (ex.: "Onde fica Machu Picchu?"); a
+// resposta continua a ser o país (`label`), e um palpite dentro dele conta como em cheio.
 function mapQuestionText(q) {
+  if (q.text) return q.text;
   const verb = q.article === 'os' || q.article === 'as' ? 'ficam' : 'fica';
   const name = q.article ? `${q.article} ${q.label}` : q.label;
   return `Onde ${verb} ${name}${q.note ? ` (${q.note})` : ''}?`;
@@ -16,7 +19,7 @@ function mapQuestionText(q) {
 
 const QUESTIONS = require('./questions.json').map((q) => (q.type === 'map' ? { ...q, text: mapQuestionText(q) } : q));
 
-const MAP_SHARE = 0.25; // cerca de 1 em cada 4 perguntas é de mapa (quando há Geografia)
+const MAP_SHARE = 0.25; // cerca de 1 em cada 4 perguntas é de mapa (quando o conjunto tem mapas)
 
 const CATEGORIES = [
   { id: 'geografia', label: 'Geografia' },
@@ -25,6 +28,14 @@ const CATEGORIES = [
   { id: 'cultura', label: 'Cultura Portuguesa' },
   { id: 'precos', label: 'Adivinha o Preço' },
   { id: 'ciencia', label: 'Ciência e Curiosidades' },
+  { id: 'musica', label: 'Música' },
+  { id: 'cinema', label: 'Cinema e Televisão' },
+  { id: 'comida', label: 'Comida e Bebida' },
+  { id: 'animais', label: 'Animais e Natureza' },
+  { id: 'espaco', label: 'Espaço e Astronomia' },
+  { id: 'corpo', label: 'Corpo Humano' },
+  { id: 'tecnologia', label: 'Tecnologia e Jogos' },
+  { id: 'recordes', label: 'Recordes e Coisas Absurdas' },
 ];
 const CATEGORY_LABELS = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.label]));
 const CATEGORY_COUNTS = Object.fromEntries(CATEGORIES.map((c) => [c.id, QUESTIONS.filter((q) => q.category === c.id).length]));
@@ -945,6 +956,7 @@ function sweepIdleRooms(now = Date.now()) {
 module.exports = {
   Room,
   QUESTIONS,
+  CATEGORIES,
   goodForTiebreak,
   GameError,
   createRoom,

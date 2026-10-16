@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 150" role="img" aria-label="Mais Coisa, Menos Coisa">
+  <!-- Logótipo de "Mais Coisa, Menos Coisa": letreiro de tasca, uma tábua de madeira pendurada
+       com o nome pintado à mão. (No jogo, o mesmo letreiro está dentro do index.html, para usar
+       a letra "Caveat Brush"; aqui ficam alternativas de sistema.) -->
+  <defs>
+    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#8a5a32"/><stop offset=".55" stop-color="#6b4423"/><stop offset="1" stop-color="#4e301a"/>
+    </linearGradient>
+  </defs>
+  <path d="M70,0 L92,30 M250,0 L228,30" stroke="#c9a56b" stroke-width="3" stroke-linecap="round"/>
+  <rect x="8" y="26" width="304" height="116" rx="14" fill="url(#wood)" stroke="#3e2716" stroke-width="4"/>
+  <path d="M20,52 C90,46 140,58 210,50 S290,56 300,52 M18,92 C80,98 150,86 220,94 S290,88 302,94 M24,124 C100,118 170,130 240,122 S292,126 298,122" fill="none" stroke="#3e2716" stroke-width="1.6" opacity=".35"/>
+  <circle cx="92" cy="34" r="4" fill="#d8c3a0"/><circle cx="228" cy="34" r="4" fill="#d8c3a0"/>
+  <g font-family="'Caveat Brush', 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive" font-size="40" fill="#f3ead7" stroke="#3e2716" stroke-width="5" paint-order="stroke" text-anchor="middle">
+    <text x="160" y="80">Mais Coisa,</text>
+    <text x="160" y="124">Menos Coisa</text>
+  </g>
+</svg>

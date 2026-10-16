@@ -3,9 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1d1846">
-  <title>Perto ou Longe</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E🎯%3C/text%3E%3C/svg%3E">
+  <meta name="theme-color" content="#3e2716">
+  <title>Mais Coisa, Menos Coisa</title>
+  <meta name="description" content="Mais Coisa, Menos Coisa: o jogo de tasca para jogar com amigos no telemóvel. Adivinha números e descobre quem falhou por mais.">
+  <meta property="og:title" content="Mais Coisa, Menos Coisa">
+  <meta property="og:description" content="O jogo de tasca para jogar com amigos no telemóvel: adivinha números e descobre quem falhou por mais.">
+  <meta property="og:type" content="website">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <!-- Letras: "Caveat Brush" (pintada à mão) nos títulos e "Atkinson Hyperlegible" (muito
+       legível) no texto e nos números; sem ligação à internet, ficam as letras do sistema. -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Caveat+Brush&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -21,25 +30,46 @@
   <main>
     <!-- Entrada -->
     <section id="screen-home" class="screen">
-      <h1 class="logo">Perto <em>ou</em> Longe</h1>
-      <p class="tagline">Adivinha números e descobre quem falhou por mais.</p>
+      <!-- Entrada da tasca: a parede de azulejo, o letreiro (logótipo) e, por baixo, um quadro
+           de ardósia com o nome e o número da mesa escritos a giz. -->
+      <div class="tiles" aria-hidden="true"></div>
+      <h1 class="logo">
+        <svg class="sign" viewBox="0 0 320 150" role="img" aria-label="Mais Coisa, Menos Coisa">
+          <defs>
+            <linearGradient id="sign-wood" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#8a5a32"/><stop offset=".55" stop-color="#6b4423"/><stop offset="1" stop-color="#4e301a"/>
+            </linearGradient>
+          </defs>
+          <!-- Cordas e pregos de onde pende o letreiro -->
+          <path d="M70,0 L92,30 M250,0 L228,30" stroke="#c9a56b" stroke-width="3" stroke-linecap="round"/>
+          <rect x="8" y="26" width="304" height="116" rx="14" fill="url(#sign-wood)" stroke="#3e2716" stroke-width="4"/>
+          <!-- Veios da madeira -->
+          <path d="M20,52 C90,46 140,58 210,50 S290,56 300,52 M18,92 C80,98 150,86 220,94 S290,88 302,94 M24,124 C100,118 170,130 240,122 S292,126 298,122" fill="none" stroke="#3e2716" stroke-width="1.6" opacity=".35"/>
+          <circle cx="92" cy="34" r="4" fill="#d8c3a0"/><circle cx="228" cy="34" r="4" fill="#d8c3a0"/>
+          <text x="160" y="80" text-anchor="middle" class="sign-line" font-size="40">Mais Coisa,</text>
+          <text x="160" y="124" text-anchor="middle" class="sign-line" font-size="40">Menos Coisa</text>
+        </svg>
+      </h1>
+      <p class="tagline" data-t="slogan">Adivinha números e descobre quem falhou por mais.</p>
       <!-- Ao voltar a ligar, se a sala já não existe (ex.: o servidor reiniciou num deploy). -->
       <p id="home-notice" class="home-notice" role="status" hidden></p>
 
-      <label class="field">O teu nome
-        <input id="home-name" maxlength="16" autocomplete="nickname" enterkeyhint="next">
-      </label>
-      <button id="btn-create" class="primary">Criar sala</button>
+      <div class="slate stack">
+        <label class="field"><span data-t="oTeuNome">O teu nome</span>
+          <input id="home-name" maxlength="16" autocomplete="nickname" enterkeyhint="next">
+        </label>
+        <button id="btn-create" class="primary" data-t="abrirMesa">Abrir mesa</button>
 
-      <div class="divider"><span>ou entra numa sala</span></div>
+        <div class="divider"><span data-t="ouSenta">ou senta-te numa mesa já aberta</span></div>
 
-      <label class="field">Código da sala
-        <input id="home-code" class="code-input" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
-      </label>
-      <button id="btn-join">Entrar</button>
+        <label class="field"><span data-t="numeroMesa">Número da mesa</span>
+          <input id="home-code" class="code-input" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
+        </label>
+        <button id="btn-join" class="wood" data-t="sentar">Sentar à mesa</button>
+      </div>
 
-      <details class="rules">
-        <summary>Como se joga</summary>
+      <details class="rules paper">
+        <summary data-t="comoSeJoga">Como se joga</summary>
         <ol>
           <li>Todos respondem com um número à mesma pergunta. Nas perguntas de mapa, toca no mapa onde achas que fica o país: conta a distância em km até ele, e tocar dentro do país é acertar em cheio.</li>
           <li>Sem ver os palpites, cada um vota em quem acha que ficou <strong>mais longe</strong> (não vale votar em si próprio).</li>
@@ -55,18 +85,26 @@
 
     <!-- Sala de espera -->
     <section id="screen-lobby" class="screen" hidden>
-      <p class="label center">Código da sala</p>
-      <div id="lobby-code" class="big-code"></div>
-      <div id="lobby-qr" class="qr" role="img" aria-label="QR code com o convite para a sala"></div>
-      <p class="hint center">Aponta a câmara do telemóvel para entrar.</p>
-      <button id="btn-share" class="ghost">Partilhar convite</button>
+      <div class="tiles" aria-hidden="true"></div>
+      <h1 class="lobby-title" data-t="aMesa">À mesa</h1>
+      <!-- O número da mesa numa plaquinha de ardósia, com o QR do convite por baixo. -->
+      <div class="table-plate">
+        <p class="plate-label" data-t="numeroMesa">Número da mesa</p>
+        <div id="lobby-code" class="big-code"></div>
+        <div id="lobby-qr" class="qr" role="img" aria-label="QR code com o convite para a mesa"></div>
+        <p class="hint center" data-t="qrDica">Aponta a câmara do telemóvel para te sentares.</p>
+      </div>
+      <button id="btn-share" class="ghost" data-t="chamarGente">Chamar mais gente</button>
 
-      <h2>Jogadores <span id="lobby-count" class="muted"></span></h2>
-      <ul id="lobby-players" class="players"></ul>
+      <!-- Quem está à mesa, como uma conta de tasca escrita num bloco. -->
+      <div class="bill paper">
+        <h2><span data-t="jogadores">À mesa estão…</span> <span id="lobby-count" class="muted"></span></h2>
+        <ul id="lobby-players" class="players"></ul>
+      </div>
 
       <!-- Boneco do jogador: é o boneco que aparece nos temas de revelação e no fim do jogo.
            Só se muda aqui, na sala de espera, no editor (painel próprio, abaixo). -->
-      <div class="card char-summary">
+      <div class="card char-summary paper">
         <button id="char-card-preview" class="char-preview small idle" type="button" aria-label="O teu boneco. Toca para o editar."></button>
         <div class="char-summary-side">
           <h2>O teu boneco</h2>
@@ -75,8 +113,8 @@
         </div>
       </div>
 
-      <div class="card">
-        <h2>Configuração</h2>
+      <div class="card menu paper">
+        <h2 data-t="ementa">Ementa da casa</h2>
         <label class="slider">
           <span>Número de perguntas <output id="out-rounds"></output></span>
           <input type="range" id="set-rounds" min="3" max="30" step="1">
@@ -105,7 +143,7 @@
         <p id="settings-hint" class="hint"></p>
       </div>
 
-      <form id="custom-form" class="card stack" autocomplete="off" hidden>
+      <form id="custom-form" class="card stack paper" autocomplete="off" hidden>
         <h2>A tua pergunta</h2>
         <p class="hint">Uma pergunta com resposta em número. Quando sair, não respondes, mas podes votar.</p>
         <label class="field">Pergunta
@@ -125,7 +163,7 @@
         <p id="custom-status" class="hint center"></p>
       </form>
 
-      <button class="ghost btn-leave">Sair da sala</button>
+      <button class="ghost btn-leave" data-t="levantar">Levantar da mesa</button>
 
       <!-- Barra fixa no fundo do ecrã: o botão principal (jogadores: "Estou pronto"; anfitrião:
            "Começar jogo") com a mensagem "Faltam X…" logo acima. A sala de espera tem espaço

@@ -153,5 +153,5 @@ io.on('connection', (socket) => {
 setInterval(sweepIdleRooms, 60_000).unref();
 
 server.listen(PORT, () => {
-  console.log(`Perto ou Longe a correr em http://localhost:${PORT}`);
+  console.log(`Mais Coisa, Menos Coisa a correr em http://localhost:${PORT}`);
 });

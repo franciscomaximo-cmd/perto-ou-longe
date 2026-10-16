@@ -12,6 +12,50 @@
   const numberFormat = new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 3 });
   const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  // --- Textos do estilo "tasca" ---------------------------------------------------------
+  // Todos os textos novos num só sítio, para se poderem mudar facilmente. No HTML, um elemento
+  // com data-t="chave" recebe o texto TEXTOS[chave] ao abrir a página (o HTML já traz o mesmo
+  // texto, para o caso de o script demorar). Os textos com valores (ex.: o número de jogadores)
+  // são funções.
+  const TEXTOS = {
+    nome: 'Mais Coisa, Menos Coisa',
+    slogan: 'Adivinha números e descobre quem falhou por mais.',
+    // Ecrã inicial
+    oTeuNome: 'O teu nome',
+    abrirMesa: 'Abrir mesa',
+    ouSenta: 'ou senta-te numa mesa já aberta',
+    numeroMesa: 'Número da mesa',
+    sentar: 'Sentar à mesa',
+    comoSeJoga: 'Como se joga',
+    // Sala de espera
+    aMesa: 'À mesa',
+    mesa: 'Mesa',
+    qrDica: 'Aponta a câmara do telemóvel para te sentares.',
+    chamarGente: 'Chamar mais gente',
+    jogadores: 'À mesa estão…',
+    jaCaEstou: 'Já cá estou!',
+    aEscolher: 'A escolher o petisco…',
+    estouServido: 'Estou servido',
+    naoServido: 'Afinal ainda não estou servido',
+    venhaDeLa: 'Venha de lá isso!',
+    ementa: 'Ementa da casa',
+    levantar: 'Levantar da mesa',
+    convite: (code) => `Senta-te à mesa no Mais Coisa, Menos Coisa! Número da mesa: ${code}`,
+    ligacaoCopiada: 'Ligação copiada.',
+    soAnfitriao: 'Só o anfitrião pode mudar a ementa.',
+    faltaPronto: (name) => `Falta 1 jogador dizer que está servido: ${name}.`,
+    faltamProntos: (n, names) => `Faltam ${n} jogadores dizerem que estão servidos: ${names}.`,
+    carregaServido: 'Carrega em «Estou servido» quando estiveres preparado.',
+    todosServidos: 'Estão todos servidos. Podes começar!',
+    esperaAnfitriao: 'Estás servido. À espera que o anfitrião comece o jogo…',
+    regrasMudaram: 'O anfitrião mudou a ementa. Vê a configuração e diz outra vez que estás servido.',
+    perguntaPrimeiro: 'Escreve primeiro a tua pergunta para ficares servido.',
+  };
+  for (const node of document.querySelectorAll('[data-t]')) {
+    const value = TEXTOS[node.dataset.t];
+    if (typeof value === 'string') node.textContent = value;
+  }
+
   // --- Utilitários --------------------------------------------------------
 
   // O nome e o som ficam no localStorage (comuns a todos os separadores); a sessão fica no
@@ -189,10 +233,10 @@
 
   $('#btn-share').addEventListener('click', async () => {
     const url = inviteUrl();
-    const text = `Junta-te ao Perto ou Longe! Código da sala: ${state.code}`;
+    const text = TEXTOS.convite(state.code);
     try {
-      if (navigator.share) await navigator.share({ title: 'Perto ou Longe', text, url });
-      else { await navigator.clipboard.writeText(url); toast('Ligação copiada.'); }
+      if (navigator.share) await navigator.share({ title: TEXTOS.nome, text, url });
+      else { await navigator.clipboard.writeText(url); toast(TEXTOS.ligacaoCopiada); }
     } catch { /* partilha cancelada */ }
   });
 
@@ -521,7 +565,7 @@
     $('#tb-round').textContent = state.phase === 'end' ? 'Fim do jogo'
       : state.tiebreak ? `Desempate${state.tiebreak.number > 1 ? ` ${state.tiebreak.number}` : ''}`
       : inGame && state.round ? `Pergunta ${state.round} de ${state.totalRounds}`
-      : 'Sala de espera';
+      : ''; // na sala de espera, o título "À mesa" está na própria página
   }
 
   function tick() {
@@ -552,12 +596,13 @@
     ]);
   }
 
-  // Linha de um jogador na sala de espera: estado (✓ Pronto / A preparar…), a pergunta (no
-  // modo "Perguntas dos jogadores") e, para o anfitrião, o botão discreto de expulsar.
+  // Linha de um jogador na sala de espera: estado ("Já cá estou!" / "A escolher o petisco…"),
+  // a pergunta (no modo "Perguntas dos jogadores") e, para o anfitrião, o botão discreto de
+  // expulsar.
   function lobbyRow(p, custom) {
     const extras = el('span', { class: 'lobby-extras' }, [
       custom ? el('span', { class: 'state', text: state.customReady.includes(p.id) ? 'pergunta ✓' : 'a escrever…' }) : null,
-      p.connected ? el('span', { class: `ready-badge ${p.ready ? 'on' : ''}`, text: p.ready ? '✓ Pronto' : 'A preparar…' }) : null,
+      p.connected ? el('span', { class: `ready-badge ${p.ready ? 'on' : ''}`, text: p.ready ? TEXTOS.jaCaEstou : TEXTOS.aEscolher }) : null,
       isHost() && p.id !== state.me ? el('button', {
         type: 'button', class: 'kick', 'aria-label': `Expulsar ${p.name}`, title: `Expulsar ${p.name}`, text: '✕',
         onclick: () => askConfirm(`Expulsar ${p.name}?`, 'Expulsar').then((ok) => { if (ok) act('player:kick', { playerId: p.id }); }),
@@ -596,7 +641,7 @@
     if (!seenRules || seenRules[0] !== key) { seenRules = [key, state.rulesVersion]; return; }
     if (state.rulesVersion > seenRules[1]) {
       seenRules[1] = state.rulesVersion;
-      if (!isHost() && state.phase === 'lobby') toast('O anfitrião mudou as regras. Vê a configuração e diz outra vez que estás pronto.');
+      if (!isHost() && state.phase === 'lobby') toast(TEXTOS.regrasMudaram);
     }
   }
 
@@ -636,7 +681,7 @@
     }
     $('#settings-hint').textContent = host
       ? 'Nos tempos, arrasta até ao início para jogar sem limite.'
-      : 'Só o anfitrião pode mudar a configuração.';
+      : TEXTOS.soAnfitriao;
     renderCategories(host);
 
     const missing = state.minPlayers - online;
@@ -647,7 +692,7 @@
     const waiting = state.players.filter((p) => p.connected && !p.ready).map((p) => p.name);
     $('#btn-start').hidden = !host;
     $('#btn-start').disabled = missing > 0 || noQuestion.length > 0 || waiting.length > 0;
-    $('#btn-start').textContent = 'Começar jogo';
+    $('#btn-start').textContent = TEXTOS.venhaDeLa;
 
     // "Estou pronto" (todos menos o anfitrião). No modo das perguntas dos jogadores, só depois
     // de escrever a pergunta.
@@ -657,17 +702,17 @@
     $('#btn-ready').hidden = host || !me;
     $('#btn-ready').disabled = !meReady && needsQuestion;
     $('#btn-ready').classList.toggle('is-ready', meReady);
-    $('#btn-ready').textContent = meReady ? 'Afinal não estou pronto' : 'Estou pronto ✓';
+    $('#btn-ready').textContent = meReady ? TEXTOS.naoServido : TEXTOS.estouServido;
 
     const waitingText = waiting.length === 1
-      ? `Falta 1 jogador ficar pronto: ${waiting[0]}.`
-      : `Faltam ${waiting.length} jogadores ficarem prontos: ${waiting.join(', ')}.`;
+      ? TEXTOS.faltaPronto(waiting[0])
+      : TEXTOS.faltamProntos(waiting.length, waiting.join(', '));
     $('#lobby-hint').textContent = missing > 0
       ? `${missing === 1 ? 'Falta 1 jogador' : `Faltam ${missing} jogadores`} para começar (mínimo ${state.minPlayers}).`
       : noQuestion.length ? `Falta a pergunta de: ${noQuestion.join(', ')}.`
-      : waiting.length ? (host || meReady ? waitingText : 'Carrega em «Estou pronto» quando estiveres preparado.')
-      : host ? 'Estão todos prontos. Podes começar!' : 'Estás pronto. À espera que o anfitrião comece o jogo…';
-    if (!host && needsQuestion && !meReady) $('#lobby-hint').textContent = 'Escreve primeiro a tua pergunta para ficares pronto.';
+      : waiting.length ? (host || meReady ? waitingText : TEXTOS.carregaServido)
+      : host ? TEXTOS.todosServidos : TEXTOS.esperaAnfitriao;
+    if (!host && needsQuestion && !meReady) $('#lobby-hint').textContent = TEXTOS.perguntaPrimeiro;
   }
   $('#btn-ready').addEventListener('click', () => {
     const me = player(state.me);

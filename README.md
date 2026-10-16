@@ -1,6 +1,8 @@
-# Perto ou Longe
+# Mais Coisa, Menos Coisa
 
-Jogo multijogador para telemóveis. Todos respondem com um número à mesma pergunta e depois votam em quem acham que ficou **mais longe** da resposta certa.
+Jogo multijogador para telemóveis, com ar de tasca portuguesa (antes chamava-se "Perto ou Longe"). Todos respondem com um número à mesma pergunta e depois votam em quem acham que ficou **mais longe** da resposta certa.
+
+O endereço do site, o nome do serviço no Render (`render.yaml`) e as chaves do `localStorage` (`pertoOuLonge.*`) mantêm o nome antigo de propósito: assim os jogadores não perdem o boneco e o progresso guardados.
 
 - Quem fica **mais perto** ganha 1 ponto. Se acertar no número exato, ganha 2.
 - Há também perguntas de mapa ("Onde fica o Paquistão?"): cada um toca num mapa-mundo em branco. Conta a distância em km até ao país; tocar dentro do país é acertar em cheio.
@@ -10,7 +12,7 @@ Jogo multijogador para telemóveis. Todos respondem com um número à mesma perg
 - No fim, se houver empate no 1.º lugar, os empatados vão a desempate: só eles respondem a uma pergunta extra, sem votação, e quem fica mais perto ganha ("venceu o desempate" na classificação). Se voltarem a empatar, sai outra pergunta. Os empates mais abaixo ficam como empate. O desempate decide a ordem, não dá pontos, e usa só perguntas com resposta grande (≥ 100) ou com casas decimais.
 - Os números escrevem-se à portuguesa: vírgula decimal ("12,5") e ponto de milhares ("1.200").
 - De 3 a 12 jogadores.
-- O anfitrião (quem cria a sala) define, na configuração da sala, o número de perguntas (de 3 a 30, 10 por defeito), o tempo para responder e para votar (de 15 a 180 s, ou sem limite) e as categorias: Geografia, Desporto, História, Cultura Portuguesa, Adivinha o Preço e Ciência e Curiosidades (ou todas). Se as categorias escolhidas não tiverem perguntas suficientes, o anfitrião é avisado e o jogo fica mais curto.
+- O anfitrião (quem cria a sala) define, na configuração da sala, o número de perguntas (de 3 a 30, 10 por defeito), o tempo para responder e para votar (de 15 a 180 s, ou sem limite) e as categorias: Geografia, Desporto, História, Cultura Portuguesa, Adivinha o Preço, Ciência e Curiosidades, Música, Cinema e Televisão, Comida e Bebida, Animais e Natureza, Espaço e Astronomia, Corpo Humano, Tecnologia e Jogos e Recordes e Coisas Absurdas (ou todas). Se as categorias escolhidas não tiverem perguntas suficientes, o anfitrião é avisado e o jogo fica mais curto.
 - **Perguntas dos jogadores** (opção do anfitrião, mínimo 4 jogadores): cada um escreve uma pergunta com resposta em número antes de começar. Quando sai a pergunta de alguém, essa pessoa não responde nem conta para mais perto ou mais longe, mas vota. Com 3 jogadores sobravam 2 a responder e cada um só podia votar no outro, por isso são precisos 4.
 - **Revelação em passos**, avançada pelo anfitrião (todos veem o mesmo): os palpites aparecem um a um, do mais longe para o mais perto, numa reta numérica (valores muito afastados ficam na ponta, a tracejado, com uma seta) ou no mapa, com uma linha até ao país; depois a resposta certa, quem votou em quem e, por fim, os pontos e a classificação.
 - **Prémios no fim**: mais certeiro (mais vezes o mais perto; em empate, o menor erro médio relativo), mais longe da realidade (mais vezes o mais longe) e melhor a ler os outros (mais votos certos). Em empate aparecem todos.

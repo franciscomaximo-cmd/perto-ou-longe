@@ -1,7 +1,7 @@
 {
-  "name": "perto-ou-longe",
+  "name": "mais-coisa-menos-coisa",
   "version": "1.0.0",
-  "description": "Jogo multijogador para telemóveis: adivinha números e apanha quem ficou mais longe.",
+  "description": "Mais Coisa, Menos Coisa: jogo multijogador de tasca para telemóveis. Adivinha números e apanha quem ficou mais longe.",
   "main": "server/index.js",
   "private": true,
   "scripts": {

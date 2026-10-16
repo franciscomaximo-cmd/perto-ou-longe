@@ -239,7 +239,7 @@
         // Placa da resposta certa, no topo (zona onde nunca cai nenhuma seta).
         answerText = s('text', { x: VW / 2, y: 26, 'text-anchor': 'middle', class: 'arco-answer' }, [document.createTextNode('?')]);
         scene.append(
-          s('rect', { x: VW / 2 - 62, y: 4, width: 124, height: 30, rx: 8, class: 'arco-plaque' }),
+          s('rect', { x: VW / 2 - 62, y: 4, width: 124, height: 30, rx: 8, class: 'arco-plaque', 'data-avoid': '' }),
           s('text', { x: VW / 2 - 56, y: 13, class: 'arco-plaque-label' }, [document.createTextNode('RESPOSTA')]),
           answerText,
         );
@@ -382,6 +382,12 @@
         }
         // As setas do mais perto ficam por cima das outras.
         for (const node of [...arrowsLayer.children]) if (node.classList.contains('near')) arrowsLayer.append(node);
+      },
+
+      // Etiqueta do palpite: na ponta da seta (onde acertou).
+      markOf(id) {
+        const shot = arrowsLayer && [...arrowsLayer.children].some((n) => n.dataset.id === id);
+        return shot && points[id] ? { x: points[id].x, y: points[id].y } : null;
       },
 
       skipToEnd() {

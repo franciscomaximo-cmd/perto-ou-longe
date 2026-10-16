@@ -310,7 +310,7 @@
         // Placa da resposta certa, no topo (nenhuma bola vai lá).
         answerText = text({ x: VW / 2 + 22, y: 18, 'text-anchor': 'middle', class: 'pen-answer' }, '?');
         scene.append(
-          s('rect', { x: 88, y: 4, width: 124, height: 20, rx: 6, class: 'pen-plaque' }),
+          s('rect', { x: 88, y: 4, width: 124, height: 20, rx: 6, class: 'pen-plaque', 'data-avoid': '' }),
           text({ x: 94, y: 16.5, class: 'pen-plaque-label' }, 'RESPOSTA'),
           answerText,
         );
@@ -464,6 +464,11 @@
         }
         if (closest.length && row[closest[0]]) showShooter(row[closest[0]].player, 'festejar');
         for (const m of marksLayer.children) m.classList.toggle('far', farthest.includes(m.dataset.id) && !closest.includes(m.dataset.id));
+      },
+
+      // Etiqueta do palpite: na marca de onde foi a bola (golo, defesa, poste, bancada…).
+      markOf(id) {
+        return (marksLayer && [...marksLayer.children].find((n) => n.dataset.id === id)) || null;
       },
 
       skipToEnd() {

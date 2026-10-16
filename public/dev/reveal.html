@@ -31,7 +31,12 @@
       <div class="dev-bar">
         <button id="replay" type="button">↻ Repetir</button>
         <button id="skip" type="button">Saltar</button>
+        <button id="tour" type="button">▶ Todos os temas</button>
       </div>
+      <p class="dev-note">Legendas (comuns a todos os temas): na vez de cada um, a legenda com o palpite na faixa
+        de cima; no fim da vez, a etiqueta com o palpite no cenário; com a resposta certa, a diferença
+        nas etiquetas e o resumo "Mais perto / Mais longe". "Todos os temas" mostra o cenário escolhido
+        em cada tema, um a seguir ao outro.</p>
 
       <p id="question" class="question small"></p>
       <!-- Introdução do tema (no jogo aparece antes da revelação, nos ecrãs de responder e votar). -->
@@ -73,6 +78,7 @@
   <script src="../reveal/character.js"></script>
   <script src="../reveal/presentation.js"></script>
   <script src="../reveal/pace.js"></script>
+  <script src="../reveal/captions.js"></script>
   <script src="../reveal/index.js"></script>
   <script src="../reveal/alvo.js"></script>
   <script src="../reveal/arco.js"></script>
@@ -227,17 +233,32 @@
           else current.showCorrect = true;
           render();
           if (!current.showCorrect) timer = setTimeout(step, delay());
+          else if (tour) timer = setTimeout(nextInTour, 3500);
         };
         timer = setTimeout(step, delay());
       }
 
       for (const id of ids()) $('#theme').append(kit.el('option', { value: id, text: id }));
       for (const name of Object.keys(SCENARIOS)) {
-        $('#scenarios').append(kit.el('button', { type: 'button', text: name, onclick: () => start(name) }));
+        $('#scenarios').append(kit.el('button', { type: 'button', text: name, onclick: () => { stopTour(); start(name); } }));
       }
-      $('#theme').addEventListener('change', () => start(current.name));
-      $('#replay').addEventListener('click', () => start(current.name));
+      // "Todos os temas": o mesmo cenário em cada tema, um a seguir ao outro (para ao mexer).
+      let tour = null;
+      function nextInTour() {
+        if (!tour || !tour.length) { tour = null; $('#tour').classList.remove('on'); return; }
+        $('#theme').value = tour.shift();
+        start(current.name);
+      }
+      $('#tour').addEventListener('click', () => {
+        tour = ids();
+        $('#tour').classList.add('on');
+        nextInTour();
+      });
+      const stopTour = () => { tour = null; $('#tour').classList.remove('on'); };
+      $('#theme').addEventListener('change', () => { stopTour(); start(current.name); });
+      $('#replay').addEventListener('click', () => { stopTour(); start(current.name); });
       $('#skip').addEventListener('click', () => {
+        stopTour();
         clearTimeout(timer);
         current.shown = current.r.order.length;
         current.showCorrect = true;

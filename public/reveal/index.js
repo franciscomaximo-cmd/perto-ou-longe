@@ -38,6 +38,11 @@
  *       Mostra a resposta certa. info = { closest, farthest, exact, instant } (listas de ids).
  *       Aqui aparecem, todos juntos, os festejos (de quem ficou mais perto) e as reações (do
  *       mais longe).
+ *   markOf(id)  (opcional, mas todos os temas atuais o têm)
+ *       Onde ficou o resultado do jogador (a bola, a seta, o kart…): o elemento, ou um ponto
+ *       { x, y } da cena, com opções de posição. O código comum põe lá uma etiqueta com o
+ *       palpite (ver public/reveal/captions.js). A placa da resposta certa leva o atributo
+ *       data-avoid, para nenhuma etiqueta a tapar.
  *   skipToEnd()
  *       Mostra tudo de imediato (termina as animações a meio).
  *   destroy()
@@ -45,8 +50,10 @@
  *
  * O código COMUM (não cada tema) controla: a ordem (aleatória, dada pelo servidor), o ritmo
  * (pace.js: rápido nos primeiros, devagar nos últimos 3, dado pelo servidor), o botão
- * "Saltar", os sons, o confetti, o cálculo da precisão (precision.js) e a lista por baixo da
- * animação (pela ordem da revelação e, no fim, do mais perto para o mais longe).
+ * "Saltar", os sons, o confetti, o cálculo da precisão (precision.js), a lista por baixo da
+ * animação (pela ordem da revelação e, no fim, do mais perto para o mais longe) e as legendas
+ * (captions.js): a legenda com o palpite na vez de cada um, as etiquetas no cenário e o resumo
+ * "Mais perto / Mais longe" no fim.
  *
  * REGRAS que todos os temas têm de cumprir:
  *   1. Tamanho fixo desde o início, sem saltos de layout. No telemóvel ocupa a largura e no
@@ -161,6 +168,8 @@
   function createController({ stage, list, avatarOf, sound = null }) {
     // Sons pedidos pelos temas (tocados pelo código comum, se houver; na pré-visualização, não).
     const themeKit = { ...kit, sound: (name) => { if (sound) sound(name); } };
+    // Legenda de cada vez, etiquetas com os palpites e resumo final (public/reveal/captions.js).
+    const captions = root.RevealCaptions ? root.RevealCaptions.createCaptions({ stage, avatarOf }) : null;
     let theme = null;
     let key = null;
     let revealed = 0;
@@ -186,6 +195,7 @@
     }
 
     function destroy() {
+      if (captions) captions.destroy();
       if (theme) theme.destroy();
       theme = null;
       key = null;
@@ -230,6 +240,7 @@
           result,
           seed: String(r.seed ?? r.key),
         });
+        if (captions) captions.start(r, theme);
         // Lista com uma linha por palpite desde o início (escondida), para não empurrar a página,
         // pela ordem da revelação; no fim reordena-se do mais perto para o mais longe.
         sorted = false;
@@ -247,6 +258,8 @@
       for (let i = revealed; i < r.shown; i++) {
         const id = r.order[i];
         const p = { ...r.players[id], id, value: r.answers[id], show: shows[id], avatar: (size) => avatarOf(id, size) };
+        // Tempo até ao passo seguinte (pace.js): a animação deste palpite tem de caber aqui.
+        const duration = root.RevealPace.timeFor(r.order.length, i);
         theme.revealPlayer(p, precisionOf(r.answers[id], r.correct), {
           value: r.answers[id],
           distance: r.distances[id],
@@ -254,16 +267,22 @@
           show: shows[id],
           index: i,
           total: r.order.length,
-          // Tempo até ao passo seguinte (pace.js): a animação deste palpite tem de caber aqui.
-          duration: root.RevealPace.timeFor(r.order.length, i),
+          duration,
           instant,
         });
+        if (captions) captions.turn(id, { duration, instant });
       }
       revealed = Math.max(revealed, r.shown);
-      if (jumped || (fresh && instant && r.shown > 0)) theme.skipToEnd();
+      if (jumped || (fresh && instant && r.shown > 0)) {
+        theme.skipToEnd();
+        if (captions) captions.showAll();
+      }
       if (r.showCorrect && !answerShown) {
         answerShown = true;
         theme.revealAnswer(r.correct, { closest: r.closest, farthest: r.farthest, exact: r.exact || [], instant });
+        // O resumo ("Mais perto: …") aparece sempre que a resposta chega durante a revelação
+        // (também ao saltar e com movimento reduzido), mas não a quem entra já no fim.
+        if (captions) captions.answer({ summary: !fresh });
         if (!instant) phraseBubbles(r);
       }
 

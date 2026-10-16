@@ -250,7 +250,7 @@
         // Placa da resposta certa, no topo (nenhum dardo cai lá).
         answerText = text({ x: VW / 2, y: 26, 'text-anchor': 'middle', class: 'dart-answer' }, '?');
         scene.append(
-          s('rect', { x: VW / 2 - 62, y: 4, width: 124, height: 30, rx: 8, class: 'dart-plaque' }),
+          s('rect', { x: VW / 2 - 62, y: 4, width: 124, height: 30, rx: 8, class: 'dart-plaque', 'data-avoid': '' }),
           text({ x: VW / 2 - 56, y: 13, class: 'dart-plaque-label' }, 'RESPOSTA'),
           answerText,
         );
@@ -380,6 +380,12 @@
         }
         // Os dardos do mais perto ficam por cima dos outros.
         for (const node of [...dartsLayer.children]) if (node.classList.contains('near')) dartsLayer.append(node);
+      },
+
+      // Etiqueta do palpite: na ponta do dardo (onde se cravou).
+      markOf(id) {
+        const thrown = dartsLayer && [...dartsLayer.children].some((n) => n.dataset.id === id);
+        return thrown && points[id] ? { x: points[id].x, y: points[id].y } : null;
       },
 
       skipToEnd() {

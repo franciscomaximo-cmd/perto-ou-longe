@@ -157,7 +157,7 @@
         // Faixa de cima: resposta certa junto à meta, e a bandeira (nenhum kart passa aqui).
         answerText = text({ x: FINISH_X - 8, y: 17, 'text-anchor': 'end', class: 'kart-answer' }, '?');
         scene.append(
-          s('rect', { x: FINISH_X - 128, y: 2, width: 124, height: 21, rx: 6, class: 'kart-plaque' }),
+          s('rect', { x: FINISH_X - 128, y: 2, width: 124, height: 21, rx: 6, class: 'kart-plaque', 'data-avoid': '' }),
           text({ x: FINISH_X - 122, y: 15.5, class: 'kart-plaque-label' }, 'RESPOSTA'),
           answerText,
         );
@@ -176,7 +176,9 @@
           const w = h * (100 / 130);
           const r = Math.min(12, laneH / 2 - 1.5);
           // "Box" de partida: o retrato do jogador num círculo da sua cor.
-          scene.append(kit.portraitMark(p, r, 18, laneTop + laneH / 2, 1.2));
+          const box = kit.portraitMark(p, r, 18, laneTop + laneH / 2, 1.2);
+          box.setAttribute('data-avoid', ''); // as etiquetas dos palpites não tapam a "box"
+          scene.append(box);
           const g = s('g', { class: 'kart-lane', 'data-id': p.id });
           const kart = s('g', { class: 'kart' });
           g.append(kart);
@@ -254,6 +256,13 @@
           l.g.classList.toggle('far', far);
         }
         if (!instant && closest.length) waveFlag();
+      },
+
+      // Etiqueta do palpite: na faixa do jogador, atrás do kart (onde a pista está livre) ou, se
+      // não couber (o kart parou logo à saída), à frente dele.
+      markOf(id) {
+        const l = lanes[id];
+        return l && l.g.classList.contains('done') ? { el: l.kart, prefer: ['left', 'right'] } : null;
       },
 
       skipToEnd() {

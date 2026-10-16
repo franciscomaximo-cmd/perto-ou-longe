@@ -248,7 +248,7 @@
         // Placa da resposta certa, no topo à esquerda (nenhuma bola passa lá).
         answerText = text({ x: 100, y: 22, 'text-anchor': 'middle', class: 'basq-answer' }, '?');
         scene.append(
-          s('rect', { x: 10, y: 6, width: 140, height: 24, rx: 7, class: 'basq-plaque' }),
+          s('rect', { x: 10, y: 6, width: 140, height: 24, rx: 7, class: 'basq-plaque', 'data-avoid': '' }),
           text({ x: 17, y: 21, class: 'basq-plaque-label' }, 'RESPOSTA'),
           answerText,
         );
@@ -354,6 +354,11 @@
           b.classList.toggle('near', closest.includes(b.dataset.id));
           b.classList.toggle('far', farthest.includes(b.dataset.id) && !closest.includes(b.dataset.id));
         }
+      },
+
+      // Etiqueta do palpite: na bola, onde ficou parada no chão.
+      markOf(id) {
+        return (ballsLayer && [...ballsLayer.children].find((n) => n.dataset.id === id)) || null;
       },
 
       skipToEnd() {

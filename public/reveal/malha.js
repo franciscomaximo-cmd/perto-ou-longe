@@ -280,7 +280,7 @@
         // Placa da resposta certa, no topo (nenhuma malha vai lá).
         answerText = text({ x: VW / 2 + 22, y: 18, 'text-anchor': 'middle', class: 'malha-answer' }, '?');
         scene.append(
-          s('rect', { x: 88, y: 4, width: 124, height: 20, rx: 6, class: 'malha-plaque' }),
+          s('rect', { x: 88, y: 4, width: 124, height: 20, rx: 6, class: 'malha-plaque', 'data-avoid': '' }),
           text({ x: 94, y: 16.5, class: 'malha-plaque-label' }, 'RESPOSTA'),
           answerText,
         );
@@ -400,6 +400,11 @@
           m.classList.toggle('near', closest.includes(m.dataset.id));
           m.classList.toggle('far', farthest.includes(m.dataset.id) && !closest.includes(m.dataset.id));
         }
+      },
+
+      // Etiqueta do palpite: na malha, onde parou.
+      markOf(id) {
+        return (malhasLayer && [...malhasLayer.children].find((n) => n.dataset.id === id)) || null;
       },
 
       skipToEnd() {

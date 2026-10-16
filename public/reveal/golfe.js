@@ -224,7 +224,7 @@
         // Placa da resposta certa, no topo (nenhuma bola vai lá).
         answerText = text({ x: VW / 2 + 22, y: 18, 'text-anchor': 'middle', class: 'golf-answer' }, '?');
         scene.append(
-          s('rect', { x: 88, y: 4, width: 124, height: 20, rx: 6, class: 'golf-plaque' }),
+          s('rect', { x: 88, y: 4, width: 124, height: 20, rx: 6, class: 'golf-plaque', 'data-avoid': '' }),
           text({ x: 94, y: 16.5, class: 'golf-plaque-label' }, 'RESPOSTA'),
           answerText,
         );
@@ -333,6 +333,12 @@
           b.classList.toggle('near', closest.includes(b.dataset.id));
           b.classList.toggle('far', farthest.includes(b.dataset.id) && !closest.includes(b.dataset.id));
         }
+      },
+
+      // Etiqueta do palpite: na bola (ou no emblema da bandeira, se entrou no buraco).
+      markOf(id) {
+        const find = (layer) => layer && [...layer.children].find((n) => n.dataset.id === id);
+        return find(badgesLayer) || find(ballsLayer) || null;
       },
 
       skipToEnd() {

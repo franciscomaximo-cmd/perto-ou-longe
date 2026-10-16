@@ -224,7 +224,7 @@
         // Faixa da resposta certa (nada se mexe aqui).
         answerText = text({ x: VW / 2 + 22, y: ANSWER_Y + 16, 'text-anchor': 'middle', class: 'bowl-answer' }, '?');
         scene.append(
-          s('rect', { x: 50, y: ANSWER_Y, width: 200, height: 22, rx: 7, class: 'bowl-plaque' }),
+          s('rect', { x: 50, y: ANSWER_Y, width: 200, height: 22, rx: 7, class: 'bowl-plaque', 'data-avoid': '' }),
           text({ x: 60, y: ANSWER_Y + 14.5, class: 'bowl-plaque-label' }, 'RESPOSTA'),
           answerText,
         );
@@ -239,13 +239,15 @@
           const box = { x: gap + (i % cols) * (cw + gap), y: BOARD_Y + gap + Math.floor(i / cols) * (ch + gap), w: cw, h: ch };
           const boneco = s('g');
           const score = text({ x: box.x + box.w - 6, y: box.y + box.h / 2 + 5.5, 'text-anchor': 'end', class: 'bowl-score' }, '·');
-          const name = text({ x: box.x + ch * 0.62 + 6, y: box.y + box.h / 2 + 3.5, class: 'bowl-name' }, p.name.length > maxName ? `${p.name.slice(0, maxName - 1)}…` : p.name);
+          // O nome fica na metade de cima da célula: a de baixo é para a etiqueta do palpite.
+          const nameX = box.x + ch * 0.62 + 6;
+          const name = text({ x: nameX, y: box.y + box.h * 0.36 + 3, class: 'bowl-name' }, p.name.length > maxName ? `${p.name.slice(0, maxName - 1)}…` : p.name);
           const g = s('g', { class: 'bowl-cell', 'data-id': p.id }, [
             s('rect', { x: box.x, y: box.y, width: box.w, height: box.h, rx: 6, class: 'bowl-cell-bg', style: `--c:${p.color}` }),
             s('rect', { x: box.x, y: box.y, width: 3, height: box.h, rx: 1.5, fill: p.color }),
             boneco, name, score,
           ]);
-          cells[p.id] = { g, boneco, score, player: p, box, h: ch - 4, small: many };
+          cells[p.id] = { g, boneco, score, player: p, box, nameX, h: ch - 4, small: many };
           board.append(g);
           drawCellBoneco(p.id, 'parado');
         });
@@ -320,6 +322,15 @@
         }
         // Ao lado da pista, em grande, quem ficou mais perto a festejar.
         if (closest.length && cells[closest[0]]) showThrower(cells[closest[0]].player, 'festejar');
+      },
+
+      // Etiqueta do palpite: dentro da célula do placar (por baixo do nome), onde fica o
+      // resultado de cada um (os pinos são de todos).
+      markOf(id) {
+        const c = cells[id];
+        if (!c || !c.g.classList.contains('done')) return null;
+        const scoreRoom = c.small ? 30 : 4; // com células baixas, deixa livre o resultado à direita
+        return { x: c.nameX, y: c.box.y + c.box.h * 0.76, fixed: true, align: 'start', maxWidth: c.box.x + c.box.w - c.nameX - scoreRoom };
       },
 
       skipToEnd() {

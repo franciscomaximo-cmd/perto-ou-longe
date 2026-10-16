@@ -11,6 +11,14 @@ const { seeded } = require('../public/reveal/seeded');
 const seededRandom = (i) => seeded(`teste|${i}`);
 const { Room } = require('../server/rooms');
 
+// Todos os jogadores dizem que estão prontos e o anfitrião começa. (As regras do "pronto"
+// têm os seus próprios testes, em rooms.test.js.)
+function startGame(room, hostId) {
+  for (const p of room.players.values()) p.ready = true;
+  return room.startGame(hostId);
+}
+
+
 function setup(names = ['Ana', 'Rui', 'Eva']) {
   const room = new Room('TEST', () => {});
   const ids = names.map((n, i) => {
@@ -44,7 +52,7 @@ test('boneco no servidor: guardado, enviado no estado e só na sala de espera', 
   assert.throws(() => room.setCharacter(ana, { number: 100 }), /não existe/);
   assert.throws(() => room.setCharacter(ana, { hat: 'tiara' }), /não existe/);
   assert.deepEqual(room.players.get(ana).character.hat, 'cowboy', 'um pedido inválido não muda nada');
-  room.startGame(ana);
+  startGame(room, ana);
   assert.throws(() => room.setCharacter(ana, { hat: 'coroa' }), /antes de começar/);
   room.destroy();
 });

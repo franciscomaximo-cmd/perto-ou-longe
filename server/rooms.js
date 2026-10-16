@@ -159,6 +159,8 @@ class Room {
     this.hostId = null;
     this.settings = { rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0, categories: [], playerQuestions: false };
     this.customQuestions = new Map(); // id do autor -> pergunta escrita no lobby
+    this.rulesVersion = 0; // sobe quando o anfitrião muda a configuração (aviso nos clientes)
+    this.kicked = new Set(); // ids expulsos: não voltam a entrar com a sessão guardada
     this.stats = new Map(); // id -> estatísticas do jogo, para os prémios do fim
     this.phase = 'lobby'; // lobby | answering | voting | reveal | tiebreak | tiebreak-reveal | end
     this.round = 0;
@@ -204,6 +206,7 @@ class Room {
     const color = PLAYER_COLORS.find((c) => !used.some((p) => p.color === c)) || PLAYER_COLORS[used.length % PLAYER_COLORS.length];
     const player = {
       id: crypto.randomUUID(), name, score: 0, connected: false, socketId: null, color,
+      ready: false, // quem entra numa sala começa "não pronto"
       // Boneco: uma cara ao calhas (o cliente troca-a logo pelo boneco guardado, se houver) e
       // o resto por omissão.
       character: CharacterOptions.cleanCharacter(CharacterOptions.randomFace(() => crypto.randomInt(1e9) / 1e9)),
@@ -279,12 +282,64 @@ class Room {
   updateSettings(playerId, settings) {
     this.requireHost(playerId);
     if (this.phase !== 'lobby') throw new GameError('Só podes mudar a configuração antes de começar.');
+    const before = JSON.stringify(this.settings);
     if (settings.rounds !== undefined) this.settings.rounds = clampRounds(settings.rounds);
     if (settings.answerTime !== undefined) this.settings.answerTime = clampTime(settings.answerTime);
     if (settings.voteTime !== undefined) this.settings.voteTime = clampTime(settings.voteTime);
     if (settings.categories !== undefined) this.settings.categories = cleanCategories(settings.categories);
     if (settings.playerQuestions !== undefined) this.settings.playerQuestions = Boolean(settings.playerQuestions);
+    // Regras novas: todos voltam a "não pronto" (ninguém começa sem as ver) e os clientes
+    // mostram "O anfitrião mudou as regras" (rulesVersion sobe).
+    if (JSON.stringify(this.settings) !== before) {
+      this.resetReady();
+      this.rulesVersion += 1;
+    }
     this.touch();
+  }
+
+  // --- Pronto para começar -------------------------------------------------
+  // Cada jogador (exceto o anfitrião, que conta sempre como pronto) diz que está pronto. O
+  // jogo só começa com todos os jogadores LIGADOS prontos; os desligados não contam.
+
+  isReady(p) {
+    return p.id === this.hostId || Boolean(p.ready);
+  }
+
+  // Jogadores ligados que ainda não estão prontos (os que impedem o início).
+  notReady() {
+    return this.connectedPlayers().filter((p) => !this.isReady(p));
+  }
+
+  resetReady() {
+    for (const p of this.players.values()) p.ready = false;
+  }
+
+  setReady(playerId, ready) {
+    if (this.phase !== 'lobby') throw new GameError('Só podes ficar pronto na sala de espera.');
+    const player = this.players.get(playerId);
+    if (!player) throw new GameError('Não estás nesta sala.');
+    if (playerId === this.hostId) throw new GameError('O anfitrião conta sempre como pronto: basta começar o jogo.');
+    if (ready && this.settings.playerQuestions && !this.customQuestions.has(playerId)) {
+      throw new GameError('Escreve primeiro a tua pergunta.');
+    }
+    player.ready = Boolean(ready);
+    this.touch();
+  }
+
+  // O anfitrião tira um jogador da sala de espera (ex.: alguém que se ausentou e está a
+  // bloquear o início). Quem foi expulso não volta a entrar com a sessão guardada; pode
+  // entrar de novo com o código, como um jogador novo.
+  kick(playerId, targetId) {
+    this.requireHost(playerId);
+    if (this.phase !== 'lobby') throw new GameError('Só podes expulsar jogadores na sala de espera.');
+    if (targetId === playerId) throw new GameError('Não te podes expulsar a ti próprio.');
+    const target = this.players.get(targetId);
+    if (!target) throw new GameError('Esse jogador já não está na sala.');
+    this.players.delete(targetId);
+    this.customQuestions.delete(targetId);
+    this.kicked.add(targetId);
+    this.touch();
+    return target;
   }
 
   // Boneco do jogador (cara, roupa, acessórios, festejo): só na sala de espera e só com peças
@@ -354,6 +409,12 @@ class Room {
     if (this.settings.playerQuestions) {
       const missing = online.filter((p) => !this.customQuestions.has(p.id)).map((p) => p.name);
       if (missing.length) throw new GameError(`Ainda falta a pergunta de: ${missing.join(', ')}.`);
+    }
+    const waiting = this.notReady().map((p) => p.name);
+    if (waiting.length) {
+      throw new GameError(waiting.length === 1
+        ? `Falta 1 jogador ficar pronto: ${waiting[0]}.`
+        : `Faltam ${waiting.length} jogadores ficarem prontos: ${waiting.join(', ')}.`);
     }
     for (const p of this.players.values()) p.score = 0;
     this.stats = new Map();
@@ -724,6 +785,7 @@ class Room {
     this.tiebreakWinner = null;
     this.customQuestions.clear(); // no jogo seguinte cada um escreve uma pergunta nova
     for (const p of this.players.values()) p.score = 0;
+    this.resetReady(); // para o jogo seguinte, todos dizem outra vez que estão prontos
     // Quem saiu durante o jogo não fica a ocupar lugar na sala nova.
     for (const p of [...this.players.values()]) {
       if (!p.connected && p.id !== this.hostId) this.players.delete(p.id);
@@ -760,6 +822,7 @@ class Room {
       customReady: [...this.customQuestions.keys()],
       myQuestion: this.phase === 'lobby' ? this.customQuestions.get(playerId) || null : null,
       maxPlayers: MAX_PLAYERS,
+      rulesVersion: this.rulesVersion,
       settings: { ...this.settings },
       categories: CATEGORIES.map((c) => ({ ...c, count: CATEGORY_COUNTS[c.id] })),
       plannedRounds: this.plannedRounds(),
@@ -769,6 +832,7 @@ class Room {
         name: p.name,
         score: p.score,
         connected: p.connected,
+        ready: this.isReady(p), // o anfitrião conta sempre como pronto
         color: p.color,
         character: { ...p.character, scarf: [...p.character.scarf] }, // boneco completo, com a cara
       })),

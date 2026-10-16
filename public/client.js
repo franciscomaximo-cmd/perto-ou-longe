@@ -145,13 +145,27 @@
         render();
         // A sala já não existe (o servidor reiniciou, ex.: num deploy, ou a sala fechou por
         // inatividade): explica no ecrã inicial em vez de voltar ao início em silêncio.
-        if (res && res.reason === 'no-room') {
-          $('#home-notice').textContent = 'O jogo foi reiniciado. Cria uma sala nova para continuar.';
-          $('#home-notice').hidden = false;
-        } else if (res && res.error) toast('Já não foi possível voltar à sala.');
+        if (res && res.reason === 'no-room') homeNotice('O jogo foi reiniciado. Cria uma sala nova para continuar.');
+        else if (res && res.reason === 'kicked') homeNotice(res.error);
+        else if (res && res.error) toast('Já não foi possível voltar à sala.');
       }
     });
   }
+
+  // Aviso no ecrã inicial (sala que desapareceu, expulso pelo anfitrião).
+  function homeNotice(text) {
+    $('#home-notice').textContent = text;
+    $('#home-notice').hidden = false;
+  }
+
+  // Expulso pelo anfitrião: volta ao ecrã inicial e esquece a sessão (não volta a entrar
+  // sozinho; pode entrar outra vez com o código).
+  socket.on('room:kicked', () => {
+    saveSession(null);
+    state = null;
+    render();
+    homeNotice('Foste removido da sala pelo anfitrião.');
+  });
 
   $('#btn-create').addEventListener('click', () => {
     act('room:create', { name: $('#home-name').value }, enterRoom);
@@ -530,14 +544,38 @@
     ]);
   }
 
+  // Linha de um jogador na sala de espera: estado (✓ Pronto / A preparar…), a pergunta (no
+  // modo "Perguntas dos jogadores") e, para o anfitrião, o botão discreto de expulsar.
+  function lobbyRow(p, custom) {
+    const extras = el('span', { class: 'lobby-extras' }, [
+      custom ? el('span', { class: 'state', text: state.customReady.includes(p.id) ? 'pergunta ✓' : 'a escrever…' }) : null,
+      p.connected ? el('span', { class: `ready-badge ${p.ready ? 'on' : ''}`, text: p.ready ? '✓ Pronto' : 'A preparar…' }) : null,
+      isHost() && p.id !== state.me ? el('button', {
+        type: 'button', class: 'kick', 'aria-label': `Expulsar ${p.name}`, title: `Expulsar ${p.name}`, text: '✕',
+        onclick: () => { if (confirm(`Expulsar ${p.name}?`)) act('player:kick', { playerId: p.id }); },
+      }) : null,
+    ]);
+    return playerRow(p, extras);
+  }
+
+  // Aviso curto quando o anfitrião muda as regras (todos voltam a "não pronto").
+  let seenRules = null; // [código da sala, versão das regras]
+  function noticeRules() {
+    const key = state.code;
+    if (!seenRules || seenRules[0] !== key) { seenRules = [key, state.rulesVersion]; return; }
+    if (state.rulesVersion > seenRules[1]) {
+      seenRules[1] = state.rulesVersion;
+      if (!isHost() && state.phase === 'lobby') toast('O anfitrião mudou as regras. Vê a configuração e diz outra vez que estás pronto.');
+    }
+  }
+
   function renderLobby() {
     const online = state.players.filter((p) => p.connected).length;
     $('#lobby-code').textContent = state.code;
     $('#lobby-count').textContent = `(${state.players.length}/${state.maxPlayers})`;
     const custom = state.settings.playerQuestions;
-    $('#lobby-players').replaceChildren(...state.players.map((p) => playerRow(p, custom
-      ? el('span', { class: 'state', text: state.customReady.includes(p.id) ? 'pergunta ✓' : 'a escrever…' })
-      : null)));
+    $('#lobby-players').replaceChildren(...state.players.map((p) => lobbyRow(p, custom)));
+    noticeRules();
 
     renderCharacterEditor();
     renderQr();
@@ -573,14 +611,36 @@
     const noQuestion = custom
       ? state.players.filter((p) => p.connected && !state.customReady.includes(p.id)).map((p) => p.name)
       : [];
+    // Jogadores ligados ainda não prontos (os desligados não contam; o anfitrião está sempre).
+    const waiting = state.players.filter((p) => p.connected && !p.ready).map((p) => p.name);
     $('#btn-start').hidden = !host;
-    $('#btn-start').disabled = missing > 0 || noQuestion.length > 0;
+    $('#btn-start').disabled = missing > 0 || noQuestion.length > 0 || waiting.length > 0;
     $('#btn-start').textContent = 'Começar jogo';
+
+    // "Estou pronto" (todos menos o anfitrião). No modo das perguntas dos jogadores, só depois
+    // de escrever a pergunta.
+    const me = player(state.me);
+    const meReady = Boolean(me && me.ready);
+    const needsQuestion = custom && !state.customReady.includes(state.me);
+    $('#btn-ready').hidden = host || !me;
+    $('#btn-ready').disabled = !meReady && needsQuestion;
+    $('#btn-ready').classList.toggle('is-ready', meReady);
+    $('#btn-ready').textContent = meReady ? 'Afinal não estou pronto' : 'Estou pronto ✓';
+
+    const waitingText = waiting.length === 1
+      ? `Falta 1 jogador ficar pronto: ${waiting[0]}.`
+      : `Faltam ${waiting.length} jogadores ficarem prontos: ${waiting.join(', ')}.`;
     $('#lobby-hint').textContent = missing > 0
       ? `${missing === 1 ? 'Falta 1 jogador' : `Faltam ${missing} jogadores`} para começar (mínimo ${state.minPlayers}).`
       : noQuestion.length ? `Falta a pergunta de: ${noQuestion.join(', ')}.`
-      : host ? '' : 'À espera que o anfitrião comece o jogo…';
+      : waiting.length ? (host || meReady ? waitingText : 'Carrega em «Estou pronto» quando estiveres preparado.')
+      : host ? 'Estão todos prontos. Podes começar!' : 'Estás pronto. À espera que o anfitrião comece o jogo…';
+    if (!host && needsQuestion && !meReady) $('#lobby-hint').textContent = 'Escreve primeiro a tua pergunta para ficares pronto.';
   }
+  $('#btn-ready').addEventListener('click', () => {
+    const me = player(state.me);
+    act('player:ready', { ready: !(me && me.ready) });
+  });
 
   // --- Progresso e desbloqueáveis (só neste dispositivo, sem contas) ------------------------
   // Feitos guardados no localStorage: "em cheio", jogos ganhos (e com 6 ou mais jogadores) e

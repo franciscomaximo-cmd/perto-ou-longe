@@ -8,6 +8,13 @@ const { precisionOf, relativeError } = require('../public/reveal/precision');
 const { ThemeDeck, REVEAL_THEMES } = require('../server/themes');
 const { Room } = require('../server/rooms');
 
+// Todos os jogadores dizem que estão prontos e o anfitrião começa. (As regras do "pronto"
+// têm os seus próprios testes, em rooms.test.js.)
+function startGame(room, hostId) {
+  for (const p of room.players.values()) p.ready = true;
+  return room.startGame(hostId);
+}
+
 // --- Precisão -----------------------------------------------------------------------------
 
 test('precisão: palpite igual à resposta é 0 (em cheio)', () => {
@@ -140,6 +147,7 @@ test('apresentação: palpites iguais (mesma precisão) têm exatamente o mesmo 
 
 const { revealPace, timeFor } = require('../public/reveal/pace');
 
+
 test('ritmo: nunca passa de 12 s até à resposta certa e com 3-4 jogadores fica perto do antigo', () => {
   for (let n = 1; n <= 12; n++) assert.ok(revealPace(n).total <= 12000, `${n} jogadores: ${revealPace(n).total} ms`);
   // Antes: 1,5 s por passo (n palpites + resposta = n passos depois do primeiro).
@@ -226,7 +234,7 @@ test('o tema é escolhido pelo servidor e é igual para todos os jogadores', () 
   });
   room.themeDeck = new ThemeDeck(['a', 'b', 'c']);
   room.updateSettings(ids[0], { categories: ['historia'] }); // só perguntas de números
-  room.startGame(ids[0]);
+  startGame(room, ids[0]);
   const themes = ids.map((id) => room.stateFor(id).question.theme);
   assert.ok(['a', 'b', 'c'].includes(themes[0]));
   assert.deepEqual(themes, [themes[0], themes[0], themes[0]]);
@@ -243,7 +251,7 @@ test('perguntas de mapa não têm tema de revelação', () => {
     return p.id;
   });
   room.updateSettings(ids[0], { categories: ['geografia'], rounds: 12 });
-  room.startGame(ids[0]);
+  startGame(room, ids[0]);
   let sawMap = false;
   for (let i = 0; i < 12; i++) {
     const q = room.stateFor(ids[0]).question;

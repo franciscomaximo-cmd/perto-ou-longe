@@ -127,6 +127,19 @@ button.ghost { background: transparent; border-color: transparent; color: var(--
 .players li.done .state { color: var(--near); }
 .tag { font-size: .75rem; color: var(--muted); margin-left: 6px; font-weight: 600; }
 .state { color: var(--muted); font-size: .9rem; }
+/* Sala de espera: estado de cada jogador (✓ Pronto a verde, "A preparar…" a cinzento) e o
+   botão discreto de expulsar (só o anfitrião o vê). */
+.lobby-extras { display: flex; align-items: center; gap: 8px; flex: none; }
+.ready-badge { font-size: .8rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; color: var(--muted); background: rgba(255, 255, 255, .06); white-space: nowrap; }
+.ready-badge.on { color: #0b2e1f; background: var(--near); }
+.players li .kick {
+  width: 32px; height: 32px; min-height: 0; padding: 0; border-radius: 50%; font-size: .85rem; line-height: 1;
+  background: transparent; border: 1px solid var(--line); color: var(--muted);
+}
+.players li .kick:hover, .players li .kick:focus-visible { color: var(--far); border-color: var(--far); }
+/* "Estou pronto": botão grande; quando já estás pronto fica verde, e tocar outra vez desfaz. */
+#btn-ready { min-height: 56px; font-size: 1.1rem; }
+#btn-ready.is-ready { background: transparent; color: var(--near); border-color: var(--near); }
 
 .slider { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .slider span { display: flex; justify-content: space-between; font-weight: 600; }

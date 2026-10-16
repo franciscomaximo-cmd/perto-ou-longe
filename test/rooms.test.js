@@ -4,6 +4,13 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { Room, GameError, clampTime, clampRounds, DEFAULT_ROUNDS } = require('../server/rooms');
 
+// Todos os jogadores dizem que estão prontos e o anfitrião começa. (As regras do "pronto"
+// têm os seus próprios testes, em rooms.test.js.)
+function startGame(room, hostId) {
+  for (const p of room.players.values()) p.ready = true;
+  return room.startGame(hostId);
+}
+
 function setup(names = ['Ana', 'Rui', 'Eva']) {
   const room = new Room('TEST', () => {});
   const ids = names.map((n, i) => {
@@ -18,10 +25,110 @@ function setup(names = ['Ana', 'Rui', 'Eva']) {
 const NUMBER_QUESTION = { text: 'Quantos ossos tem o corpo humano adulto?', answer: 206 };
 const MAP_QUESTION = { type: 'map', text: 'Onde fica o Paquistão?', country: '586', label: 'Paquistão' };
 function startWith(room, host, question) {
-  room.startGame(host);
+  startGame(room, host);
   room.current.question = question;
 }
 const startWithNumber = (room, host) => startWith(room, host, NUMBER_QUESTION);
+
+// --- Pronto para começar e expulsar ----------------------------------------------------------
+
+const readyOf = (room, viewer) => Object.fromEntries(room.stateFor(viewer).players.map((p) => [p.name, p.ready]));
+
+test('pronto: não deixa começar com alguém ligado não pronto; o anfitrião conta como pronto', () => {
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
+  const [ana, rui, eva] = ids;
+  assert.deepEqual(readyOf(room, rui), { Ana: true, Rui: false, Eva: false, Tó: false }, 'quem entra começa não pronto; o anfitrião está sempre');
+  room.setReady(rui, true);
+  room.setReady(eva, true);
+  assert.throws(() => room.startGame(ana), /Falta 1 jogador ficar pronto: Tó/);
+  room.setReady(eva, false);
+  assert.throws(() => room.startGame(ana), /Faltam 2 jogadores ficarem prontos: Eva, Tó/);
+  assert.throws(() => room.setReady(ana, true), /anfitrião/, 'o anfitrião não precisa');
+  room.setReady(eva, true);
+  room.setReady(ids[3], true);
+  room.startGame(ana);
+  assert.equal(room.phase, 'answering');
+  assert.throws(() => room.setReady(rui, false), /sala de espera/);
+  room.destroy();
+});
+
+test('pronto: desligados não bloqueiam; mudar o boneco não tira o pronto', () => {
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
+  const [ana, rui, eva, to] = ids;
+  room.setReady(rui, true);
+  room.setReady(eva, true);
+  room.setCharacter(rui, { hat: 'gorro', skin: '#5a3520' });
+  assert.equal(room.players.get(rui).ready, true, 'mudar o boneco não tira o pronto');
+  room.disconnect(to, 'socket-3'); // o Tó saiu de casa e ficou desligado
+  room.startGame(ana);
+  assert.equal(room.phase, 'answering');
+  room.destroy();
+});
+
+test('pronto: mudar a configuração repõe os estados (e avisa); mexer sem mudar nada não', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  room.setReady(rui, true);
+  room.setReady(eva, true);
+  const v = room.stateFor(rui).rulesVersion;
+  room.updateSettings(ana, { rounds: room.settings.rounds }); // igual: não muda nada
+  assert.equal(room.players.get(rui).ready, true);
+  assert.equal(room.stateFor(rui).rulesVersion, v);
+  for (const change of [{ rounds: 15 }, { answerTime: 45 }, { voteTime: 30 }, { categories: ['historia'] }, { playerQuestions: true }]) {
+    room.setReady(rui, change.playerQuestions ? false : true);
+    room.updateSettings(ana, change);
+    assert.equal(room.players.get(rui).ready, false, `depois de ${JSON.stringify(change)}`);
+    assert.ok(room.stateFor(rui).rulesVersion > v, 'os clientes mostram "O anfitrião mudou as regras"');
+  }
+  room.destroy();
+});
+
+test('pronto: com perguntas dos jogadores, só fica pronto quem já escreveu a sua', () => {
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
+  const [ana, rui] = ids;
+  room.updateSettings(ana, { playerQuestions: true });
+  assert.throws(() => room.setReady(rui, true), /pergunta/);
+  room.submitCustomQuestion(rui, { text: 'Quantos irmãos tem o Rui?', answer: 3 });
+  room.setReady(rui, true);
+  assert.equal(room.players.get(rui).ready, true);
+  room.setReady(rui, false); // desfazer é sempre possível
+  room.destroy();
+});
+
+test('pronto: "Jogar de novo" repõe os estados; novo anfitrião continua a funcionar', () => {
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva']);
+  const [ana, rui, eva] = ids;
+  startGame(room, ana);
+  room.phase = 'end';
+  room.backToLobby(ana);
+  assert.deepEqual(readyOf(room, rui), { Ana: true, Rui: false, Eva: false });
+  // O anfitrião sai: o Rui passa a anfitrião (conta como pronto) e a Ana já não está.
+  room.leave(ana);
+  assert.equal(room.hostId, rui);
+  assert.deepEqual(readyOf(room, rui), { Rui: true, Eva: false });
+  room.addPlayer('Zé');
+  room.connect([...room.players.values()].find((p) => p.name === 'Zé').id, 'socket-z');
+  assert.throws(() => room.startGame(rui), /Faltam 2 jogadores ficarem prontos: Eva, Zé/);
+  room.destroy();
+});
+
+test('expulsar: só o anfitrião, só na sala de espera; o expulso não volta com a sessão', () => {
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
+  const [ana, rui, eva, to] = ids;
+  assert.throws(() => room.kick(rui, eva), /anfitrião/);
+  assert.throws(() => room.kick(ana, ana), /a ti próprio/);
+  const kicked = room.kick(ana, to);
+  assert.equal(kicked.name, 'Tó');
+  assert.equal(room.players.has(to), false);
+  assert.ok(room.kicked.has(to), 'fica marcado: a sessão guardada já não volta a entrar');
+  assert.throws(() => room.kick(ana, to), /já não está/);
+  // Expulsar quem bloqueava deixa começar.
+  room.setReady(rui, true);
+  room.setReady(eva, true);
+  startGame(room, ana);
+  assert.throws(() => room.kick(ana, rui), /sala de espera/);
+  room.destroy();
+});
 
 test('o primeiro jogador é o anfitrião e os nomes são únicos', () => {
   const { room, ids } = setup();
@@ -31,12 +138,12 @@ test('o primeiro jogador é o anfitrião e os nomes são únicos', () => {
 
 test('não começa com menos de 3 jogadores ligados', () => {
   const { room, ids } = setup(['Ana', 'Rui']);
-  assert.throws(() => room.startGame(ids[0]), /pelo menos 3/);
+  assert.throws(() => startGame(room, ids[0]), /pelo menos 3/);
 });
 
 test('só o anfitrião começa e configura', () => {
   const { room, ids } = setup();
-  assert.throws(() => room.startGame(ids[1]), /anfitrião/);
+  assert.throws(() => startGame(room, ids[1]), /anfitrião/);
   assert.throws(() => room.updateSettings(ids[1], { answerTime: 30 }), /anfitrião/);
   room.updateSettings(ids[0], { answerTime: 30, voteTime: 5 });
   assert.deepEqual(room.settings, { rounds: DEFAULT_ROUNDS, answerTime: 30, voteTime: 10, categories: [], playerQuestions: false });
@@ -130,7 +237,7 @@ test('sem respostas, a revelação vai direto ao fim da ronda', () => {
 
 // Joga todas as rondas sem respostas e para na revelação da última.
 function playToLastReveal(room, host) {
-  room.startGame(host);
+  startGame(room, host);
   while (room.round < room.questions.length) {
     room.forceAdvance(host);
     room.nextQuestion(host);
@@ -155,7 +262,7 @@ for (const rounds of [DEFAULT_ROUNDS, 5, 30]) {
   test(`o jogo termina ao fim de ${rounds} perguntas, sem repetir`, () => {
     const { room, ids } = setup();
     room.updateSettings(ids[0], { rounds });
-    room.startGame(ids[0]);
+    startGame(room, ids[0]);
     assert.equal(room.stateFor(ids[1]).totalRounds, rounds);
     for (let i = 1; i <= rounds; i++) {
       assert.equal(room.round, i);
@@ -424,7 +531,7 @@ test('pergunta de mapa: dentro do país conta como acerto em cheio', () => {
 test('cerca de um quarto das perguntas de cada jogo são de mapa', () => {
   const { room, ids } = setup();
   room.updateSettings(ids[0], { rounds: 12 });
-  room.startGame(ids[0]);
+  startGame(room, ids[0]);
   assert.equal(room.questions.filter((q) => q.type === 'map').length, 3);
 });
 
@@ -463,7 +570,7 @@ test('só saem perguntas das categorias escolhidas', () => {
   const { room, ids } = setup();
   room.updateSettings(ids[0], { categories: ['desporto', 'historia', 'inventada'], rounds: 12 });
   assert.deepEqual(room.settings.categories, ['desporto', 'historia']);
-  room.startGame(ids[0]);
+  startGame(room, ids[0]);
   assert.equal(room.questions.length, 12);
   assert.ok(room.questions.every((q) => ['desporto', 'historia'].includes(q.category)));
   assert.ok(room.questions.every((q) => q.type !== 'map'), 'sem Geografia não há mapas');
@@ -484,7 +591,7 @@ test('se a categoria não chega para as rondas, o jogo fica mais curto e avisa',
   room.questionPool = () => small;
   const state = room.stateFor(ids[0]);
   assert.equal(state.plannedRounds, 16);
-  room.startGame(ids[0]);
+  startGame(room, ids[0]);
   assert.equal(room.questions.length, 16);
   assert.equal(new Set(room.questions).size, 16);
 });
@@ -492,7 +599,7 @@ test('se a categoria não chega para as rondas, o jogo fica mais curto e avisa',
 test('Geografia sozinha mistura perguntas de mapa e de números', () => {
   const { room, ids } = setup();
   room.updateSettings(ids[0], { categories: ['geografia'], rounds: 8 });
-  room.startGame(ids[0]);
+  startGame(room, ids[0]);
   const maps = room.questions.filter((q) => q.type === 'map').length;
   assert.equal(maps, 2);
 });
@@ -509,12 +616,12 @@ test('perguntas dos jogadores: exigem 4 jogadores e uma pergunta de cada', () =>
   const three = setup();
   three.room.updateSettings(three.ids[0], { playerQuestions: true });
   assert.equal(three.room.stateFor(three.ids[0]).minPlayers, 4);
-  assert.throws(() => three.room.startGame(three.ids[0]), /pelo menos 4/);
+  assert.throws(() => startGame(three.room, three.ids[0]), /pelo menos 4/);
 
   const { room, ids } = setupCustom();
   room.submitCustomQuestion(ids[0], { text: 'Quantos primos tenho?', answer: 23 });
   room.submitCustomQuestion(ids[1], { text: 'Quantos gatos tem a minha avó?', answer: 4, unit: 'gatos' });
-  assert.throws(() => room.startGame(ids[0]), /Eva, Tó/);
+  assert.throws(() => startGame(room, ids[0]), /Eva, Tó/);
   assert.deepEqual(room.stateFor(ids[2]).customReady, [ids[0], ids[1]]);
   assert.equal(room.stateFor(ids[2]).myQuestion, null, 'não se vê a pergunta dos outros');
   assert.equal(room.stateFor(ids[1]).myQuestion.unit, 'gatos');
@@ -528,7 +635,7 @@ test('perguntas dos jogadores: saem todas, mesmo com menos rondas pedidas', () =
   assert.equal(lobby.minRounds, 4, 'o mínimo do regulador sobe para 4');
   assert.equal(lobby.plannedRounds, 4);
   for (const [i, id] of ids.entries()) room.submitCustomQuestion(id, { text: `Pergunta número ${i} de teste?`, answer: i });
-  room.startGame(ids[0]);
+  startGame(room, ids[0]);
   assert.equal(room.questions.length, 4);
   assert.deepEqual(room.questions.map((q) => q.author).sort(), [...ids].sort());
 });
@@ -558,7 +665,7 @@ test('perguntas dos jogadores: o autor não responde, mas vota, e não conta par
   const { room, ids } = setupCustom();
   const [ana, rui, eva, to] = ids;
   for (const [i, id] of ids.entries()) room.submitCustomQuestion(id, { text: `Pergunta número ${i} de teste?`, answer: 100 + i });
-  room.startGame(ana);
+  startGame(room, ana);
   assert.equal(room.questions.filter((q) => q.author).length, 4);
   assert.equal(room.questions.length, 5);
 
@@ -588,7 +695,7 @@ test('perguntas dos jogadores: o autor não responde, mas vota, e não conta par
 test('perguntas dos jogadores: limpam-se ao voltar à sala de espera', () => {
   const { room, ids } = setupCustom();
   for (const [i, id] of ids.entries()) room.submitCustomQuestion(id, { text: `Pergunta número ${i} de teste?`, answer: i });
-  room.startGame(ids[0]);
+  startGame(room, ids[0]);
   while (room.phase !== 'end') {
     if (room.phase === 'tiebreak') finishTiebreaks(room, ids[0]);
     else { room.forceAdvance(ids[0]); room.nextQuestion(ids[0]); }
@@ -612,7 +719,7 @@ test('prémios: mais certeiro, mais longe e melhor a ler os outros', () => {
   const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
   const [ana, rui, eva, to] = ids;
   room.updateSettings(ana, { rounds: 3 });
-  room.startGame(ana);
+  startGame(room, ana);
   playRound(room, ana, 100, { [ana]: 100, [rui]: 150, [eva]: 300, [to]: 90 }, { [ana]: eva, [rui]: eva, [eva]: to, [to]: rui });
   room.nextQuestion(ana);
   playRound(room, ana, 1000, { [ana]: 990, [rui]: 5000, [eva]: 1200, [to]: 2000 }, { [ana]: rui, [rui]: to, [eva]: rui, [to]: eva });
@@ -636,7 +743,7 @@ test('prémios: empate no mais certeiro desfaz-se pelo erro médio', () => {
   const { room, ids } = setup();
   const [ana, rui, eva] = ids;
   room.updateSettings(ana, { rounds: 3 });
-  room.startGame(ana);
+  startGame(room, ana);
   playRound(room, ana, 100, { [ana]: 100, [rui]: 120, [eva]: 400 }, {});
   room.nextQuestion(ana);
   playRound(room, ana, 100, { [ana]: 300, [rui]: 105, [eva]: 400 }, {});
@@ -673,6 +780,7 @@ test('monumentos estrangeiros não estão em Geografia', () => {
   assert.equal(bigBen.category, 'ciencia');
   assert.ok(!QUESTIONS.some((q) => q.category === 'geografia' && /Torre Eiffel|Burj|Pisa|Empire State/.test(q.text)));
 });
+
 
 test('o temporizador fecha a fase de respostas (com poucas respostas, sem votação)', async () => {
   const { room, ids } = setup();

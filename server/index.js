@@ -92,8 +92,28 @@ io.on('connection', (socket) => {
       err.reason = 'no-room';
       throw err;
     }
+    // Quem foi expulso não volta a entrar com a sessão guardada (pode entrar com o código,
+    // como jogador novo, que não manda playerId).
+    if (playerId && room.kicked.has(playerId)) {
+      const err = new GameError('Foste removido da sala pelo anfitrião.');
+      err.reason = 'kicked';
+      throw err;
+    }
     const existing = playerId && room.players.get(playerId);
     return attach(room, existing || room.addPlayer(name));
+  });
+
+  // O anfitrião expulsa um jogador da sala de espera: o jogador expulso é avisado logo (volta
+  // ao ecrã inicial) e o seu socket deixa de estar ligado à sala.
+  handle(socket, 'player:kick', ({ playerId: targetId }) => {
+    const { room, playerId } = context();
+    const target = room.kick(playerId, targetId);
+    const targetSocket = target.socketId && io.sockets.sockets.get(target.socketId);
+    if (targetSocket) {
+      targetSocket.data = {};
+      targetSocket.emit('room:kicked', { code: room.code });
+    }
+    broadcast(room);
   });
 
   handle(socket, 'room:leave', () => {
@@ -116,6 +136,7 @@ io.on('connection', (socket) => {
     'round:next': (room, id, p) => room.nextQuestion(id, p),
     'reveal:skip': (room, id, p) => room.revealSkip(id, p),
     'player:character': (room, id, p) => room.setCharacter(id, p),
+    'player:ready': (room, id, p) => room.setReady(id, p.ready),
     'game:lobby': (room, id) => room.backToLobby(id),
   };
   for (const [event, action] of Object.entries(actions)) {

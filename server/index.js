@@ -6,10 +6,13 @@ const express = require('express');
 const { Server } = require('socket.io');
 const { GameError, createRoom, getRoom, deleteRoom, sweepIdleRooms } = require('./rooms');
 const { devPagesGuard } = require('./devpages');
+const { hostRedirect } = require('./redirect');
 
 const PORT = process.env.PORT || 3000;
 
 const app = express();
+// Endereço antigo → endereço novo (só se REDIRECT_FROM_HOST e REDIRECT_TO_URL estiverem definidas).
+app.use(hostRedirect());
 // /dev/... (pré-visualização das revelações) só fora de produção.
 app.use(devPagesGuard());
 app.use(express.static(path.join(__dirname, '..', 'public')));

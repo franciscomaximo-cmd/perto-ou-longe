@@ -36,6 +36,12 @@ Para testar com telemóveis na mesma rede Wi-Fi, abre `http://<IP-do-computador>
    Em alternativa, usa **New → Web Service** com Build `npm install`, Start `npm start` e o plano **Free**.
 3. Partilha o endereço `https://<nome>.onrender.com`.
 
+Mudança de endereço: no serviço do endereço antigo, define `REDIRECT_FROM_HOST` (o host antigo, ex.:
+`perto-ou-longe.onrender.com`) e `REDIRECT_TO_URL` (o endereço novo, ex.:
+`https://maiscoisamenoscoisa.onrender.com`). Os pedidos a esse host recebem um redirecionamento
+permanente (301) para o mesmo caminho e parâmetros no endereço novo (o `/health` não). Sem as duas
+variáveis, não há reencaminhamento (`server/redirect.js`).
+
 Notas do plano gratuito:
 - O serviço adormece após ~15 min sem visitas e o primeiro acesso demora cerca de 30 a 50 s a acordar.
 - O estado do jogo vive só em memória, por isso as salas perdem-se quando o serviço reinicia ou adormece.

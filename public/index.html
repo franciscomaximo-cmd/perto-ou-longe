@@ -34,6 +34,9 @@
   <!-- Duelo: anúncio no início ("Duelo! Ana vs Bruno", com os bonecos frente a frente). -->
   <div id="duel-intro" class="duel-intro" role="dialog" aria-label="Início do duelo" hidden></div>
 
+  <!-- Ronda especial: anúncio antes da pergunta ("Teste-surpresa: ÀS ESCURAS!"). -->
+  <div id="special-intro" class="special-intro" role="alert" hidden></div>
+
   <main>
     <!-- Entrada -->
     <section id="screen-home" class="screen">
@@ -93,6 +96,15 @@
           <li>Com as perguntas dos jogadores ligadas (mínimo 4 jogadores), cada um escreve uma pergunta: quando sai a tua, não respondes, mas votas.</li>
           <li>No fim há prémios para o mais certeiro, o mais longe da realidade e quem melhor leu os outros.</li>
         </ol>
+        <h3 class="rules-sub">📝 Rondas especiais (testes-surpresa)</h3>
+        <p>Se o anfitrião as deixar ligadas, cerca de 1 em cada 4 rondas é especial (nunca a primeira, nunca duas seguidas, nunca no desempate), anunciada antes da pergunta:</p>
+        <ul>
+          <li><strong>✖️2 Pontos a dobrar</strong>: todos os pontos da ronda contam a dobrar.</li>
+          <li><strong>⚡ Ronda relâmpago</strong>: só 10 segundos para responder.</li>
+          <li><strong>🤝 Toda a turma ganha</strong>: se todos ficarem a menos de 10% da resposta (ou a menos de 500 km do país), todos ganham +1.</li>
+          <li><strong>🐢 Último lugar ataca</strong>: só a metade de baixo da pauta pode ganhar o ponto do mais perto (no duelo, quem vai a perder). Os votos contam para todos.</li>
+          <li><strong>🙈 Às escuras</strong>: a pergunta só se vê durante 5 segundos.</li>
+        </ul>
         <h3 class="rules-sub">⚔️ Duelo (2 jogadores)</h3>
         <p>O anfitrião escolhe o modo «Duelo» nas regras da aula: um contra um, sem votação. Em cada pergunta, quem ficar mais perto ganha 1 ponto (2 em cheio); se ficarem igualmente perto, ganham os dois. Se acabar empatado, há desempate.</p>
       </details>
@@ -164,6 +176,13 @@
           </span>
           <input type="checkbox" id="set-custom">
         </label>
+        <label id="special-setting" class="switch">
+          <span>
+            <b>Rondas especiais</b>
+            <small>De vez em quando, um teste-surpresa com regras diferentes (pontos a dobrar, relâmpago…).</small>
+          </span>
+          <input type="checkbox" id="set-special">
+        </label>
         <p id="settings-hint" class="hint"></p>
       </div>
 
@@ -207,6 +226,7 @@
       <div class="chalkboard board">
         <p class="board-title" data-t="perguntaTeste">Pergunta do teste</p>
         <p id="ans-cat" class="cat-label"></p>
+        <p id="ans-special" class="special-tag" hidden></p>
         <p id="ans-question" class="question"></p>
         <p id="ans-unit" class="unit"></p>
       </div>
@@ -241,6 +261,7 @@
     <!-- Votar -->
     <section id="screen-vote" class="screen" hidden>
       <p id="vote-question" class="question small"></p>
+      <p id="vote-special" class="special-tag" hidden></p>
       <h2 class="center vote-title" data-t="votarTitulo">Quem é que disse a maior asneira?</h2>
       <p class="hint center" data-t="votarDica">Vota em quem achas que ficou mais longe. Os palpites só se veem no fim.</p>
 
@@ -256,6 +277,7 @@
     <!-- Revelação -->
     <section id="screen-reveal" class="screen" hidden>
       <p id="rev-question" class="question small"></p>
+      <p id="rev-special" class="special-tag" hidden></p>
 
       <!-- 1. Palpites, um a um (reta numérica ou mapa) -->
       <!-- Perguntas de números: o tema da ronda desenha-se em #rev-stage (public/reveal/);
@@ -287,6 +309,8 @@
 
       <!-- 3. Pontos e classificação (a "Pauta" afixada), no topo dos resultados -->
       <div id="rev-points-box" class="reveal-in stack" hidden>
+        <!-- Ronda especial: o efeito nos pontos ("Toda a turma ganha! +1 para todos"…). -->
+        <p id="rev-special-effect" class="special-effect post-it" hidden></p>
         <p id="rev-mine" class="mine"></p>
         <div class="grades paper">
           <h3 class="grades-title" data-t="pauta">Pauta</h3>

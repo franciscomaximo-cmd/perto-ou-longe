@@ -52,6 +52,44 @@ const MIN_PLAYERS = 3;
 const MODES = ['turma', 'duelo'];
 const DUEL_PLAYERS = 2;
 const MIN_ANSWERS_TO_VOTE = 3;
+// Rondas especiais (opção "Rondas especiais", ligada por defeito). SÓ nelas a pontuação muda
+// (ver Room.applySpecial); nas rondas normais fica tudo igual.
+//   dobrar     todos os pontos da ronda contam a dobrar;
+//   relampago  só LIGHTNING_SECONDS para responder (quem não responder fica sem palpite);
+//   todos      se TODOS ficarem a menos de 10% (números) ou de 500 km (mapa): +1 para todos;
+//   ultimo     o ponto do "mais perto" só pode ir para a metade de baixo da pauta;
+//   escuras    o texto da pergunta só se vê DARK_MS (depois do anúncio); pontos normais.
+// Cerca de 1 em cada 4 rondas (SPECIAL_SHARE), nunca a primeira, nunca duas seguidas, nunca no
+// desempate, e o mesmo tipo nunca duas vezes seguidas.
+const SPECIAL_TYPES = ['dobrar', 'relampago', 'todos', 'ultimo', 'escuras'];
+const SPECIAL_SHARE = 0.25;
+const SPECIAL_INTRO_MS = 2500; // anúncio antes da pergunta (não conta para o tempo de responder)
+const LIGHTNING_SECONDS = 10;
+const DARK_MS = 5000;
+const ALL_WIN_SHARE = 0.1;
+const ALL_WIN_KM = 500;
+
+// Rondas (de 2 a `total`) que vão ser especiais: round(total × 1/4), sem duas seguidas.
+function planSpecialRounds(total, randomInt = (n) => crypto.randomInt(n)) {
+  const want = Math.round(total * SPECIAL_SHARE);
+  const candidates = [];
+  for (let r = 2; r <= total; r++) candidates.push(r);
+  let best = [];
+  for (let tries = 0; tries < 30 && best.length < want; tries++) {
+    const pool = [...candidates];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = randomInt(i + 1);
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const chosen = [];
+    for (const r of pool) {
+      if (chosen.length >= want) break;
+      if (!chosen.some((c) => Math.abs(c - r) <= 1)) chosen.push(r);
+    }
+    if (chosen.length > best.length) best = chosen;
+  }
+  return best.sort((a, b) => a - b);
+}
 // Com perguntas dos jogadores, quem escreveu não responde: com 3 jogadores sobravam só 2
 // a responder e cada um só podia votar no outro. Por isso são precisos 4.
 const MIN_PLAYERS_WITH_CUSTOM = 4;
@@ -198,7 +236,9 @@ class Room {
     this.notify = notify; // chamado quando o estado muda fora de um pedido de um jogador (temporizadores)
     this.players = new Map();
     this.hostId = null;
-    this.settings = { mode: 'turma', rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0, categories: [], playerQuestions: false };
+    this.settings = { mode: 'turma', rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0, categories: [], playerQuestions: false, specialRounds: true };
+    this.specialPlan = new Set(); // rondas especiais deste jogo (números das rondas)
+    this.lastSpecialType = null;
     this.customQuestions = new Map(); // id do autor -> pergunta escrita no lobby
     this.rulesVersion = 0; // sobe quando o anfitrião muda a configuração (aviso nos clientes)
     this.kicked = new Set(); // ids expulsos: não voltam a entrar com a sessão guardada
@@ -338,6 +378,7 @@ class Room {
     if (settings.voteTime !== undefined) this.settings.voteTime = clampTime(settings.voteTime);
     if (settings.categories !== undefined) this.settings.categories = cleanCategories(settings.categories);
     if (settings.playerQuestions !== undefined) this.settings.playerQuestions = Boolean(settings.playerQuestions);
+    if (settings.specialRounds !== undefined) this.settings.specialRounds = Boolean(settings.specialRounds);
     // No duelo não há perguntas dos jogadores (com 2, quem escreveu ficava sem adversário).
     if (this.isDuel()) this.settings.playerQuestions = false;
     // Regras novas: todos voltam a "não pronto" (ninguém começa sem as ver) e os clientes
@@ -548,6 +589,8 @@ class Room {
     for (const p of this.players.values()) p.score = 0;
     this.stats = new Map();
     this.questions = this.pickQuestions();
+    this.specialPlan = new Set(this.settings.specialRounds ? planSpecialRounds(this.questions.length) : []);
+    this.lastSpecialType = null;
     this.round = 0;
     this.gameNumber += 1; // identifica o jogo (ex.: o cliente conta feitos uma vez por jogo)
     this.standings = null;
@@ -607,8 +650,87 @@ class Room {
       answers: new Map(),
       votes: new Map(),
       result: null,
+      special: this.pickSpecial(), // { type, introUntil, textUntil } ou null
     };
-    this.setPhase('answering', this.settings.answerTime, () => this.endAnswering());
+    const special = this.current.special;
+    const answerTime = special && special.type === 'relampago' ? LIGHTNING_SECONDS : this.settings.answerTime;
+    // O anúncio da ronda especial não conta para o tempo de responder.
+    const seconds = special && answerTime > 0 ? answerTime + SPECIAL_INTRO_MS / 1000 : answerTime;
+    this.setPhase('answering', seconds, () => this.endAnswering());
+  }
+
+  // --- Rondas especiais ----------------------------------------------------
+
+  // A ronda que agora começa é especial? (Só nas rondas planeadas no início do jogo; o tipo é
+  // escolhido aqui, ao acaso entre os que podem sair agora, sem repetir o da anterior.)
+  pickSpecial(now = Date.now()) {
+    if (!this.specialPlan.has(this.round)) return null;
+    const types = SPECIAL_TYPES.filter((t) => t !== this.lastSpecialType && this.specialAllowed(t));
+    if (!types.length) return null;
+    const type = types[crypto.randomInt(types.length)];
+    this.lastSpecialType = type;
+    const introUntil = now + SPECIAL_INTRO_MS;
+    return { type, introUntil, textUntil: type === 'escuras' ? introUntil + DARK_MS : null };
+  }
+
+  // "Último lugar ataca" só sai quando a pauta não está toda empatada.
+  specialAllowed(type) {
+    if (type === 'ultimo') return new Set([...this.players.values()].map((p) => p.score)).size > 1;
+    return true;
+  }
+
+  // Metade de baixo da pauta (antes dos pontos desta ronda): os floor(n/2) com menos pontos
+  // (pelo menos 1), mais quem estiver empatado com o último deles, mas nunca quem vai à
+  // frente. No duelo: quem vai a perder.
+  bottomHalf() {
+    const sorted = [...this.players.values()].sort((a, b) => a.score - b.score);
+    if (!sorted.length) return [];
+    const max = sorted[sorted.length - 1].score;
+    const boundary = sorted[Math.max(1, Math.floor(sorted.length / 2)) - 1].score;
+    return sorted.filter((p) => p.score <= boundary && p.score < max).map((p) => p.id);
+  }
+
+  // Efeito da ronda especial nos pontos já calculados (scoreRound, igual às rondas normais).
+  // Devolve o resultado com os pontos finais e `special` (o que aconteceu, para a revelação).
+  applySpecial(type, question, result, answers) {
+    const points = { ...result.points };
+    const add = (id, n) => {
+      points[id] = (points[id] || 0) + n;
+      if (!points[id]) delete points[id];
+    };
+    const special = { type };
+    if (type === 'dobrar') {
+      for (const id of Object.keys(points)) points[id] *= 2;
+    } else if (type === 'todos') {
+      // Todos os que deviam responder (ligados, menos o autor da pergunta) responderam e ficaram
+      // perto: +1 para cada um. Basta um falhar (ou não responder) para a ronda contar normal.
+      const correct = correctOf(question);
+      const near = (id) => (question.type === 'map'
+        ? result.distances[id] < ALL_WIN_KM
+        : correct === 0 ? result.distances[id] === 0 : result.distances[id] < ALL_WIN_SHARE * Math.abs(correct));
+      const ids = Object.keys(result.distances);
+      const missing = this.connectedPlayers().map((p) => p.id).filter((id) => id !== question.author && !answers.has(id));
+      special.missed = [...ids.filter((id) => !near(id)), ...missing];
+      special.allWin = ids.length > 0 && special.missed.length === 0;
+      if (special.allWin) for (const id of ids) add(id, 1);
+    } else if (type === 'ultimo') {
+      // O ponto do "mais perto" (1, ou 2 em cheio) só vai para a metade de baixo da pauta: o
+      // mais perto de entre eles. Os votos contam normalmente para todos.
+      const bottom = this.bottomHalf();
+      const closestPoints = result.exact.length ? 2 : 1;
+      for (const id of result.closest) add(id, -closestPoints);
+      const candidates = Object.keys(result.distances).filter((id) => bottom.includes(id));
+      let awarded = [];
+      if (candidates.length) {
+        const min = Math.min(...candidates.map((id) => result.distances[id]));
+        awarded = candidates.filter((id) => result.distances[id] === min);
+        for (const id of awarded) add(id, min === 0 ? 2 : 1);
+      }
+      special.bottom = bottom;
+      special.awarded = awarded;
+      special.moved = awarded.some((id) => !result.closest.includes(id)); // o ponto mudou de dono
+    }
+    return { ...result, points, special };
   }
 
   setPhase(phase, seconds = 0, onTimeout = null) {
@@ -701,6 +823,10 @@ class Room {
     const { question, answers, votes } = this.current;
     if (!this.current.voting) votes.clear();
     this.current.result = scoreRound(correctOf(question), answers, votes, measureFor(question));
+    // Ronda especial: o efeito nos pontos (só nestas rondas).
+    if (this.current.special) {
+      this.current.result = this.applySpecial(this.current.special.type, question, this.current.result, answers);
+    }
     for (const [id, pts] of Object.entries(this.current.result.points)) {
       const player = this.players.get(id);
       if (player) player.score += pts;
@@ -1014,8 +1140,19 @@ class Room {
     };
 
     if (cur && this.phase !== 'lobby') {
+      // Ronda especial (só durante a própria ronda: não passa para o desempate nem para o fim).
+      const special = ['answering', 'voting', 'reveal'].includes(this.phase) ? cur.special : null;
+      const now = Date.now();
+      // "Às escuras": passado o tempo, o texto deixa de ser enviado (até à revelação).
+      const dark = Boolean(special && special.textUntil && this.phase !== 'reveal' && now >= special.textUntil);
+      state.special = special ? {
+        type: special.type,
+        introMs: this.phase === 'answering' ? Math.max(0, special.introUntil - now) : 0,
+        hideTextMs: special.textUntil && this.phase !== 'reveal' ? Math.max(0, special.textUntil - now) : null,
+        answerSeconds: special.type === 'relampago' ? LIGHTNING_SECONDS : null,
+      } : null;
       state.question = {
-        text: cur.question.text,
+        text: dark ? null : cur.question.text,
         unit: cur.question.unit || '',
         type: cur.question.type || 'number',
         category: CATEGORY_LABELS[cur.question.category] || '',
@@ -1115,4 +1252,9 @@ module.exports = {
   CHAT_GAP_MS,
   CHAT_KEEP,
   MODES,
+  SPECIAL_TYPES,
+  SPECIAL_INTRO_MS,
+  LIGHTNING_SECONDS,
+  DARK_MS,
+  planSpecialRounds,
 };

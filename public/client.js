@@ -293,6 +293,7 @@
   }
 
   $('#set-custom').addEventListener('change', (e) => act('settings:update', { playerQuestions: e.target.checked }));
+  $('#set-special').addEventListener('change', (e) => act('settings:update', { specialRounds: e.target.checked }));
   // Modo de jogo: "Turma" (3 a 12) ou "Duelo" (2).
   $$('#set-mode button').forEach((b) => b.addEventListener('click', () => {
     if (state && state.settings.mode !== b.dataset.mode) act('settings:update', { mode: b.dataset.mode });
@@ -627,6 +628,128 @@
     duelIntroTimer = setTimeout(closeDuelIntro, 2800);
   }
 
+  // --- Rondas especiais ("testes-surpresa") ------------------------------------
+  // O servidor decide quais são e manda state.special = { type, introMs, hideTextMs,
+  // answerSeconds }; aqui só se mostram: o anúncio antes da pergunta, a etiqueta com a regra
+  // junto à pergunta, o texto que desaparece ("Às escuras") e o efeito nos pontos.
+  const SPECIALS = {
+    dobrar: { icon: '✖️2', name: 'Pontos a dobrar', rule: () => 'Todos os pontos desta ronda contam a dobrar.' },
+    relampago: { icon: '⚡', name: 'Ronda relâmpago', rule: () => 'Só tens 10 segundos para responder!' },
+    todos: {
+      icon: '🤝', name: 'Toda a turma ganha',
+      rule: (isMap) => (isMap
+        ? 'Se todos ficarem a menos de 500 km do país, todos ganham +1.'
+        : 'Se todos ficarem a menos de 10% da resposta certa, todos ganham +1.'),
+    },
+    ultimo: {
+      icon: '🐢', name: 'Último lugar ataca',
+      rule: (isMap, duel) => (duel
+        ? 'Só quem vai a perder pode ganhar o ponto do mais perto.'
+        : 'Só a metade de baixo da pauta pode ganhar o ponto do mais perto.'),
+    },
+    escuras: { icon: '🙈', name: 'Às escuras', rule: () => 'A pergunta só aparece durante 5 segundos. Decora-a!' },
+  };
+  const specialOf = () => (state && state.special && SPECIALS[state.special.type] ? state.special : null);
+  const specialRule = (s) => SPECIALS[s.type].rule(state.question && state.question.type === 'map', Boolean(state.duel));
+
+  // Etiqueta com a regra junto à pergunta (resposta, votação e revelação).
+  function renderSpecialTags() {
+    const s = specialOf();
+    for (const sel of ['#ans-special', '#vote-special', '#rev-special']) {
+      const tag = $(sel);
+      tag.hidden = !s;
+      if (s) tag.replaceChildren(el('b', { text: `${SPECIALS[s.type].icon} ${SPECIALS[s.type].name}` }), ` · ${specialRule(s)}`);
+    }
+  }
+
+  // Anúncio animado (~2,5 s, o tempo vem do servidor) antes da pergunta. Toca para fechar.
+  let specialIntroKey = null;
+  let specialIntroTimer = null;
+  function closeSpecialIntro() {
+    clearTimeout(specialIntroTimer);
+    $('#special-intro').hidden = true;
+  }
+  $('#special-intro').addEventListener('click', closeSpecialIntro);
+  function renderSpecialIntro() {
+    const s = specialOf();
+    if (!s || state.phase !== 'answering') {
+      closeSpecialIntro();
+      return;
+    }
+    const key = `${state.code}-${state.gameNumber}-${state.round}`;
+    if (specialIntroKey === key || s.introMs <= 0) return;
+    specialIntroKey = key;
+    const meta = SPECIALS[s.type];
+    $('#special-intro').replaceChildren(el('div', { class: `special-intro-box special-${s.type}` }, [
+      el('p', { class: 'special-intro-kicker', text: 'Teste-surpresa:' }),
+      el('p', { class: 'special-intro-icon', text: meta.icon, 'aria-hidden': 'true' }),
+      el('p', { class: 'special-intro-name', text: `${meta.name.toUpperCase()}!` }),
+      el('p', { class: 'special-intro-rule', text: specialRule(s) }),
+    ]));
+    $('#special-intro').hidden = false;
+    clearTimeout(specialIntroTimer);
+    specialIntroTimer = setTimeout(closeSpecialIntro, s.introMs);
+  }
+
+  // "Às escuras": a hora (neste telemóvel) a que o texto desaparece; o ecrã volta a ser
+  // desenhado nesse momento. (O servidor também deixa de enviar o texto, para quem recarrega.)
+  let darkAt = null;
+  let darkTimer = null;
+  let darkState = null; // o estado de onde veio darkAt (só se recalcula com um estado novo)
+  function trackDark() {
+    if (state === darkState) return;
+    darkState = state;
+    const s = specialOf();
+    clearTimeout(darkTimer);
+    if (!s || s.hideTextMs === null || s.hideTextMs === undefined) { darkAt = null; return; }
+    darkAt = Date.now() + s.hideTextMs;
+    // (Só o texto da pergunta: um render() completo com o estado antigo voltava a acertar o
+    // relógio para trás.)
+    if (s.hideTextMs > 0) {
+      darkTimer = setTimeout(() => {
+        if (state && state.phase === 'answering') showQuestion('#ans-question');
+        if (state && state.phase === 'voting') showQuestion('#vote-question');
+      }, s.hideTextMs + 30);
+    }
+  }
+  const questionHidden = () => Boolean(state.question && (state.question.text === null || (darkAt !== null && Date.now() >= darkAt)));
+  // O texto da pergunta, ou o aviso de que desapareceu (fica a categoria e a unidade).
+  function showQuestion(sel) {
+    const node = $(sel);
+    const hidden = questionHidden();
+    node.classList.toggle('dark', hidden);
+    node.textContent = hidden ? '🙈 A pergunta desapareceu! Lembras-te dela?' : state.question.text;
+  }
+
+  // Revelação: o que a ronda especial mudou nos pontos (uma frase por cima dos pontos).
+  function specialEffectText(r) {
+    const sp = r.special;
+    if (!sp) return '';
+    if (sp.type === 'dobrar') return '✖️2 Pontos a dobrar: todos os pontos desta ronda contaram a dobrar.';
+    if (sp.type === 'todos') {
+      return sp.allWin
+        ? '🤝 Toda a turma ganha! +1 para todos.'
+        : `🤝 Não foi desta: ${listNames(sp.missed.filter((id) => player(id)))} ${sp.missed.length === 1 ? 'ficou' : 'ficaram'} longe. A ronda contou normalmente.`;
+    }
+    if (sp.type === 'ultimo') {
+      if (!sp.awarded.length) return '🐢 Ninguém da metade de baixo da pauta respondeu: o ponto do mais perto ficou por dar.';
+      return sp.moved
+        ? `🐢 Ponto para o último lugar! ${listNames(sp.awarded)} ${sp.awarded.length === 1 ? 'ganha' : 'ganham'} o ponto do mais perto.`
+        : `🐢 Ponto para o último lugar! ${listNames(sp.awarded)} ${sp.awarded.length === 1 ? 'era' : 'eram'} mesmo o mais perto.`;
+    }
+    return '';
+  }
+  // O "+N" de cada jogador, com o efeito da ronda especial à vista.
+  function gainText(r, id) {
+    const gain = r.points[id] || 0;
+    if (!gain) return '';
+    const sp = r.special;
+    if (sp && sp.type === 'dobrar') return `+${gain} ×2`;
+    if (sp && sp.type === 'todos' && sp.allWin) return `+${gain} (🤝 +1)`;
+    if (sp && sp.type === 'ultimo' && sp.awarded.includes(id)) return `+${gain} 🐢`;
+    return `+${gain}`;
+  }
+
   // --- Desenho ------------------------------------------------------------
 
   const SCREENS = {
@@ -697,6 +820,9 @@
     renderChat();
     renderDuelBar();
     renderDuelIntro();
+    trackDark();
+    renderSpecialIntro();
+    renderSpecialTags();
     // No duelo, a "Média da turma" das pautas não faz sentido.
     $$('.grades-avg').forEach((n) => { n.hidden = Boolean(state && state.settings && state.settings.mode === 'duelo'); });
     tick();
@@ -846,6 +972,8 @@
     if (tooMany) $('#mode-note').textContent = TEXTOS.duelSoDois(online);
     $('#set-custom').checked = custom;
     $('#set-custom').disabled = !host;
+    $('#set-special').checked = state.settings.specialRounds !== false;
+    $('#set-special').disabled = !host;
     renderCustomForm(custom);
     $('#set-rounds').min = state.minRounds;
     $('#set-rounds').max = state.maxRounds;
@@ -1247,7 +1375,7 @@
   }
 
   function renderAnswer() {
-    $('#ans-question').textContent = state.question.text;
+    showQuestion('#ans-question');
     const author = state.question.author;
     $('#ans-cat').textContent = author ? `Pergunta de ${nameOf(author)}` : state.question.category || '';
     const isMap = state.question.type === 'map';
@@ -1291,7 +1419,7 @@
   };
 
   function renderVote() {
-    $('#vote-question').textContent = state.question.text;
+    showQuestion('#vote-question');
     const candidates = state.candidates || [];
     const status = $('#vote-status');
     const canVote = !state.myVote && candidates.length > 0;
@@ -1681,6 +1809,9 @@
     $('#rev-hint').textContent = host || showPoints ? '' : 'A revelar os palpites…';
     if (!showPoints) return;
 
+    const effect = specialEffectText(r);
+    $('#rev-special-effect').hidden = !effect;
+    $('#rev-special-effect').textContent = effect;
     const myGain = r.points[state.me] || 0;
     $('#rev-mine').textContent = myGain ? `Ganhaste ${myGain} ponto${myGain === 1 ? '' : 's'} nesta ronda!` : 'Nenhum ponto para ti nesta ronda.';
 
@@ -1691,16 +1822,17 @@
       const exact = (r.exact || []).includes(id);
       const far = r.farthest.includes(id);
       const votes = votesFor(id);
-      const gain = r.points[id] || 0;
+      const lastPlace = r.special && r.special.type === 'ultimo' && r.special.awarded.includes(id);
       return el('li', { class: near ? 'near' : far ? 'far shake' : '' }, [
         el('span', { class: 'name' }, [
           ...who(id),
           near ? el('span', { class: 'badge near', text: exact ? 'em cheio!' : 'mais perto' }) : null,
           far ? el('span', { class: 'badge far', text: 'mais longe' }) : null,
+          lastPlace ? el('span', { class: 'badge special', text: 'ponto do último lugar' }) : null,
         ]),
         el('span', { class: 'value', text: isMap ? `${fmt(r.distances[id])} km` : fmt(r.answers[id]) }),
         el('span', { class: 'meta', text: missText(exact, r.distances[id], isMap) + (r.voting ? ` · ${votes} voto${votes === 1 ? '' : 's'}` : '') }),
-        el('span', { class: 'gain', text: gain ? `+${gain}` : '' }),
+        el('span', { class: 'gain', text: gainText(r, id) }),
       ]);
     });
 
@@ -1711,7 +1843,7 @@
           el('span', { class: 'name' }, who(p.id)),
           el('span', { class: 'value', text: author ? '✍️' : '—' }),
           el('span', { class: 'meta', text: author ? 'autor da pergunta' : 'sem resposta' }),
-          el('span', { class: 'gain', text: r.points[p.id] ? `+${r.points[p.id]}` : '' }),
+          el('span', { class: 'gain', text: gainText(r, p.id) }),
         ]));
       }
     }

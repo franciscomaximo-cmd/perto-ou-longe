@@ -11,8 +11,11 @@ function startGame(room, hostId) {
   return room.startGame(hostId);
 }
 
+// (As rondas especiais ficam desligadas nos testes, para os pontos serem previsíveis; os
+// testes das rondas especiais ligam-nas.)
 function setup(names = ['Ana', 'Rui', 'Eva']) {
   const room = new Room('TEST', () => {});
+  room.settings.specialRounds = false;
   const ids = names.map((n, i) => {
     const p = room.addPlayer(n);
     room.connect(p.id, `socket-${i}`);
@@ -146,7 +149,8 @@ test('só o anfitrião começa e configura', () => {
   assert.throws(() => startGame(room, ids[1]), /anfitrião/);
   assert.throws(() => room.updateSettings(ids[1], { answerTime: 30 }), /anfitrião/);
   room.updateSettings(ids[0], { answerTime: 30, voteTime: 5 });
-  assert.deepEqual(room.settings, { mode: 'turma', rounds: DEFAULT_ROUNDS, answerTime: 30, voteTime: 10, categories: [], playerQuestions: false });
+  assert.deepEqual(room.settings, { mode: 'turma', rounds: DEFAULT_ROUNDS, answerTime: 30, voteTime: 10, categories: [], playerQuestions: false, specialRounds: false });
+  assert.equal(new Room('X', () => {}).settings.specialRounds, true, 'rondas especiais ligadas por defeito');
 });
 
 test('clampRounds: entre 3 e 30, 10 por defeito', () => {
@@ -1107,4 +1111,279 @@ test('duelo: os temas de revelação com 2 jogadores (vencedor o melhor, o outro
   assert.deepEqual([two.a.level, two.a.winner, two.b.level, two.b.farthest], [0, true, 1, true]);
   const tie = presentationOf([{ id: 'a', precision: 0.03 }, { id: 'b', precision: 0.03 }], { closest: ['a', 'b'], farthest: ['a', 'b'], exact: [] });
   assert.deepEqual([tie.a.level, tie.a.winner, tie.b.level, tie.b.winner], [0, true, 0, true]);
+});
+// --- Rondas especiais ------------------------------------------------------------------------
+
+// Torna a ronda atual especial (como se o servidor a tivesse sorteado).
+function makeSpecial(room, type, { textUntil = null } = {}) {
+  room.current.special = { type, introUntil: Date.now() - 1, textUntil };
+}
+// Responde e passa a votação (se houver) até à revelação.
+function answerAll(room, ids, values) {
+  ids.forEach((id, i) => { if (values[i] !== undefined) room.submitAnswer(id, values[i]); });
+}
+const toReveal = (room, host) => { while (room.phase === 'answering' || room.phase === 'voting') room.forceAdvance(host); };
+
+test('ronda especial "Pontos a dobrar": todos os pontos da ronda contam a dobrar', () => {
+  const { room, ids } = setup();
+  const [ana, rui, eva] = ids;
+  startWithNumber(room, ana);
+  makeSpecial(room, 'dobrar');
+  answerAll(room, ids, [206, 100, 50]); // Ana em cheio (2), Eva a mais longe
+  room.submitVote(ana, eva); // certo
+  room.submitVote(rui, eva); // certo
+  room.submitVote(eva, rui); // errado
+  assert.equal(room.phase, 'reveal');
+  const r = room.stateFor(ana).result;
+  assert.deepEqual(r.points, { [ana]: 6, [rui]: 2 }, 'Ana: (2 + 1) × 2; Rui: 1 × 2');
+  assert.equal(r.special.type, 'dobrar');
+  assert.deepEqual([room.players.get(ana).score, room.players.get(rui).score, room.players.get(eva).score], [6, 2, 0]);
+  room.destroy();
+});
+
+test('ronda especial "Ronda relâmpago": 10 segundos para responder, seja qual for o tempo escolhido', () => {
+  const { LIGHTNING_SECONDS, SPECIAL_INTRO_MS } = require('../server/rooms');
+  for (const answerTime of [0, 60]) {
+    const { room, ids } = setup();
+    room.settings.answerTime = answerTime;
+    startWithNumber(room, ids[0]);
+    answerAll(room, ids, [1, 2, 3]);
+    toReveal(room, ids[0]);
+    room.pickSpecial = () => ({ type: 'relampago', introUntil: Date.now() + SPECIAL_INTRO_MS, textUntil: null });
+    room.nextQuestion(ids[0]);
+    const st = room.stateFor(ids[1]);
+    assert.equal(st.special.type, 'relampago');
+    assert.equal(st.special.answerSeconds, LIGHTNING_SECONDS);
+    // 10 s depois do anúncio (que não conta).
+    const left = st.remainingMs;
+    assert.ok(left > (LIGHTNING_SECONDS * 1000 + SPECIAL_INTRO_MS) - 300 && left <= LIGHTNING_SECONDS * 1000 + SPECIAL_INTRO_MS, `tempo: ${left} ms (escolhido: ${answerTime} s)`);
+    room.destroy();
+  }
+});
+
+test('ronda relâmpago: quem não responde a tempo fica sem palpite', async () => {
+  const { room, ids } = setup();
+  startWithNumber(room, ids[0]);
+  answerAll(room, ids, [1, 2, 3]);
+  toReveal(room, ids[0]);
+  // (Tempos encurtados só para o teste: o mesmo caminho do temporizador.)
+  room.pickSpecial = () => ({ type: 'relampago', introUntil: Date.now(), textUntil: null });
+  room.settings.answerTime = 0;
+  const realSetPhase = room.setPhase.bind(room);
+  room.setPhase = (phase, seconds, onTimeout) => realSetPhase(phase, phase === 'answering' ? 0.05 : seconds, onTimeout);
+  room.nextQuestion(ids[0]);
+  room.current.question = NUMBER_QUESTION;
+  room.submitAnswer(ids[0], 206);
+  await new Promise((r) => setTimeout(r, 120));
+  assert.notEqual(room.phase, 'answering');
+  assert.deepEqual([...room.current.answers.keys()], [ids[0]], 'só a Ana tem palpite');
+  room.destroy();
+});
+
+test('ronda especial "Toda a turma ganha": +1 para todos só se TODOS ficarem perto', () => {
+  // Todos a menos de 10% de 206 (< 20,6): +1 para todos, além dos pontos normais.
+  {
+    const { room, ids } = setup();
+    const [ana, rui, eva] = ids;
+    startWithNumber(room, ana);
+    makeSpecial(room, 'todos');
+    answerAll(room, ids, [200, 190, 220]);
+    toReveal(room, ana);
+    const r = room.stateFor(ana).result;
+    assert.equal(r.special.allWin, true);
+    assert.deepEqual(r.points, { [ana]: 2, [rui]: 1, [eva]: 1 }, 'Ana mais perto (1) + 1; os outros + 1');
+    room.destroy();
+  }
+  // Um jogador a falhar (150 está a 56 da resposta): a ronda conta normalmente.
+  {
+    const { room, ids } = setup();
+    const [ana, , eva] = ids;
+    startWithNumber(room, ana);
+    makeSpecial(room, 'todos');
+    answerAll(room, ids, [200, 190, 150]);
+    toReveal(room, ana);
+    const r = room.stateFor(ana).result;
+    assert.equal(r.special.allWin, false);
+    assert.deepEqual(r.special.missed, [eva]);
+    assert.deepEqual(r.points, { [ana]: 1 });
+    room.destroy();
+  }
+  // Alguém ligado sem responder também conta como falhar.
+  {
+    const { room, ids } = setup();
+    startWithNumber(room, ids[0]);
+    makeSpecial(room, 'todos');
+    answerAll(room, ids, [200, 210]);
+    toReveal(room, ids[0]);
+    assert.equal(room.stateFor(ids[0]).result.special.allWin, false);
+    room.destroy();
+  }
+  // Mapa: a menos de 500 km do país (Paquistão).
+  for (const [far, allWin] of [[{ lat: 31.5, lon: 74.3 }, true], [{ lat: 48.86, lon: 2.35 }, false]]) {
+    const { room, ids } = setup();
+    startWith(room, ids[0], MAP_QUESTION);
+    makeSpecial(room, 'todos');
+    answerAll(room, ids, [{ lat: 33.7, lon: 73 }, { lat: 28.6, lon: 77.2 }, far]); // Islamabad, Deli (~400 km), e Lahore ou Paris
+    toReveal(room, ids[0]);
+    assert.equal(room.stateFor(ids[0]).result.special.allWin, allWin, allWin ? 'todos perto' : 'Paris fica longe');
+    room.destroy();
+  }
+});
+
+test('ronda especial "Último lugar ataca": o ponto do mais perto só vai para a metade de baixo da pauta', () => {
+  // O mais perto (Ana) vai à frente na pauta: o ponto passa para o mais perto da metade de baixo.
+  {
+    const { room, ids } = setup();
+    const [ana, rui, eva] = ids;
+    startWithNumber(room, ana);
+    room.players.get(ana).score = 5;
+    room.players.get(rui).score = 2;
+    room.players.get(eva).score = 0;
+    assert.deepEqual(room.bottomHalf(), [eva]);
+    makeSpecial(room, 'ultimo');
+    answerAll(room, ids, [205, 150, 100]); // Ana a 1, Rui a 56, Eva a 106 (a mais longe)
+    room.submitVote(ana, eva); // certo: os votos contam normalmente para todos
+    room.submitVote(rui, eva); // certo
+    room.submitVote(eva, rui);
+    const r = room.stateFor(ana).result;
+    assert.deepEqual(r.closest, [ana], 'quem ficou mais perto continua a ser a Ana');
+    assert.deepEqual(r.special.awarded, [eva]);
+    assert.equal(r.special.moved, true);
+    assert.deepEqual(r.points, { [ana]: 1, [rui]: 1, [eva]: 1 }, 'Ana e Rui: o voto; Eva: o ponto do mais perto');
+    room.destroy();
+  }
+  // Com 4 jogadores, a metade de baixo são os 2 últimos; em cheio continua a valer 2.
+  {
+    const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
+    const [ana, rui, eva, to] = ids;
+    startWithNumber(room, ana);
+    [5, 3, 1, 0].forEach((s, i) => { room.players.get(ids[i]).score = s; });
+    assert.deepEqual(room.bottomHalf().sort(), [eva, to].sort());
+    makeSpecial(room, 'ultimo');
+    answerAll(room, ids, [300, 206, 206, 100]); // Rui e Eva em cheio; só a Eva é de baixo
+    toReveal(room, ana);
+    const r = room.stateFor(ana).result;
+    assert.deepEqual(r.special.awarded, [eva]);
+    assert.equal(r.points[eva], 2);
+    assert.equal(r.points[rui], undefined, 'o Rui (de cima) não ganha o ponto do mais perto');
+    room.destroy();
+  }
+  // Pauta toda empatada: este tipo não pode sair.
+  {
+    const { room, ids } = setup();
+    startWithNumber(room, ids[0]);
+    for (const p of room.players.values()) p.score = 2;
+    assert.equal(room.specialAllowed('ultimo'), false);
+    room.players.get(ids[1]).score = 3;
+    assert.equal(room.specialAllowed('ultimo'), true);
+    room.destroy();
+  }
+  // Duelo: só quem vai a perder pode ganhar o ponto do mais perto.
+  {
+    const { room, ids } = setup(['Ana', 'Rui']);
+    room.updateSettings(ids[0], { mode: 'duelo' });
+    for (const p of room.players.values()) p.ready = true;
+    room.startGame(ids[0]);
+    room.current.question = NUMBER_QUESTION;
+    room.players.get(ids[0]).score = 3;
+    room.players.get(ids[1]).score = 1;
+    makeSpecial(room, 'ultimo');
+    answerAll(room, ids, [206, 250]);
+    const r = room.stateFor(ids[0]).result;
+    assert.deepEqual(room.bottomHalf(), [ids[1]]);
+    assert.deepEqual(r.points, { [ids[1]]: 1 }, 'a Ana acertou em cheio, mas o ponto vai para o Rui');
+    room.destroy();
+  }
+});
+
+test('ronda especial "Às escuras": o texto só se vê 5 s (depois só a categoria e a unidade); pontos normais', () => {
+  const { DARK_MS } = require('../server/rooms');
+  assert.equal(DARK_MS, 5000);
+  const { room, ids } = setup();
+  const q = { text: 'Qual a altura da Torre dos Clérigos?', answer: 75, unit: 'metros', category: 'cultura' };
+  startWith(room, ids[0], q);
+  makeSpecial(room, 'escuras', { textUntil: Date.now() + 4000 });
+  let st = room.stateFor(ids[1]);
+  assert.equal(st.question.text, q.text, 'nos primeiros 5 s vê-se');
+  assert.ok(st.special.hideTextMs > 3000 && st.special.hideTextMs <= 4000);
+  room.current.special.textUntil = Date.now() - 1; // passaram os 5 s
+  st = room.stateFor(ids[1]);
+  assert.equal(st.question.text, null, 'o texto deixa de ser enviado');
+  assert.equal(st.question.unit, 'metros');
+  assert.equal(st.question.category, 'Cultura Portuguesa');
+  answerAll(room, ids, [75, 60, 10]);
+  toReveal(room, ids[0]);
+  st = room.stateFor(ids[1]);
+  assert.equal(st.question.text, q.text, 'na revelação volta a aparecer');
+  assert.deepEqual(st.result.points, { [ids[0]]: 2 }, 'pontos normais');
+  // Mapa: o texto também desaparece, o mapa continua (a pergunta continua a ser de mapa).
+  const m = setup();
+  startWith(m.room, m.ids[0], MAP_QUESTION);
+  makeSpecial(m.room, 'escuras', { textUntil: Date.now() - 1 });
+  const ms = m.room.stateFor(m.ids[0]);
+  assert.equal(ms.question.text, null);
+  assert.equal(ms.question.type, 'map');
+  m.room.destroy();
+  room.destroy();
+});
+
+test('rondas especiais: ~1 em cada 4, nunca a primeira, nunca seguidas, sem repetir o tipo, nunca no desempate', () => {
+  const { planSpecialRounds, SPECIAL_TYPES } = require('../server/rooms');
+  for (let run = 0; run < 200; run++) {
+    const plan = planSpecialRounds(12);
+    assert.equal(plan.length, 3);
+    assert.ok(!plan.includes(1));
+    for (let i = 1; i < plan.length; i++) assert.ok(plan[i] - plan[i - 1] >= 2, `seguidas: ${plan}`);
+  }
+  assert.equal(planSpecialRounds(10).length, 3);
+  assert.equal(planSpecialRounds(3).length, 1);
+  assert.equal(planSpecialRounds(30).length, 8);
+  // Jogos inteiros de 12 rondas: o que o servidor manda no room:state.
+  const seen = new Set();
+  for (let run = 0; run < 40; run++) {
+    const { room, ids } = setup();
+    room.updateSettings(ids[0], { rounds: 12, specialRounds: true, categories: ['corpo'] }); // só números
+    startGame(room, ids[0]);
+    const types = [];
+    for (let i = 0; i < 12; i++) {
+      const st = room.stateFor(ids[1]);
+      types.push(st.special ? st.special.type : null);
+      // Todos com o mesmo estado (a mesma ronda especial).
+      assert.deepEqual(room.stateFor(ids[2]).special && room.stateFor(ids[2]).special.type, st.special && st.special.type);
+      // A Ana fica sempre mais perto: a pauta deixa de estar empatada a partir da 2.ª ronda.
+      answerAll(room, ids, [206, 100, 50]);
+      toReveal(room, ids[0]);
+      if (st.special) seen.add(st.special.type);
+      room.nextQuestion(ids[0]);
+    }
+    const specials = types.map((t, i) => [i + 1, t]).filter(([, t]) => t);
+    assert.equal(specials.length, 3, `3 rondas especiais em 12: ${types}`);
+    assert.equal(types[0], null, 'nunca a primeira');
+    for (let i = 1; i < 12; i++) assert.ok(!(types[i] && types[i - 1]), 'nunca duas seguidas');
+    for (let i = 1; i < specials.length; i++) assert.notEqual(specials[i][1], specials[i - 1][1], 'o mesmo tipo não sai seguido');
+    assert.equal(room.phase, 'end');
+    room.destroy();
+  }
+  assert.deepEqual([...seen].sort(), [...SPECIAL_TYPES].sort(), 'saem os cinco tipos');
+  // Pauta toda empatada (ninguém responde): nunca sai "Último lugar ataca"; no desempate nunca há especial.
+  for (let run = 0; run < 30; run++) {
+    const { room, ids } = setup();
+    room.updateSettings(ids[0], { rounds: 8, specialRounds: true });
+    startGame(room, ids[0]);
+    for (let i = 0; i < 8; i++) {
+      const st = room.stateFor(ids[0]);
+      assert.ok(!st.special || st.special.type !== 'ultimo', 'pauta empatada: sem "Último lugar ataca"');
+      toReveal(room, ids[0]);
+      room.nextQuestion(ids[0]);
+    }
+    assert.equal(room.phase, 'tiebreak', 'todos a 0: desempate');
+    assert.equal(room.stateFor(ids[0]).special, null, 'no desempate não há ronda especial');
+    room.destroy();
+  }
+  // Opção desligada: nenhuma.
+  const { room, ids } = setup();
+  room.updateSettings(ids[0], { rounds: 12, specialRounds: false });
+  startGame(room, ids[0]);
+  assert.equal(room.specialPlan.size, 0);
+  room.destroy();
 });

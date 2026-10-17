@@ -72,6 +72,14 @@
     empate: (names, last) => `🏆 ${names} e ${last} são os melhores alunos da turma!`,
     quadroHonra: 'Quadro de honra',
     maisUmaAula: 'Mais uma aula!',
+    // Duelo (2 jogadores)
+    duelo: 'Duelo!',
+    fimDuelo: 'Fim do duelo!',
+    duelFalta: 'À espera de um adversário para o duelo.',
+    duelSoDois: (n) => `O duelo é só para 2 jogadores (estão ${n} ligados). O anfitrião pode mudar para «Turma».`,
+    duelGanha: (name, a, b) => `🏆 ${name} ganha o duelo ${a}–${b}!`,
+    duelDesempate: (name, a, b) => `🏆 ${name} ganha o duelo no desempate (${a}–${b})!`,
+    duelEmpate: (a, b) => `Empate no duelo: ${a}–${b}!`,
   };
   for (const node of document.querySelectorAll('[data-t]')) {
     const value = TEXTOS[node.dataset.t];
@@ -285,6 +293,10 @@
   }
 
   $('#set-custom').addEventListener('change', (e) => act('settings:update', { playerQuestions: e.target.checked }));
+  // Modo de jogo: "Turma" (3 a 12) ou "Duelo" (2).
+  $$('#set-mode button').forEach((b) => b.addEventListener('click', () => {
+    if (state && state.settings.mode !== b.dataset.mode) act('settings:update', { mode: b.dataset.mode });
+  }));
 
   // Como nos palpites: mostra como o número vai ser lido, ou o erro por baixo do campo.
   function checkCustomAnswer(showError) {
@@ -546,6 +558,75 @@
     if (atEnd || scrollToEnd) list.scrollTop = list.scrollHeight;
   }
 
+  // --- Duelo (2 jogadores) ----------------------------------------------------
+  // Marcador sempre à vista durante o jogo ("Ana 3 – 2 Bruno") e anúncio no início, com os
+  // dois bonecos frente a frente. state.duel = { ids: [a, b], stats } (só no modo Duelo).
+  const DUEL_PHASES = new Set(['answering', 'voting', 'reveal', 'tiebreak', 'tiebreak-reveal']);
+  // Pontos no marcador: durante a revelação, os desta ronda só entram no último passo (os
+  // pontos), como na pauta; antes disso ainda não se sabe quem ganhou.
+  function duelScore(id) {
+    const p = player(id);
+    if (!p) return 0;
+    const r = state.result;
+    const pending = state.phase === 'reveal' && r && r.step < r.steps ? (r.points[id] || 0) : 0;
+    return p.score - pending;
+  }
+  let duelBarKey = '';
+  function renderDuelBar() {
+    const bar = $('#duel-bar');
+    const show = Boolean(state && state.duel && DUEL_PHASES.has(state.phase));
+    bar.hidden = !show;
+    if (!show) { duelBarKey = ''; return; }
+    const [a, b] = state.duel.ids.map(player);
+    if (!a || !b) { bar.hidden = true; return; }
+    const sa = duelScore(a.id);
+    const sb = duelScore(b.id);
+    const key = JSON.stringify([state.me, a.id, b.id, a.name, b.name, a.connected, b.connected, a.character, b.character, sa, sb]);
+    if (key === duelBarKey) return;
+    const before = duelBarKey ? JSON.parse(duelBarKey) : null;
+    duelBarKey = key;
+    // O número que acabou de subir dá um pulinho.
+    const bump = (i, s) => (before && before[1] === a.id && before[i] !== s && !reducedMotion() ? 'bump' : '');
+    bar.replaceChildren(
+      el('span', { class: `duel-side left${a.id === state.me ? ' me' : ''}` }, [avatar(a, 's'), el('span', { class: 'duel-name', text: a.name })]),
+      el('span', { class: 'duel-score' }, [el('b', { class: bump(9, sa), text: String(sa) }), el('span', { text: '–' }), el('b', { class: bump(10, sb), text: String(sb) })]),
+      el('span', { class: `duel-side right${b.id === state.me ? ' me' : ''}` }, [el('span', { class: 'duel-name', text: b.name }), avatar(b, 's')]),
+    );
+    bar.setAttribute('aria-label', `Duelo: ${a.name} ${sa}, ${b.name} ${sb}`);
+  }
+
+  // Anúncio "Duelo! Ana vs Bruno" na primeira pergunta de cada jogo (uma vez; toca para fechar).
+  let duelIntroKey = null;
+  let duelIntroTimer = null;
+  function closeDuelIntro() {
+    clearTimeout(duelIntroTimer);
+    $('#duel-intro').hidden = true;
+  }
+  $('#duel-intro').addEventListener('click', closeDuelIntro);
+  function renderDuelIntro() {
+    if (!state || !state.duel || state.phase !== 'answering' || state.round !== 1) {
+      if (!$('#duel-intro').hidden && (!state || state.phase !== 'answering')) closeDuelIntro();
+      return;
+    }
+    const key = `${state.code}-${state.gameNumber}`;
+    if (duelIntroKey === key) return;
+    duelIntroKey = key;
+    const [a, b] = state.duel.ids.map(player);
+    if (!a || !b) return;
+    const fighter = (p, side) => el('div', { class: `duel-fighter ${side}` }, [
+      window.drawCharacter(p, 'parado', { size: 128 }),
+      el('span', { class: 'duel-fighter-name', text: p.name }),
+    ]);
+    $('#duel-intro').replaceChildren(el('div', { class: 'duel-intro-box' }, [
+      el('p', { class: 'duel-intro-title', text: TEXTOS.duelo }),
+      el('div', { class: 'duel-face-off' }, [fighter(a, 'left'), el('span', { class: 'duel-vs', text: 'vs' }), fighter(b, 'right')]),
+      el('p', { class: 'duel-intro-names', text: `${a.name} vs ${b.name}` }),
+    ]));
+    $('#duel-intro').hidden = false;
+    clearTimeout(duelIntroTimer);
+    duelIntroTimer = setTimeout(closeDuelIntro, 2800);
+  }
+
   // --- Desenho ------------------------------------------------------------
 
   const SCREENS = {
@@ -614,6 +695,10 @@
     deadline = state && state.remainingMs != null ? Date.now() + state.remainingMs : null;
     renderTopbar();
     renderChat();
+    renderDuelBar();
+    renderDuelIntro();
+    // No duelo, a "Média da turma" das pautas não faz sentido.
+    $$('.grades-avg').forEach((n) => { n.hidden = Boolean(state && state.settings && state.settings.mode === 'duelo'); });
     tick();
 
     // Cada pergunta (ronda normal ou desempate) começa com a caixa de resposta limpa.
@@ -746,6 +831,19 @@
     renderQr();
 
     const host = isHost();
+    // Modo de jogo. No duelo não há votação nem perguntas dos jogadores: essas regras somem.
+    const duel = state.settings.mode === 'duelo';
+    $$('#set-mode button').forEach((b) => {
+      const on = b.dataset.mode === state.settings.mode;
+      b.classList.toggle('on', on);
+      b.setAttribute('aria-checked', String(on));
+      b.disabled = !host;
+    });
+    $('#vote-setting').hidden = duel;
+    $('#custom-setting').hidden = duel;
+    const tooMany = duel && online > 2;
+    $('#mode-note').hidden = !tooMany;
+    if (tooMany) $('#mode-note').textContent = TEXTOS.duelSoDois(online);
     $('#set-custom').checked = custom;
     $('#set-custom').disabled = !host;
     renderCustomForm(custom);
@@ -779,7 +877,7 @@
     // Jogadores ligados ainda não prontos (os desligados não contam; o anfitrião está sempre).
     const waiting = state.players.filter((p) => p.connected && !p.ready).map((p) => p.name);
     $('#btn-start').hidden = !host;
-    $('#btn-start').disabled = missing > 0 || noQuestion.length > 0 || waiting.length > 0;
+    $('#btn-start').disabled = missing > 0 || tooMany || noQuestion.length > 0 || waiting.length > 0;
     $('#btn-start').textContent = TEXTOS.comecarAula;
 
     // "Estou pronto" (todos menos o anfitrião). No modo das perguntas dos jogadores, só depois
@@ -795,7 +893,9 @@
     const waitingText = waiting.length === 1
       ? TEXTOS.faltaPronto(waiting[0])
       : TEXTOS.faltamProntos(waiting.length, waiting.join(', '));
-    $('#lobby-hint').textContent = missing > 0
+    $('#lobby-hint').textContent = tooMany ? TEXTOS.duelSoDois(online)
+      : duel && missing > 0 ? TEXTOS.duelFalta
+      : missing > 0
       ? `${missing === 1 ? 'Falta 1 jogador' : `Faltam ${missing} jogadores`} para começar (mínimo ${state.minPlayers}).`
       : noQuestion.length ? `Falta a pergunta de: ${noQuestion.join(', ')}.`
       : waiting.length ? (host || meReady ? waitingText : TEXTOS.carregaPresente)
@@ -1539,7 +1639,7 @@
     const showCorrect = r.step > n;
     const showVotes = r.voting && r.step > n + 1;
     const showPoints = r.step >= r.steps;
-    $('#rev-novote').hidden = r.voting || n === 0;
+    $('#rev-novote').hidden = r.voting || n === 0 || Boolean(state.duel); // no duelo nunca há votação
 
     $('#rev-numbers').hidden = isMap;
     $('#rev-map').hidden = !isMap;
@@ -1702,6 +1802,41 @@
     }));
   }
 
+  // Fim do duelo: o vencedor em destaque, a festejar, e o outro mais pequeno e triste (num
+  // empate, os dois a festejar); "Ana ganha o duelo 7–5!" e o resumo dos dois, em vez do quadro
+  // de honra da turma.
+  function renderDuelEnd() {
+    const pair = state.duel.ids.map(player).filter(Boolean);
+    const first = standingGroups()[0];
+    const tie = first.length > 1 || pair.length < 2;
+    const winner = tie ? null : first[0];
+    const loser = winner && pair.find((p) => p.id !== winner.id);
+    const stage = $('#end-stage');
+    const stageKey = JSON.stringify(['duelo', winner && winner.id, pair.map((p) => [p.id, p.character])]);
+    if (stage.dataset.key !== stageKey) {
+      stage.dataset.key = stageKey;
+      stage.replaceChildren(...(winner
+        ? [window.drawCharacter(winner, 'festejar', { size: 140, withPet: true }), window.drawCharacter(loser, 'triste', { size: 92 })]
+        : pair.map((p) => window.drawCharacter(p, 'festejar', { size: 120, withPet: true }))));
+    }
+    if (winner) {
+      const [w, l] = [winner.score, loser.score];
+      $('#end-winner').textContent = w === l ? TEXTOS.duelDesempate(winner.name, w, l) : TEXTOS.duelGanha(winner.name, w, l);
+    } else {
+      $('#end-winner').textContent = TEXTOS.duelEmpate(pair[0] ? pair[0].score : 0, pair[1] ? pair[1].score : 0);
+    }
+    const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    $('#end-duel').replaceChildren(...pair.map((p) => {
+      const s = state.duel.stats[p.id] || { won: 0, exact: 0 };
+      return el('div', { class: `duel-card${winner && winner.id === p.id ? ' win' : ''}` }, [
+        avatar(p, 'm'),
+        el('b', { class: 'duel-card-name', text: p.name }),
+        el('span', { text: `${plural(s.won, 'ronda ganha', 'rondas ganhas')}` }),
+        el('span', { text: `${plural(s.exact, 'em cheio', 'em cheio')}` }),
+      ]);
+    }));
+  }
+
   function renderEnd() {
     // A classificação final só se redesenha se mudar alguma coisa (no fim chegam atualizações
     // por outros motivos, ex.: alguém sai ou volta a ligar-se).
@@ -1712,20 +1847,26 @@
       scoresBox.dataset.key = scoresKey;
       renderScores('#end-scores', { size: 'l' });
     }
-    // Quem ganhou a festejar, com o seu festejo e o animal (só se redesenha se mudar, para a
-    // animação não recomeçar a cada atualização).
-    const top = standingGroups()[0].slice(0, 3);
-    const stage = $('#end-stage');
-    const stageKey = JSON.stringify(top.map((p) => [p.id, p.character]));
-    if (stage.dataset.key !== stageKey) {
-      stage.dataset.key = stageKey;
-      const size = top.length > 2 ? 104 : 132;
-      stage.replaceChildren(...top.map((p) => window.drawCharacter(p, 'festejar', { size, withPet: true })));
+    $('.end-title').textContent = state.duel ? TEXTOS.fimDuelo : TEXTOS.toqueSaida;
+    $('#end-duel').hidden = !state.duel;
+    if (state.duel) {
+      renderDuelEnd();
+    } else {
+      // Quem ganhou a festejar, com o seu festejo e o animal (só se redesenha se mudar, para a
+      // animação não recomeçar a cada atualização).
+      const top = standingGroups()[0].slice(0, 3);
+      const stage = $('#end-stage');
+      const stageKey = JSON.stringify(top.map((p) => [p.id, p.character]));
+      if (stage.dataset.key !== stageKey) {
+        stage.dataset.key = stageKey;
+        const size = top.length > 2 ? 104 : 132;
+        stage.replaceChildren(...top.map((p) => window.drawCharacter(p, 'festejar', { size, withPet: true })));
+      }
+      const winners = standingGroups()[0].map((p) => p.name);
+      $('#end-winner').textContent = winners.length === 1
+        ? TEXTOS.ganhou(winners[0])
+        : TEXTOS.empate(winners.slice(0, -1).join(', '), winners[winners.length - 1]);
     }
-    const winners = standingGroups()[0].map((p) => p.name);
-    $('#end-winner').textContent = winners.length === 1
-      ? TEXTOS.ganhou(winners[0])
-      : TEXTOS.empate(winners.slice(0, -1).join(', '), winners[winners.length - 1]);
     renderAwards();
     $('#btn-again').hidden = !isHost();
     $('#end-hint').textContent = isHost() ? '' : 'O anfitrião pode começar um novo jogo.';

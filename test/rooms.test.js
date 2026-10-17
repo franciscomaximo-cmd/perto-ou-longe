@@ -146,7 +146,7 @@ test('só o anfitrião começa e configura', () => {
   assert.throws(() => startGame(room, ids[1]), /anfitrião/);
   assert.throws(() => room.updateSettings(ids[1], { answerTime: 30 }), /anfitrião/);
   room.updateSettings(ids[0], { answerTime: 30, voteTime: 5 });
-  assert.deepEqual(room.settings, { rounds: DEFAULT_ROUNDS, answerTime: 30, voteTime: 10, categories: [], playerQuestions: false });
+  assert.deepEqual(room.settings, { mode: 'turma', rounds: DEFAULT_ROUNDS, answerTime: 30, voteTime: 10, categories: [], playerQuestions: false });
 });
 
 test('clampRounds: entre 3 e 30, 10 por defeito', () => {
@@ -984,4 +984,127 @@ test('chat: mensagens automáticas, só as últimas 50, e fechado durante o jogo
   assert.equal(room.stateFor(rui).chat, null);
   assert.throws(() => room.chatSend(rui, 'psst', 999999), /só está aberto/);
   room.destroy();
+});
+// --- Modo Duelo (2 jogadores) -------------------------------------------------------------------
+
+function duelSetup(names = ['Ana', 'Rui']) {
+  const { room, ids } = setup(names);
+  room.updateSettings(ids[0], { mode: 'duelo' });
+  for (const p of room.players.values()) p.ready = true;
+  return { room, ids };
+}
+// Os dois respondem: a revelação começa logo (sem votação).
+function duelRound(room, [a, b], va, vb) {
+  room.current.question = NUMBER_QUESTION; // resposta certa: 206
+  room.submitAnswer(a, va);
+  room.submitAnswer(b, vb);
+}
+
+test('duelo: começa só com exatamente 2 jogadores ligados e prontos', () => {
+  const { MODES } = require('../server/rooms');
+  assert.deepEqual(MODES, ['turma', 'duelo']);
+  // Em "Turma", 2 jogadores não chegam.
+  const two = setup(['Ana', 'Rui']);
+  for (const p of two.room.players.values()) p.ready = true;
+  assert.throws(() => two.room.startGame(two.ids[0]), /pelo menos 3/);
+  two.room.updateSettings(two.ids[0], { mode: 'duelo' });
+  assert.equal(two.room.stateFor(two.ids[1]).settings.mode, 'duelo');
+  assert.equal(two.room.stateFor(two.ids[1]).minPlayers, 2);
+  assert.throws(() => two.room.startGame(two.ids[0]), /pronto/, 'mudar as regras tira o "pronto"');
+  for (const p of two.room.players.values()) p.ready = true;
+  two.room.startGame(two.ids[0]);
+  assert.equal(two.room.phase, 'answering');
+  two.room.destroy();
+  // Sozinho: falta o adversário.
+  const one = setup(['Ana']);
+  one.room.updateSettings(one.ids[0], { mode: 'duelo' });
+  assert.throws(() => one.room.startGame(one.ids[0]), /Falta um adversário/);
+  one.room.destroy();
+  // Um terceiro pode entrar na sala, mas o duelo não começa (o anfitrião pode mudar para Turma).
+  const three = duelSetup(['Ana', 'Rui', 'Eva']);
+  assert.throws(() => three.room.startGame(three.ids[0]), /só para 2 jogadores \(estão 3 ligados\)/);
+  three.room.updateSettings(three.ids[0], { mode: 'turma' });
+  for (const p of three.room.players.values()) p.ready = true;
+  three.room.startGame(three.ids[0]);
+  three.room.destroy();
+  // Um terceiro desligado não conta e não fica na pauta do duelo.
+  const away = duelSetup(['Ana', 'Rui', 'Eva']);
+  away.room.disconnect(away.ids[2], 'socket-2');
+  away.room.startGame(away.ids[0]);
+  assert.deepEqual([...away.room.players.keys()], away.ids.slice(0, 2));
+  assert.deepEqual(away.room.stateFor(away.ids[0]).duel.ids, away.ids.slice(0, 2));
+  away.room.destroy();
+  // Modo desconhecido volta a "Turma"; no duelo não há perguntas dos jogadores.
+  const odd = setup();
+  odd.room.updateSettings(odd.ids[0], { mode: 'batalha' });
+  assert.equal(odd.room.settings.mode, 'turma');
+  odd.room.updateSettings(odd.ids[0], { playerQuestions: true });
+  odd.room.updateSettings(odd.ids[0], { mode: 'duelo' });
+  assert.equal(odd.room.settings.playerQuestions, false);
+  odd.room.updateSettings(odd.ids[0], { playerQuestions: true });
+  assert.equal(odd.room.settings.playerQuestions, false);
+  odd.room.destroy();
+});
+
+test('duelo: sem fase de votação; pontos como no modo normal (1, em cheio 2, empate para os dois)', () => {
+  const { room, ids } = duelSetup();
+  const [ana, rui] = ids;
+  room.startGame(ana);
+  // Ana mais perto: 1 ponto; logo a seguir às respostas vem a revelação.
+  duelRound(room, ids, 200, 100);
+  assert.equal(room.phase, 'reveal');
+  const r1 = room.stateFor(ana).result;
+  assert.equal(r1.voting, false);
+  assert.deepEqual(r1.points, { [ana]: 1 });
+  assert.throws(() => room.submitVote(rui, ana), /Já não é possível votar/);
+  room.nextQuestion(ana);
+  // Rui em cheio: 2 pontos.
+  duelRound(room, ids, 300, 206);
+  assert.equal(room.phase, 'reveal');
+  assert.deepEqual(room.stateFor(ana).result.points, { [rui]: 2 });
+  room.nextQuestion(ana);
+  // Igualmente perto (um por baixo, outro por cima): ganham os dois.
+  duelRound(room, ids, 196, 216);
+  assert.deepEqual(room.stateFor(ana).result.points, { [ana]: 1, [rui]: 1 });
+  assert.deepEqual(room.stateFor(ana).result.closest.sort(), [ana, rui].sort());
+  // Marcador e estatísticas do duelo.
+  assert.deepEqual(room.players.get(ana).score, 2);
+  assert.deepEqual(room.players.get(rui).score, 3);
+  assert.deepEqual(room.stateFor(rui).duel, { ids, stats: { [ana]: { won: 2, exact: 0 }, [rui]: { won: 2, exact: 1 } } });
+  room.destroy();
+});
+
+test('duelo: empate no fim vai ao desempate; ecrã final sem o quadro de honra da turma', () => {
+  const { room, ids } = duelSetup();
+  const [ana, rui] = ids;
+  room.updateSettings(ana, { rounds: 3 });
+  for (const p of room.players.values()) p.ready = true;
+  room.startGame(ana);
+  for (let i = 0; i < 3; i++) {
+    duelRound(room, ids, 200, 212); // os dois a 6: empate em todas as rondas
+    room.nextQuestion(ana);
+  }
+  assert.equal(room.phase, 'tiebreak', '3–3: desempate');
+  assert.deepEqual(room.stateFor(ana).tiebreak.ids.sort(), [ana, rui].sort());
+  const q = room.tiebreak.question;
+  room.submitAnswer(ana, q.answer);
+  room.submitAnswer(rui, q.answer + 1000);
+  assert.equal(room.phase, 'tiebreak-reveal');
+  assert.equal(room.tiebreakWinner, ana);
+  room.nextQuestion(ana);
+  assert.equal(room.phase, 'end');
+  const end = room.stateFor(rui);
+  assert.deepEqual(end.standings, [[ana], [rui]]);
+  assert.deepEqual(end.awards, [], 'sem prémios de turma');
+  assert.deepEqual(end.duel.stats, { [ana]: { won: 3, exact: 0 }, [rui]: { won: 3, exact: 0 } });
+  // Com "Turma", os prémios continuam lá.
+  room.destroy();
+});
+
+test('duelo: os temas de revelação com 2 jogadores (vencedor o melhor, o outro o pior; empate: os dois)', () => {
+  const { presentationOf } = require('../public/reveal/presentation');
+  const two = presentationOf([{ id: 'a', precision: 0.03 }, { id: 'b', precision: 0.5 }], { closest: ['a'], farthest: ['b'], exact: [] });
+  assert.deepEqual([two.a.level, two.a.winner, two.b.level, two.b.farthest], [0, true, 1, true]);
+  const tie = presentationOf([{ id: 'a', precision: 0.03 }, { id: 'b', precision: 0.03 }], { closest: ['a', 'b'], farthest: ['a', 'b'], exact: [] });
+  assert.deepEqual([tie.a.level, tie.a.winner, tie.b.level, tie.b.winner], [0, true, 0, true]);
 });

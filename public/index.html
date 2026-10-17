@@ -27,7 +27,12 @@
       <button id="tb-chat" type="button" class="icon-btn chat-btn" aria-haspopup="dialog" aria-label="Abrir o chat" hidden>💬 Chat<span id="tb-chat-count" class="chat-count" hidden></span></button>
       <button id="tb-sound" type="button" class="icon-btn" aria-pressed="true" aria-label="Som ligado">🔊</button>
     </span>
+    <!-- Duelo: o marcador, sempre à vista durante o jogo ("Ana 3 – 2 Bruno"). -->
+    <div id="duel-bar" class="duel-bar" role="status" aria-live="polite" hidden></div>
   </header>
+
+  <!-- Duelo: anúncio no início ("Duelo! Ana vs Bruno", com os bonecos frente a frente). -->
+  <div id="duel-intro" class="duel-intro" role="dialog" aria-label="Início do duelo" hidden></div>
 
   <main>
     <!-- Entrada -->
@@ -88,6 +93,8 @@
           <li>Com as perguntas dos jogadores ligadas (mínimo 4 jogadores), cada um escreve uma pergunta: quando sai a tua, não respondes, mas votas.</li>
           <li>No fim há prémios para o mais certeiro, o mais longe da realidade e quem melhor leu os outros.</li>
         </ol>
+        <h3 class="rules-sub">⚔️ Duelo (2 jogadores)</h3>
+        <p>O anfitrião escolhe o modo «Duelo» nas regras da aula: um contra um, sem votação. Em cada pergunta, quem ficar mais perto ganha 1 ponto (2 em cheio); se ficarem igualmente perto, ganham os dois. Se acabar empatado, há desempate.</p>
       </details>
     </section>
 
@@ -124,6 +131,14 @@
 
       <div class="card worksheet paper">
         <h2 data-t="regrasAula">Regras da aula</h2>
+        <div class="field-group">
+          <span class="group-title">Modo de jogo</span>
+          <div id="set-mode" class="chips mode-chips" role="radiogroup" aria-label="Modo de jogo">
+            <button type="button" role="radio" data-mode="turma">🏫 Turma <small>3 a 12 jogadores</small></button>
+            <button type="button" role="radio" data-mode="duelo">⚔️ Duelo <small>2 jogadores</small></button>
+          </div>
+          <p id="mode-note" class="warn" hidden></p>
+        </div>
         <label class="slider">
           <span>Número de perguntas <output id="out-rounds"></output></span>
           <input type="range" id="set-rounds" min="3" max="30" step="1">
@@ -133,7 +148,7 @@
           <span>Tempo para responder <output id="out-answer"></output></span>
           <input type="range" id="set-answer" min="5" max="180" step="5">
         </label>
-        <label class="slider">
+        <label id="vote-setting" class="slider">
           <span>Tempo para votar <output id="out-vote"></output></span>
           <input type="range" id="set-vote" min="5" max="180" step="5">
         </label>
@@ -142,7 +157,7 @@
           <div id="set-cats" class="chips"></div>
           <p id="cats-warning" class="warn" hidden></p>
         </div>
-        <label class="switch">
+        <label id="custom-setting" class="switch">
           <span>
             <b>Perguntas dos jogadores</b>
             <small>Cada um escreve uma pergunta antes de começar (mínimo 4 jogadores).</small>
@@ -320,6 +335,8 @@
       <!-- Quem ganhou, em grande, a festejar (com o animal de estimação). -->
       <div id="end-stage" class="end-stage" aria-hidden="true"></div>
       <p id="end-winner" class="winner"></p>
+      <!-- Duelo: o resumo dos dois (rondas ganhas e "em cheio"), em vez do quadro de honra. -->
+      <div id="end-duel" class="duel-summary paper" hidden></div>
       <div class="grades paper">
         <h3 class="grades-title" data-t="pauta">Pauta</h3>
         <ol id="end-scores" class="scores"></ol>

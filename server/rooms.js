@@ -47,6 +47,10 @@ function cleanCategories(list) {
 }
 
 const MIN_PLAYERS = 3;
+// Modos de jogo: "turma" (o normal, 3 a 12 jogadores) e "duelo" (exatamente 2, sem votação e
+// sem perguntas dos jogadores: quem escreve não responde, e sobrava só um).
+const MODES = ['turma', 'duelo'];
+const DUEL_PLAYERS = 2;
 const MIN_ANSWERS_TO_VOTE = 3;
 // Com perguntas dos jogadores, quem escreveu não responde: com 3 jogadores sobravam só 2
 // a responder e cada um só podia votar no outro. Por isso são precisos 4.
@@ -194,7 +198,7 @@ class Room {
     this.notify = notify; // chamado quando o estado muda fora de um pedido de um jogador (temporizadores)
     this.players = new Map();
     this.hostId = null;
-    this.settings = { rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0, categories: [], playerQuestions: false };
+    this.settings = { mode: 'turma', rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0, categories: [], playerQuestions: false };
     this.customQuestions = new Map(); // id do autor -> pergunta escrita no lobby
     this.rulesVersion = 0; // sobe quando o anfitrião muda a configuração (aviso nos clientes)
     this.kicked = new Set(); // ids expulsos: não voltam a entrar com a sessão guardada
@@ -328,11 +332,14 @@ class Room {
     this.requireHost(playerId);
     if (this.phase !== 'lobby') throw new GameError('Só podes mudar a configuração antes de começar.');
     const before = JSON.stringify(this.settings);
+    if (settings.mode !== undefined) this.settings.mode = MODES.includes(settings.mode) ? settings.mode : 'turma';
     if (settings.rounds !== undefined) this.settings.rounds = clampRounds(settings.rounds);
     if (settings.answerTime !== undefined) this.settings.answerTime = clampTime(settings.answerTime);
     if (settings.voteTime !== undefined) this.settings.voteTime = clampTime(settings.voteTime);
     if (settings.categories !== undefined) this.settings.categories = cleanCategories(settings.categories);
     if (settings.playerQuestions !== undefined) this.settings.playerQuestions = Boolean(settings.playerQuestions);
+    // No duelo não há perguntas dos jogadores (com 2, quem escreveu ficava sem adversário).
+    if (this.isDuel()) this.settings.playerQuestions = false;
     // Regras novas: todos voltam a "não pronto" (ninguém começa sem as ver) e os clientes
     // mostram "O anfitrião mudou as regras" (rulesVersion sobe).
     if (JSON.stringify(this.settings) !== before) {
@@ -462,7 +469,12 @@ class Room {
     this.touch();
   }
 
+  isDuel() {
+    return this.settings.mode === 'duelo';
+  }
+
   minPlayers() {
+    if (this.isDuel()) return DUEL_PLAYERS;
     return this.settings.playerQuestions ? MIN_PLAYERS_WITH_CUSTOM : MIN_PLAYERS;
   }
 
@@ -509,6 +521,10 @@ class Room {
     this.requireHost(playerId);
     if (this.phase !== 'lobby') throw new GameError('O jogo já começou.');
     const online = this.connectedPlayers();
+    if (this.isDuel() && online.length < DUEL_PLAYERS) throw new GameError('Falta um adversário: o duelo é para 2 jogadores.');
+    if (this.isDuel() && online.length > DUEL_PLAYERS) {
+      throw new GameError(`O duelo é só para 2 jogadores (estão ${online.length} ligados). Muda para «Turma» ou fica só com 2.`);
+    }
     if (online.length < this.minPlayers()) {
       throw new GameError(this.settings.playerQuestions
         ? `Com perguntas dos jogadores são precisos pelo menos ${MIN_PLAYERS_WITH_CUSTOM} jogadores ligados.`
@@ -523,6 +539,11 @@ class Room {
       throw new GameError(waiting.length === 1
         ? `Falta 1 jogador ficar pronto: ${waiting[0]}.`
         : `Faltam ${waiting.length} jogadores ficarem prontos: ${waiting.join(', ')}.`);
+    }
+    // No duelo jogam só os 2 ligados: quem está na sala mas desligado sai (senão aparecia na
+    // pauta com 0 pontos, como um terceiro jogador).
+    if (this.isDuel()) {
+      for (const p of [...this.players.values()]) if (!p.connected) this.players.delete(p.id);
     }
     for (const p of this.players.values()) p.score = 0;
     this.stats = new Map();
@@ -665,8 +686,8 @@ class Room {
   endAnswering() {
     if (this.phase !== 'answering') return;
     // Com menos de 3 respostas a votação não faz sentido (com 2, cada um só podia votar
-    // no outro): revela logo, sem pontos de voto nesta ronda.
-    if (this.current.answers.size < MIN_ANSWERS_TO_VOTE) {
+    // no outro): revela logo, sem pontos de voto nesta ronda. No duelo nunca há votação.
+    if (this.isDuel() || this.current.answers.size < MIN_ANSWERS_TO_VOTE) {
       this.reveal();
       return;
     }
@@ -751,8 +772,20 @@ class Room {
   // --- Estatísticas e prémios ---------------------------------------------
 
   statsOf(id) {
-    if (!this.stats.has(id)) this.stats.set(id, { closest: 0, farthest: 0, correctVotes: 0, errorSum: 0, answered: 0 });
+    if (!this.stats.has(id)) this.stats.set(id, { closest: 0, exact: 0, farthest: 0, correctVotes: 0, errorSum: 0, answered: 0 });
     return this.stats.get(id);
+  }
+
+  // Duelo: os dois jogadores (pela ordem em que entraram) e, de cada um, as rondas ganhas e os
+  // "em cheio" (para o ecrã final). Fora do duelo, null.
+  duelInfo() {
+    if (!this.isDuel() || this.phase === 'lobby') return null;
+    const ids = [...this.players.keys()].slice(0, DUEL_PLAYERS);
+    const stats = Object.fromEntries(ids.map((id) => {
+      const s = this.stats.get(id) || {};
+      return [id, { won: s.closest || 0, exact: s.exact || 0 }];
+    }));
+    return { ids, stats };
   }
 
   recordStats(question, result, answerCount) {
@@ -762,6 +795,7 @@ class Room {
       s.errorSum += relativeError(question, dist);
     }
     for (const id of result.closest) this.statsOf(id).closest += 1;
+    for (const id of result.exact) this.statsOf(id).exact += 1;
     // Com uma só resposta, essa pessoa seria ao mesmo tempo a mais perto e a mais longe.
     if (answerCount >= 2) for (const id of result.farthest) this.statsOf(id).farthest += 1;
     for (const id of result.correctVoters) this.statsOf(id).correctVotes += 1;
@@ -1028,7 +1062,9 @@ class Room {
         .filter((ids) => ids.length);
       state.tiebreakPending = this.standings.some((t) => !t.settled);
     }
-    if (this.phase === 'end') state.awards = this.awards();
+    // Duelo: o marcador e o ecrã final próprio (sem o "Quadro de honra" da turma).
+    state.duel = this.duelInfo();
+    if (this.phase === 'end') state.awards = this.isDuel() ? [] : this.awards();
     return state;
   }
 }
@@ -1078,4 +1114,5 @@ module.exports = {
   CHAT_MAX_LENGTH,
   CHAT_GAP_MS,
   CHAT_KEEP,
+  MODES,
 };

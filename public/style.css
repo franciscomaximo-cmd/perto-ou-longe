@@ -400,6 +400,8 @@ textarea:focus { border-color: var(--accent); }
 /* Faixa por cima do cenário, sempre reservada (sem saltos de layout): na vez de cada jogador, a
    legenda "tipo televisão" com o palpite; no fim, o resumo "Mais perto / Mais longe". */
 .reveal-stage.has-captions { padding-top: 54px; }
+/* No fim (a faixa ficou vazia), a faixa encolhe e o cenário sobe, sem deixar espaço vazio. */
+.reveal-stage.captions-closing { transition: padding-top .35s ease; }
 .rv-caption {
   position: absolute; top: 0; left: 0; right: 0; height: 50px; z-index: 3;
   display: flex; justify-content: center; align-items: center; pointer-events: none;
@@ -444,6 +446,7 @@ textarea:focus { border-color: var(--accent); }
 @keyframes rv-mark-in { from { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) {
   .rv-caption-box.in, .rv-mark.in { animation: none; }
+  .reveal-stage.captions-closing { transition: none; }
   .rv-summary { animation: rv-summary-still 2.3s steps(1, end) forwards; }
   @keyframes rv-summary-still { 0% { opacity: 1; } 100% { opacity: 0; } }
 }

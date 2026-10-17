@@ -79,6 +79,7 @@
     // de o tema montar a cena (fica por cima dela).
     function start(r, theme) {
       stop();
+      stage.classList.remove('captions-closing');
       stage.classList.add('has-captions');
       const caption = el('div', { class: 'rv-caption', 'aria-live': 'polite' });
       const layer = el('div', { class: 'rv-marks', 'aria-hidden': 'true' });
@@ -141,7 +142,7 @@
       c.caption.replaceChildren();
       for (const id of c.revealed) showLabel(id);
       layout();
-      if (summary) showSummary();
+      if (!summary || !showSummary()) collapse();
       // As marcas ainda podem mexer um pouco (festejos); depois disso, já não é preciso seguir.
       later(() => clearInterval(c.interval), 2500);
     }
@@ -151,13 +152,31 @@
       const who = (ids) => ids.filter((id) => r.players[id]).map((id) => `${r.players[id].name} (${fmt(r.answers[id])})`).join(', ');
       const near = r.closest.filter((id) => r.players[id]);
       const far = r.farthest.filter((id) => r.players[id] && !r.closest.includes(id));
-      if (!near.length) return;
+      if (!near.length) return false;
       const box = el('div', { class: `rv-summary${reducedMotion() ? ' still' : ''}` }, [
         el('div', { class: 'near' }, [el('b', { text: 'Mais perto: ' }), who(near)]),
         far.length ? el('div', { class: 'far' }, [el('b', { text: 'Mais longe: ' }), who(far)]) : null,
       ]);
       c.caption.replaceChildren(box);
-      later(() => box.remove(), SUMMARY_MS);
+      later(() => { box.remove(); collapse(); }, SUMMARY_MS);
+      return true;
+    }
+
+    // Fim da revelação: a faixa de cima já não tem nada (o resumo saiu, ou não houve resumo).
+    // Encolhe-se, para não ficar um espaço vazio por cima do cenário; enquanto o cenário sobe,
+    // as etiquetas acompanham-no.
+    function collapse() {
+      if (!c || !stage.classList.contains('has-captions')) return;
+      stage.classList.add('captions-closing');
+      stage.classList.remove('has-captions');
+      const round = c;
+      const end = performance.now() + 500;
+      const follow = () => {
+        if (c !== round) return;
+        layout();
+        if (performance.now() < end) requestAnimationFrame(follow);
+      };
+      requestAnimationFrame(follow);
     }
 
     // Variantes do texto de cada etiqueta, da mais completa para a mais curta.
@@ -331,7 +350,7 @@
 
     function destroy() {
       stop();
-      stage.classList.remove('has-captions');
+      stage.classList.remove('has-captions', 'captions-closing');
     }
 
     return { start, turn, answer, showAll, layout, destroy };

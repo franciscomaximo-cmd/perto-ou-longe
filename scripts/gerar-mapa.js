@@ -7,8 +7,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { feature } = require('topojson-client');
-const world = require('world-atlas/countries-110m.json');
+// (Os mesmos países das contas do servidor: escala 1:110m, mais alguns países pequenos da 1:50m.)
+const { countryFeatures } = require('../server/geo');
 
 const TOP = 84;
 const BOTTOM = -58;
@@ -38,7 +38,7 @@ function ringPaths(ring) {
   return parts.join('');
 }
 
-const paths = feature(world, world.objects.countries).features
+const paths = countryFeatures()
   .filter((f) => f.id !== '010') // Antártida
   .map((f) => {
     const polygons = f.geometry.type === 'Polygon' ? [f.geometry.coordinates] : f.geometry.coordinates;

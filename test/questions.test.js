@@ -37,11 +37,9 @@ test('verificação das perguntas: países-ilha mais pequenos do que o Chipre n�
   assert.match(checkQuestions([map('780', 'Trindade e Tobago')]).join(), /país-ilha demasiado pequeno.*Trindade e Tobago/);
   // Também numa pergunta sobre um sítio concreto.
   assert.match(checkQuestions([map('662', 'Santa Lúcia', { text: 'Onde fica o vulcão Soufrière?' })]).join(), /país-ilha demasiado pequeno/);
-  // Cabo Verde, São Tomé e Príncipe e Malta são exceção (dão erro só por não existirem no mapa).
+  // Cabo Verde, São Tomé e Príncipe e Malta são exceção (e estão no mapa, vindos da escala 1:50m).
   for (const [code, label] of [['132', 'Cabo Verde'], ['678', 'São Tomé e Príncipe'], ['470', 'Malta']]) {
-    const problems = checkQuestions([map(code, label)]).join();
-    assert.doesNotMatch(problems, /país-ilha/);
-    assert.match(problems, /país inexistente no mapa/);
+    assert.deepEqual(checkQuestions([map(code, label)]), [], label);
   }
   // Países-ilha do tamanho do Chipre ou maiores ficam.
   for (const [code, label] of [['196', 'Chipre'], ['388', 'Jamaica'], ['242', 'Fiji'], ['044', 'Bahamas'], ['144', 'Sri Lanka'], ['158', 'Taiwan']]) {

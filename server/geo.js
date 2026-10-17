@@ -5,6 +5,19 @@
 
 const { feature } = require('topojson-client');
 const world = require('world-atlas/countries-110m.json');
+const world50 = require('world-atlas/countries-50m.json');
+
+// Países pequenos que não existem à escala 1:110m mas podem ser resposta de uma pergunta de
+// mapa: vêm da escala 1:50m (mais detalhada). Malta, Cabo Verde e São Tomé e Príncipe.
+const EXTRA_COUNTRIES = ['470', '132', '678'];
+
+// Todos os países do mapa (GeoJSON), na escala 1:110m mais os de EXTRA_COUNTRIES. Também usado
+// por scripts/gerar-mapa.js, para o desenho bater certo com as contas.
+function countryFeatures() {
+  const base = feature(world, world.objects.countries).features;
+  const extra = feature(world50, world50.objects.countries).features.filter((f) => EXTRA_COUNTRIES.includes(f.id));
+  return base.filter((f) => !EXTRA_COUNTRIES.includes(f.id)).concat(extra);
+}
 
 const EARTH_RADIUS_KM = 6371;
 const rad = (deg) => (deg * Math.PI) / 180;
@@ -37,7 +50,7 @@ function unwrapRing(ring) {
 // id ISO numérico (ex.: "586") -> lista de polígonos, cada um com [contorno, ...buracos],
 // com os anéis já desdobrados.
 const COUNTRIES = new Map(
-  feature(world, world.objects.countries).features
+  countryFeatures()
     .filter((f) => f.id)
     .map((f) => [f.id, polygonsOf(f.geometry).map((rings) => rings.map(unwrapRing))]),
 );
@@ -122,4 +135,4 @@ function centerOf(id) {
   return best && { lat: Math.round(best.lat * 100) / 100, lon: Math.round(wrapLon(best.lon) * 100) / 100 };
 }
 
-module.exports = { distanceToCountry, hasCountry, centerOf, haversine };
+module.exports = { distanceToCountry, hasCountry, centerOf, haversine, countryFeatures };

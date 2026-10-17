@@ -69,5 +69,8 @@ O texto da pergunta é montado a partir do artigo: `"o"`/`"a"` dá "Onde fica o 
 dá "Onde ficam as Filipinas?" e `""` (sem artigo) dá "Onde fica Angola?". Um `"note"` opcional
 acrescenta uma explicação entre parênteses ("Onde fica a Geórgia (o país)?").
 O `country` é o código ISO numérico do país, tal como aparece no `world-atlas` (países à escala 1:110m;
-alguns países pequenos, como Malta ou Singapura, não existem a esta escala). Cerca de um quarto das
+alguns países pequenos, como Singapura, não existem a esta escala; Malta, Cabo Verde e São Tomé e
+Príncipe vêm da escala 1:50m, ver `EXTRA_COUNTRIES` em `server/geo.js` e voltar a correr
+`node scripts/gerar-mapa.js`). Os países-ilha mais pequenos do que o Chipre não podem ser resposta
+de uma pergunta de mapa (o `npm run check-questions` dá erro), exceto estes três. Cerca de um quarto das
 perguntas de cada jogo são de mapa; os desempates usam sempre perguntas de números.

@@ -66,3 +66,20 @@ test('ponto de referência dos sítios concretos: usado na revelação e verific
   const bad = { ...kola, point: { lat: 38.7, lon: -9.1 } };
   assert.match(checkQuestions([bad]).join('\n'), /ponto de referência fica a/);
 });
+
+test('Malta, Cabo Verde e São Tomé e Príncipe: estão no mapa (da escala 1:50m) e no sítio certo', () => {
+  const cases = [
+    ['470', { lat: 35.9, lon: 14.51 }, 'Valeta'],
+    ['132', { lat: 14.93, lon: -23.51 }, 'Praia'],
+    ['678', { lat: 0.34, lon: 6.73 }, 'São Tomé'],
+  ];
+  for (const [id, capital, name] of cases) {
+    assert.ok(distanceToCountry(id, capital) <= 5, `${name} fica no país`);
+    assert.equal(distanceToCountry(id, centerOf(id)), 0, `o centro de ${name} fica dentro do país`);
+  }
+  // Distâncias de Lisboa, com a ordem de grandeza certa.
+  const lisboa = { lat: 38.72, lon: -9.14 };
+  assert.ok(Math.abs(distanceToCountry('470', lisboa) - 2080) < 60, 'Lisboa → Malta ~2080 km');
+  assert.ok(Math.abs(distanceToCountry('132', lisboa) - 2780) < 100, 'Lisboa → Cabo Verde ~2780 km');
+  assert.ok(Math.abs(distanceToCountry('678', lisboa) - 4450) < 100, 'Lisboa → São Tomé ~4450 km');
+});

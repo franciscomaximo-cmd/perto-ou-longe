@@ -155,6 +155,9 @@ io.on('connection', (socket) => {
     'player:character': (room, id, p) => room.setCharacter(id, p),
     'player:ready': (room, id, p) => room.setReady(id, p.ready),
     'game:lobby': (room, id) => room.backToLobby(id),
+    // Chat (sala de espera e fim): as mensagens vão no room:state.
+    'chat:send': (room, id, p) => room.chatSend(id, p.text),
+    'chat:mute': (room, id, p) => room.chatMute(id, p.playerId, p.muted),
   };
   for (const [event, action] of Object.entries(actions)) {
     handle(socket, event, (payload) => {

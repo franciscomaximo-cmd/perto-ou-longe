@@ -434,6 +434,118 @@
     layer.append(node);
   });
 
+  // --- Chat da turma (sala de espera e fim do jogo) ----------------------------
+  // As mensagens chegam no room:state, só nestas fases (durante o jogo o chat não existe).
+  // O texto é SEMPRE posto com textContent: nunca é lido como HTML. O contador do botão conta
+  // as mensagens novas dos outros desde a última vez que o chat esteve aberto (as que já lá
+  // estavam quando se entrou na sala não contam como novas).
+  let chatSeen = null; // id da última mensagem já vista
+  let chatRoom = null;
+  let chatSignature = '';
+  const chatIsOpen = () => !$('#chat').hidden;
+
+  function openChat() {
+    $('#chat').hidden = false;
+    renderChat(true);
+    // Só com teclado físico: no telemóvel, o teclado a abrir logo tapava os bilhetes.
+    if (window.matchMedia('(hover: hover)').matches) $('#chat-input').focus();
+  }
+  function closeChat() {
+    if (!chatIsOpen()) return;
+    $('#chat').hidden = true;
+  }
+  $('#tb-chat').addEventListener('click', openChat);
+  $('#chat-close').addEventListener('click', closeChat);
+  $('#chat').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeChat(); });
+  $('#chat').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeChat(); });
+
+  // Por baixo da caixa: quantos caracteres faltam (perto do limite) ou o erro do último envio
+  // (fica no painel: o aviso normal ficava por baixo dele).
+  function updateChatLeft(error = '') {
+    const left = (state && state.chat ? state.chat.maxLength : 200) - [...$('#chat-input').value].length;
+    const note = $('#chat-left');
+    note.classList.toggle('error', Boolean(error));
+    note.textContent = error || (left <= 40 ? `Faltam ${Math.max(0, left)} caracteres` : '');
+  }
+  $('#chat-input').addEventListener('input', () => updateChatLeft());
+  $('#chat-form').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = $('#chat-input').value.trim();
+    if (!text) return;
+    if (!socket.connected) return updateChatLeft('Sem ligação ao servidor.');
+    socket.timeout(10000).emit('chat:send', { text }, (err, res) => {
+      if (err) return updateChatLeft('O servidor não respondeu. Tenta outra vez.');
+      if (!res || !res.ok) return updateChatLeft((res && res.error) || 'Não foi possível enviar.');
+      $('#chat-input').value = '';
+      updateChatLeft();
+    });
+  });
+
+  // Botão do anfitrião para silenciar (ou voltar a deixar escrever) um jogador no chat.
+  function muteButton(id, name, cls = '') {
+    const muted = state.chat.muted.includes(id);
+    return el('button', {
+      type: 'button', class: `chat-mute ${cls}${muted ? ' on' : ''}`, text: muted ? '🔇' : '🔈',
+      'aria-pressed': String(muted),
+      'aria-label': muted ? `Deixar ${name} escrever no chat` : `Silenciar ${name} no chat`,
+      title: muted ? `Deixar ${name} escrever no chat` : `Silenciar ${name} no chat`,
+      onclick: () => act('chat:mute', { playerId: id, muted: !muted }),
+    });
+  }
+
+  function chatItem(m) {
+    if (m.kind === 'info') return el('li', { class: 'chat-info', text: m.text });
+    // Quem escreveu pode já ter saído: o retrato e o nome vêm com a mensagem.
+    const p = player(m.from) || { id: m.from, name: m.name, color: m.color, character: m.character, connected: true };
+    const mine = m.from === state.me;
+    const muted = state.chat.muted.includes(m.from);
+    return el('li', { class: `chat-note${mine ? ' mine' : ''}`, style: `--c:${m.color}` }, [
+      el('div', { class: 'chat-who' }, [
+        window.RevealThemes.kit.avatar(p, 's', { me: mine, host: m.from === state.hostId }),
+        el('span', { class: 'chat-name', text: m.name }),
+        muted ? el('span', { class: 'chat-tag', text: 'silenciado' }) : null,
+        isHost() && !mine && player(m.from) ? muteButton(m.from, m.name) : null,
+      ]),
+      el('p', { class: 'chat-text', text: m.text }),
+    ]);
+  }
+
+  function renderChat(scrollToEnd = false) {
+    const chat = state && state.chat;
+    $('#tb-chat').hidden = !chat;
+    if (!chat) {
+      closeChat();
+      return;
+    }
+    const msgs = chat.messages;
+    const lastId = msgs.length ? msgs[msgs.length - 1].id : 0;
+    if (chatRoom !== state.code) {
+      chatRoom = state.code;
+      chatSeen = lastId; // ao entrar: as recentes veem-se, mas não contam como novas
+      chatSignature = '';
+    }
+    if (chatIsOpen()) chatSeen = lastId;
+    const unread = msgs.filter((m) => m.id > chatSeen && m.kind === 'msg' && m.from !== state.me).length;
+    const count = $('#tb-chat-count');
+    count.hidden = !unread;
+    count.textContent = unread > 9 ? '9+' : String(unread);
+    $('#tb-chat').setAttribute('aria-label', unread ? `Abrir o chat (${unread} ${unread === 1 ? 'mensagem nova' : 'mensagens novas'})` : 'Abrir o chat');
+
+    const mutedMe = chat.muted.includes(state.me);
+    $('#chat-muted').hidden = !mutedMe;
+    $('#chat-input').disabled = mutedMe;
+    $('#chat-send').disabled = mutedMe;
+
+    // Só volta a desenhar os bilhetes quando alguma coisa mudou.
+    const signature = JSON.stringify([state.code, lastId, msgs.length, msgs.length && msgs[msgs.length - 1].at, chat.muted, state.hostId, state.me]);
+    if (signature === chatSignature && !scrollToEnd) return;
+    chatSignature = signature;
+    const list = $('#chat-list');
+    const atEnd = list.scrollHeight - list.scrollTop - list.clientHeight < 60;
+    list.replaceChildren(...(msgs.length ? msgs.map(chatItem) : [el('li', { class: 'chat-info', text: 'Ainda não há bilhetes. Escreve o primeiro!' })]));
+    if (atEnd || scrollToEnd) list.scrollTop = list.scrollHeight;
+  }
+
   // --- Desenho ------------------------------------------------------------
 
   const SCREENS = {
@@ -501,6 +613,7 @@
 
     deadline = state && state.remainingMs != null ? Date.now() + state.remainingMs : null;
     renderTopbar();
+    renderChat();
     tick();
 
     // Cada pergunta (ronda normal ou desempate) começa com a caixa de resposta limpa.
@@ -571,12 +684,13 @@
   }
 
   // Linha de um jogador na sala de espera: estado ("Presente!" / "A arrumar a mochila…"),
-  // a pergunta (no modo "Perguntas dos jogadores") e, para o anfitrião, o botão discreto de
-  // expulsar.
+  // a pergunta (no modo "Perguntas dos jogadores") e, para o anfitrião, os botões discretos de
+  // silenciar no chat e de expulsar.
   function lobbyRow(p, custom) {
     const extras = el('span', { class: 'lobby-extras' }, [
       custom ? el('span', { class: 'state', text: state.customReady.includes(p.id) ? 'pergunta ✓' : 'a escrever…' }) : null,
       p.connected ? el('span', { class: `ready-badge ${p.ready ? 'on' : ''}`, text: p.ready ? TEXTOS.presente : TEXTOS.aArrumar }) : null,
+      isHost() && p.id !== state.me && state.chat ? muteButton(p.id, p.name, 'kick') : null,
       isHost() && p.id !== state.me ? el('button', {
         type: 'button', class: 'kick', 'aria-label': `Expulsar ${p.name}`, title: `Expulsar ${p.name}`, text: '✕',
         onclick: () => askConfirm(`Expulsar ${p.name}?`, 'Expulsar').then((ok) => { if (ok) act('player:kick', { playerId: p.id }); }),

@@ -909,3 +909,79 @@ test('reações: só os 6 emojis, só na revelação, no máximo uma a cada 0,7 
   assert.ok(!JSON.stringify(room.stateFor(ana)).includes('👏'));
   room.destroy();
 });
+// --- Chat (sala de espera e fim do jogo) -------------------------------------------------------
+
+test('chat: texto simples até 200 caracteres (mais longo dá erro), limpo e guardado como texto', () => {
+  const { CHAT_MAX_LENGTH } = require('../server/rooms');
+  const { room, ids } = setup();
+  const [ana, rui] = ids;
+  assert.equal(CHAT_MAX_LENGTH, 200);
+  room.chatSend(ana, 'x'.repeat(200), 1000);
+  assert.throws(() => room.chatSend(rui, 'x'.repeat(201), 1000), /no máximo 200 caracteres/);
+  // Os emojis contam como um carácter cada.
+  room.chatSend(rui, '😂'.repeat(200), 5000);
+  assert.throws(() => room.chatSend(ana, '   ', 9000), /Escreve uma mensagem/);
+  assert.throws(() => room.chatSend(ana, { text: 'olá' }, 9000), /Escreve uma mensagem/, 'só texto');
+  // Quebras de linha e caracteres de controlo viram espaços; o HTML fica como texto (o cliente
+  // mostra-o sempre com textContent).
+  room.chatSend(ana, '  <img src=x onerror=alert(1)>\n\n olá\u0000 \u202E turma  ', 20000);
+  const msgs = room.stateFor(rui).chat.messages.filter((m) => m.kind === 'msg');
+  assert.equal(msgs.at(-1).text, '<img src=x onerror=alert(1)> olá turma');
+  assert.equal(msgs.at(-1).name, 'Ana');
+  assert.equal(msgs.at(-1).from, ana);
+  room.destroy();
+});
+
+test('chat: no máximo uma mensagem a cada 1,5 s por jogador', () => {
+  const { CHAT_GAP_MS } = require('../server/rooms');
+  const { room, ids } = setup();
+  const [ana, rui] = ids;
+  assert.equal(CHAT_GAP_MS, 1500);
+  room.chatSend(ana, 'olá', 1000);
+  assert.throws(() => room.chatSend(ana, 'outra vez', 1000 + CHAT_GAP_MS - 1), /Espera um bocadinho/);
+  room.chatSend(rui, 'eu também posso', 1001); // o limite é por jogador
+  room.chatSend(ana, 'agora já dá', 1000 + CHAT_GAP_MS);
+  assert.deepEqual(room.chat.filter((m) => m.kind === 'msg').map((m) => m.text), ['olá', 'eu também posso', 'agora já dá']);
+  room.destroy();
+});
+
+test('chat: o anfitrião silencia (e volta a deixar escrever); expulsos deixam de poder escrever', () => {
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
+  const [ana, rui, eva, to] = ids;
+  assert.throws(() => room.chatMute(rui, eva, true), /Só o anfitrião/);
+  assert.throws(() => room.chatMute(ana, ana, true), /a ti próprio/);
+  room.chatMute(ana, rui, true);
+  assert.deepEqual(room.stateFor(eva).chat.muted, [rui], 'todos sabem quem está silenciado');
+  assert.throws(() => room.chatSend(rui, 'deixem-me falar', 1000), /silenciou-te/);
+  room.chatSend(eva, 'eu posso', 1000);
+  room.chatMute(ana, rui, false);
+  room.chatSend(rui, 'voltei', 3000);
+  // Expulso: sai da sala e já não consegue escrever.
+  room.kick(ana, to);
+  assert.throws(() => room.chatSend(to, 'ainda estou aqui?', 9000), /Não estás nesta sala/);
+  assert.ok(room.chat.some((m) => m.kind === 'info' && m.text === 'Tó saiu'));
+  room.destroy();
+});
+
+test('chat: mensagens automáticas, só as últimas 50, e fechado durante o jogo', () => {
+  const { CHAT_KEEP } = require('../server/rooms');
+  const { room, ids } = setup(['Ana', 'Rui', 'Eva', 'Tó']);
+  const [ana, rui, eva] = ids;
+  const infos = () => room.chat.filter((m) => m.kind === 'info').map((m) => m.text);
+  assert.deepEqual(infos(), ['Ana entrou na turma', 'Rui entrou na turma', 'Eva entrou na turma', 'Tó entrou na turma']);
+  room.updateSettings(ana, { rounds: 5 });
+  room.updateSettings(ana, { rounds: 6 }); // seguidas: juntam-se numa só
+  assert.equal(infos().filter((t) => t === 'O anfitrião mudou as regras').length, 1);
+  room.leave(eva);
+  assert.equal(infos().at(-1), 'Eva saiu');
+  for (let i = 0; i < 70; i++) room.chatSend(i % 2 ? ana : rui, `mensagem ${i}`, 10000 + i * 1000);
+  assert.equal(room.chat.length, CHAT_KEEP);
+  assert.equal(room.chat.at(-1).text, 'mensagem 69');
+  // Quem entra (ou volta) recebe as recentes no estado.
+  assert.equal(room.stateFor(rui).chat.messages.length, CHAT_KEEP);
+  // Durante o jogo o chat não vai no estado e não aceita mensagens.
+  startWithNumber(room, ana);
+  assert.equal(room.stateFor(rui).chat, null);
+  assert.throws(() => room.chatSend(rui, 'psst', 999999), /só está aberto/);
+  room.destroy();
+});

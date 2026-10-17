@@ -74,6 +74,28 @@ const ROOM_IDLE_MS = 10 * 60_000;
 // public/client.js), no máximo uma por jogador a cada REACTION_GAP_MS. Não ficam guardadas.
 const REACTIONS = ['😂', '😱', '👏', '🤦', '🔥', '🤯'];
 const REACTION_GAP_MS = 700;
+// Chat da sala de espera e do fim do jogo: texto simples (máx. CHAT_MAX_LENGTH caracteres),
+// uma mensagem por jogador a cada CHAT_GAP_MS, e só as últimas CHAT_KEEP mensagens, em
+// memória (desaparecem com a sala).
+const CHAT_MAX_LENGTH = 200;
+const CHAT_GAP_MS = 1500;
+const CHAT_KEEP = 50;
+// Mensagens automáticas iguais seguidas (ex.: o anfitrião a mexer nas regras) juntam-se numa.
+const CHAT_MERGE_MS = 15_000;
+const chatOpen = (phase) => phase === 'lobby' || phase === 'end';
+
+// Texto de uma mensagem do chat: só texto simples numa linha (sem caracteres de controlo nem
+// de mudança de sentido do texto). Devolve o texto limpo ou lança um erro para o jogador.
+function cleanChatText(raw) {
+  if (typeof raw !== 'string') throw new GameError('Escreve uma mensagem.');
+  const text = raw
+    .replace(/[\u0000-\u001f\u007f-\u009f‎‏‪-‮⁦-⁩]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) throw new GameError('Escreve uma mensagem.');
+  if ([...text].length > CHAT_MAX_LENGTH) throw new GameError(`A mensagem tem de ter no máximo ${CHAT_MAX_LENGTH} caracteres.`);
+  return text;
+}
 const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // sem I nem O, para não confundir com 1 e 0
 
 // Erros "esperados", com mensagem para mostrar ao jogador.
@@ -196,6 +218,10 @@ class Room {
     this.hostTimer = null;
     this.lastActivity = Date.now();
     this.lastReaction = new Map(); // id -> hora da última reação aceite (só para o limite)
+    this.chat = []; // últimas CHAT_KEEP mensagens: { id, at, kind: 'msg' | 'info', ... }
+    this.chatSeq = 0;
+    this.lastChat = new Map(); // id -> hora da última mensagem (só para o limite)
+    this.chatMuted = new Set(); // ids que o anfitrião silenciou no chat
   }
 
   touch() {
@@ -230,6 +256,7 @@ class Room {
     };
     this.players.set(player.id, player);
     if (!this.hostId) this.hostId = player.id;
+    this.chatInfo(`${name} entrou na turma`);
     this.touch();
     return player;
   }
@@ -267,6 +294,7 @@ class Room {
 
   leave(playerId) {
     if (!this.players.has(playerId)) return;
+    this.chatInfo(`${this.players.get(playerId).name} saiu`);
     if (this.phase === 'lobby' || this.phase === 'end') {
       this.players.delete(playerId);
       this.customQuestions.delete(playerId);
@@ -310,6 +338,7 @@ class Room {
     if (JSON.stringify(this.settings) !== before) {
       this.resetReady();
       this.rulesVersion += 1;
+      this.chatInfo('O anfitrião mudou as regras');
     }
     this.touch();
   }
@@ -368,9 +397,57 @@ class Room {
     if (!target) throw new GameError('Esse jogador já não está na sala.');
     this.players.delete(targetId);
     this.customQuestions.delete(targetId);
-    this.kicked.add(targetId);
+    this.kicked.add(targetId); // (e, fora da sala, deixa de poder escrever no chat)
+    this.chatInfo(`${target.name} saiu`);
     this.touch();
     return target;
+  }
+
+  // --- Chat (sala de espera e fim do jogo) --------------------------------
+
+  pushChat(message) {
+    this.chatSeq += 1;
+    this.chat.push({ id: this.chatSeq, ...message });
+    if (this.chat.length > CHAT_KEEP) this.chat.splice(0, this.chat.length - CHAT_KEEP);
+  }
+
+  // Mensagem automática, discreta ("Ana entrou na turma"). Se for igual à anterior e recente,
+  // só lhe muda a hora (não enche o chat).
+  chatInfo(text, now = Date.now()) {
+    const last = this.chat[this.chat.length - 1];
+    if (last && last.kind === 'info' && last.text === text && now - last.at < CHAT_MERGE_MS) {
+      last.at = now;
+      return;
+    }
+    this.pushChat({ kind: 'info', at: now, text });
+  }
+
+  // Mensagem de um jogador. Leva o nome, a cor e o boneco de quem escreveu (continuam certos
+  // mesmo que a pessoa saia da sala).
+  chatSend(playerId, raw, now = Date.now()) {
+    const player = this.players.get(playerId);
+    if (!player) throw new GameError('Não estás nesta sala.');
+    if (!chatOpen(this.phase)) throw new GameError('O chat só está aberto na sala de espera e no fim do jogo.');
+    if (this.chatMuted.has(playerId)) throw new GameError('O anfitrião silenciou-te no chat.');
+    const text = cleanChatText(raw);
+    const last = this.lastChat.get(playerId);
+    if (last !== undefined && now - last < CHAT_GAP_MS) throw new GameError('Calma! Espera um bocadinho antes de escreveres outra vez.');
+    this.lastChat.set(playerId, now);
+    this.pushChat({
+      kind: 'msg', at: now, from: playerId, text,
+      name: player.name, color: player.color, character: { ...player.character, scarf: [...player.character.scarf] },
+    });
+    this.touch();
+  }
+
+  // O anfitrião silencia (ou deixa voltar a escrever) um jogador no chat.
+  chatMute(playerId, targetId, muted) {
+    this.requireHost(playerId);
+    if (targetId === playerId) throw new GameError('Não te podes silenciar a ti próprio.');
+    if (!this.players.has(targetId)) throw new GameError('Esse jogador já não está na sala.');
+    if (muted) this.chatMuted.add(targetId);
+    else this.chatMuted.delete(targetId);
+    this.touch();
   }
 
   // Boneco do jogador (cara, roupa, acessórios, festejo): só na sala de espera e só com peças
@@ -894,6 +971,12 @@ class Room {
         color: p.color,
         character: { ...p.character, scarf: [...p.character.scarf] }, // boneco completo, com a cara
       })),
+      // Chat: só na sala de espera e no fim (durante o jogo não se mostra nem se envia).
+      chat: chatOpen(this.phase) ? {
+        messages: this.chat,
+        muted: [...this.chatMuted].filter((id) => this.players.has(id)),
+        maxLength: CHAT_MAX_LENGTH,
+      } : null,
     };
 
     if (cur && this.phase !== 'lobby') {
@@ -992,4 +1075,7 @@ module.exports = {
   DEFAULT_ROUNDS,
   REACTIONS,
   REACTION_GAP_MS,
+  CHAT_MAX_LENGTH,
+  CHAT_GAP_MS,
+  CHAT_KEEP,
 };

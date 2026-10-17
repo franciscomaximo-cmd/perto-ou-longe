@@ -23,6 +23,8 @@
     <span id="tb-round"></span>
     <span class="tb-right">
       <span id="tb-timer" class="pill timer" hidden></span>
+      <!-- Chat (só na sala de espera e no fim): o contador diz quantas mensagens novas há. -->
+      <button id="tb-chat" type="button" class="icon-btn chat-btn" aria-haspopup="dialog" aria-label="Abrir o chat" hidden>💬 Chat<span id="tb-chat-count" class="chat-count" hidden></span></button>
       <button id="tb-sound" type="button" class="icon-btn" aria-pressed="true" aria-label="Som ligado">🔊</button>
     </span>
   </header>
@@ -437,6 +439,26 @@
   </div>
 
   <!-- Confirmação no estilo do jogo (ex.: "Expulsar Ana?"), em vez do confirm() do browser. -->
+  <!-- Chat da turma: bilhetinhos com o retrato e o nome de quem escreveu (client.js). -->
+  <div id="chat" class="sheet chat-sheet" role="dialog" aria-modal="true" aria-labelledby="chat-title" hidden>
+    <div class="sheet-box">
+      <header class="sheet-head">
+        <button id="chat-close" type="button" class="ghost">Fechar</button>
+        <h2 id="chat-title">Bilhetinhos da turma</h2>
+        <span></span>
+      </header>
+      <ol id="chat-list" class="chat-list" aria-live="polite"></ol>
+      <form id="chat-form" class="chat-form" autocomplete="off">
+        <p id="chat-muted" class="chat-muted" hidden>O anfitrião silenciou-te no chat.</p>
+        <div class="chat-row">
+          <input id="chat-input" type="text" maxlength="200" placeholder="Escreve um bilhete…" enterkeyhint="send" aria-label="Mensagem">
+          <button id="chat-send" type="submit" class="primary">Enviar</button>
+        </div>
+        <span id="chat-left" class="chat-left" aria-live="polite"></span>
+      </form>
+    </div>
+  </div>
+
   <div id="confirm" class="sheet confirm" role="alertdialog" aria-modal="true" aria-labelledby="confirm-text" hidden>
     <div class="confirm-box">
       <p id="confirm-text"></p>

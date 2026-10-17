@@ -1381,3 +1381,56 @@ body.has-reactions #toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
   .reaction { animation: reaction-still 2s steps(1, end) forwards; }
   .reaction-btn:active { transform: none; }
 }
+/* --- Chat da turma (sala de espera e fim do jogo): bilhetinhos num quadro de cortiça --- */
+.chat-btn { position: relative; font-size: .95rem; white-space: nowrap; }
+.chat-count {
+  position: absolute; top: -6px; right: -6px; min-width: 20px; height: 20px; padding: 0 5px;
+  border-radius: 999px; background: var(--far); color: #fff; font-size: .75rem; font-weight: 700;
+  line-height: 20px; text-align: center; box-shadow: 0 1px 3px rgba(0, 0, 0, .4);
+}
+.chat-count[hidden] { display: none; }
+.chat-sheet .sheet-box { height: min(640px, 86dvh); }
+.chat-list {
+  flex: 1; overflow-y: auto; overscroll-behavior: contain; margin: 0; padding: 14px 14px 18px;
+  list-style: none; display: flex; flex-direction: column; gap: 12px;
+  /* Cortiça: castanho claro com pintinhas. */
+  background:
+    radial-gradient(rgba(90, 60, 25, .25) 1px, transparent 1.6px) 0 0 / 9px 9px,
+    radial-gradient(rgba(255, 240, 210, .25) 1px, transparent 1.6px) 4px 5px / 11px 11px,
+    #c49a63;
+}
+.chat-note {
+  align-self: flex-start; max-width: 86%; padding: 6px 10px 8px; border-radius: 2px;
+  background: var(--post-it); color: var(--grafite); border-left: 5px solid var(--c, var(--line));
+  box-shadow: 0 4px 8px rgba(0, 0, 0, .28); transform: rotate(-.8deg);
+}
+.chat-note:nth-child(even) { transform: rotate(.7deg); }
+.chat-note.mine { align-self: flex-end; background: #d6ecff; border-left: 0; border-right: 5px solid var(--c, var(--line)); }
+.chat-who { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.chat-who .avatar { margin: 0; flex: none; }
+.chat-name { font-family: var(--letra-titulo); font-weight: 700; font-size: 1.25rem; line-height: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.chat-tag { font-size: .7rem; font-weight: 700; color: #a3221b; text-transform: uppercase; letter-spacing: .04em; }
+.chat-text { margin: 4px 0 0; font-size: .98rem; line-height: 1.35; overflow-wrap: anywhere; white-space: pre-wrap; }
+.chat-info {
+  align-self: center; max-width: 92%; padding: 2px 10px; border-radius: 999px; text-align: center;
+  background: rgba(255, 255, 255, .55); color: #4a3a22; font-size: .8rem; font-style: italic;
+}
+.chat-mute {
+  flex: none; width: 30px; height: 30px; min-height: 0; padding: 0; margin-left: auto; border-radius: 50%;
+  font-size: .85rem; line-height: 1; background: transparent; border: 1px solid rgba(0, 0, 0, .25); box-shadow: none;
+}
+.chat-mute.on { background: rgba(196, 60, 60, .18); border-color: var(--far); }
+.players li .chat-mute { margin-left: 0; border-color: var(--line); }
+.chat-form { flex: none; display: flex; flex-direction: column; gap: 4px; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); background: var(--bg-2); }
+.chat-row { display: flex; gap: 8px; }
+.chat-row input { flex: 1; min-width: 0; min-height: 46px; font-size: 1rem; }
+.chat-row button { min-height: 46px; padding: 0 16px; }
+.chat-left { font-size: .8rem; color: var(--muted); min-height: 1em; }
+.chat-left.error { color: var(--far); font-weight: 700; }
+.chat-left:empty { display: none; }
+.chat-muted { margin: 0; font-size: .85rem; color: var(--far); font-weight: 700; }
+/* No telemóvel o chat abre como um painel que sobe do fundo, quase até ao topo. */
+@media (max-width: 600px) {
+  .chat-sheet { padding: 0; place-items: end stretch; }
+  .chat-sheet .sheet-box { width: 100%; height: 88dvh; border-radius: 18px 18px 0 0; border-bottom: 0; }
+}

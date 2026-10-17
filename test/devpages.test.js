@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { devPagesEnabled, devPagesGuard } = require('../server/devpages');
+const { devPagesEnabled, devPagesGuard, devMapResult } = require('../server/devpages');
 
 test('páginas de desenvolvimento: ligadas em desenvolvimento, desligadas em produção', () => {
   assert.equal(devPagesEnabled({}), true);
@@ -25,4 +25,21 @@ test('páginas de desenvolvimento: em produção /dev/... dá 404 e o resto pass
   assert.deepEqual(run({ RENDER: 'true' }, '/index.html'), { status: null, passed: true });
   assert.deepEqual(run({ RENDER: 'true' }, '/developer.js'), { status: null, passed: true });
   assert.deepEqual(run({}, '/dev/reveal.html'), { status: null, passed: true });
+});
+
+test('pré-visualização: contas dos cenários de mapa com as do jogo (e erros nos pedidos inválidos)', () => {
+  const call = (query) => {
+    let status = 200;
+    let body = null;
+    const res = { status(code) { status = code; return this; }, json(data) { body = data; return this; } };
+    devMapResult({ query }, res);
+    return { status, body };
+  };
+  const russia = call({ country: '643', guesses: '48.86,2.35;66,-175' });
+  assert.equal(russia.status, 200);
+  assert.ok(russia.body.center.lon > 60 && russia.body.center.lon < 140, 'centro da Rússia na Sibéria');
+  assert.equal(russia.body.distances[1], 0, 'Chukotka (a leste dos 180°) está na Rússia');
+  assert.ok(russia.body.distances[0] > 500, 'Paris fica longe da Rússia');
+  assert.equal(call({ country: '999', guesses: '0,0' }).status, 400);
+  assert.equal(call({ country: '643', guesses: 'a,b' }).status, 400);
 });

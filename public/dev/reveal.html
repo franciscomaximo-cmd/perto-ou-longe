@@ -50,6 +50,29 @@
       </div>
       <div class="answer-box"><span class="label">Resposta certa</span><strong id="answer">?</strong></div>
 
+      <h2>Mapa</h2>
+      <p class="dev-note">Revelação das perguntas de mapa com o mesmo código do jogo (public/map.js): os palpites
+        aparecem um a um, do mais longe para o mais perto, e no fim marcam-se o mais perto e o mais longe. O país
+        certo, o anel da resposta e as linhas aparecem desde o início, como no jogo. O centro do país e as
+        distâncias vêm do servidor (as mesmas contas do jogo, em server/geo.js). Cenários com países que
+        atravessam a longitude de 180°.</p>
+      <div class="dev-bar" id="map-scenarios"></div>
+      <div class="dev-bar">
+        <button id="map-replay" type="button">↻ Repetir</button>
+        <button id="map-skip" type="button">Saltar</button>
+      </div>
+      <p id="map-question" class="question small"></p>
+      <div id="dev-map" class="map-wrap">
+        <div class="map-box"><div class="map-inner"><svg class="lines" viewBox="0 0 100 100" preserveAspectRatio="none"></svg><div class="pins"></div></div></div>
+        <div class="map-zoom">
+          <button type="button" data-zoom="-1" aria-label="Afastar">−</button>
+          <button type="button" data-zoom="1" aria-label="Aproximar">+</button>
+        </div>
+        <ol id="map-list" class="map-list"></ol>
+      </div>
+      <div class="answer-box"><span class="label">Resposta certa:</span><strong id="map-answer">?</strong></div>
+      <p id="map-note" class="dev-note"></p>
+
       <h2>Caras</h2>
       <p class="dev-note">12 caras ao calhas (as mesmas dos jogadores falsos dos temas acima), com o retrato
         das listas (grande e pequeno) e a cara em todas as expressões; a última coluna é a versão
@@ -93,6 +116,7 @@
   <script src="../reveal/golfe.js"></script>
   <script src="../reveal/malha.js"></script>
   <script src="../reveal/basquete.js"></script>
+  <script src="../map.js"></script>
   <script>
     'use strict';
     (() => {
@@ -279,6 +303,107 @@
         renderCharacters();
         start(current.name);
       });
+
+      // --- Mapa: cenários com países que atravessam a longitude de 180° ---------------------
+      // Cada palpite: [onde, latitude, longitude]. Os jogadores são os falsos de cima.
+      const MAP_SCENARIOS = {
+        'Rússia (África, Europa e extremo leste)': {
+          country: '643', label: 'Rússia', q: 'Onde fica a Rússia?',
+          guesses: [
+            ['Nairobi, Quénia', -1.29, 36.82], ['Lagos, Nigéria', 6.52, 3.38], ['Paris, França', 48.86, 2.35],
+            ['Varsóvia, Polónia', 52.23, 21.01], ['Chukotka (a leste dos 180°)', 66, -175], ['Kamchatka', 53.02, 158.65],
+          ],
+        },
+        'Fiji (Austrália e Américas)': {
+          country: '242', label: 'Fiji', q: 'Onde fica Fiji?',
+          guesses: [
+            ['Sydney, Austrália', -33.87, 151.21], ['Perth, Austrália', -31.95, 115.86], ['Darwin, Austrália', -12.46, 130.84],
+            ['Lima, Peru', -12.05, -77.04], ['Los Angeles, EUA', 34.05, -118.24], ['Cidade do México', 19.43, -99.13],
+          ],
+        },
+      };
+      const mapWrap = $('#dev-map');
+      let mapRun = 0;
+      let mapTimer = null;
+      let mapCurrent = null;
+
+      function renderMap() {
+        const m = mapCurrent;
+        const order = m.order.slice(0, m.shown);
+        const clsOf = (id) => (m.showCorrect && m.closest.includes(id) ? 'near' : m.showCorrect && m.farthest.includes(id) ? 'far' : '');
+        window.MapView.drawReveal(mapWrap, {
+          key: `mapa-${mapRun}`,
+          ids: order,
+          answers: m.answers,
+          center: m.center,
+          country: m.s.country,
+          classOf: clsOf,
+          labelOf: (id) => `${m.players[id].name} · ${kit.fmt(m.distances[id])} km`,
+          colorOf: (id) => m.players[id].color,
+          faceOf: (id) => kit.avatar(m.players[id], 'xs'),
+        });
+        const byDistance = [...order].sort((a, b) => m.distances[a] - m.distances[b]);
+        $('#map-list').replaceChildren(...byDistance.map((id) => kit.el('li', { class: clsOf(id) }, [
+          kit.avatar(m.players[id], 'm'),
+          kit.el('span', { text: `${m.players[id].name} (${m.where[id]})` }),
+          kit.el('span', { class: 'km', text: `— ${kit.fmt(m.distances[id])} km` }),
+        ])));
+        $('#map-answer').textContent = m.showCorrect ? m.s.label : '?';
+      }
+
+      async function startMap(name) {
+        clearTimeout(mapTimer);
+        mapRun += 1;
+        const run = mapRun;
+        const s = MAP_SCENARIOS[name];
+        document.querySelectorAll('#map-scenarios button').forEach((b) => b.classList.toggle('on', b.textContent === name));
+        $('#map-question').textContent = s.q;
+        const guesses = s.guesses.map(([, lat, lon]) => `${lat},${lon}`).join(';');
+        let res;
+        try {
+          res = await (await fetch(`/dev/map-result?country=${s.country}&guesses=${encodeURIComponent(guesses)}`)).json();
+        } catch (e) {
+          $('#map-note').textContent = `Não foi possível pedir as contas ao servidor: ${e.message}`;
+          return;
+        }
+        if (run !== mapRun) return; // entretanto escolheu-se outro cenário
+        const players = Object.fromEntries(fakePlayers(s.guesses.length).map((p) => [p.id, p]));
+        const ids = Object.keys(players);
+        const answers = Object.fromEntries(ids.map((id, i) => [id, { lat: s.guesses[i][1], lon: s.guesses[i][2] }]));
+        const distances = Object.fromEntries(ids.map((id, i) => [id, res.distances[i]]));
+        const where = Object.fromEntries(ids.map((id, i) => [id, s.guesses[i][0]]));
+        const min = Math.min(...res.distances);
+        const max = Math.max(...res.distances);
+        mapCurrent = {
+          s, players, answers, distances, where, center: res.center,
+          order: [...ids].sort((a, b) => distances[b] - distances[a]), // como no jogo: do mais longe para o mais perto
+          closest: ids.filter((id) => distances[id] === min),
+          farthest: ids.filter((id) => distances[id] === max),
+          shown: 1, showCorrect: false,
+        };
+        $('#map-note').textContent = `Centro do país (servidor): ${res.center.lat}, ${res.center.lon}.`;
+        renderMap();
+        const step = () => {
+          if (mapCurrent.shown < mapCurrent.order.length) mapCurrent.shown += 1;
+          else mapCurrent.showCorrect = true;
+          renderMap();
+          if (!mapCurrent.showCorrect) mapTimer = setTimeout(step, 700);
+        };
+        mapTimer = setTimeout(step, 700);
+      }
+
+      for (const name of Object.keys(MAP_SCENARIOS)) {
+        $('#map-scenarios').append(kit.el('button', { type: 'button', text: name, onclick: () => startMap(name) }));
+      }
+      $('#map-replay').addEventListener('click', () => startMap(Object.keys(MAP_SCENARIOS).find((n) => MAP_SCENARIOS[n] === mapCurrent?.s) || Object.keys(MAP_SCENARIOS)[0]));
+      $('#map-skip').addEventListener('click', () => {
+        if (!mapCurrent) return;
+        clearTimeout(mapTimer);
+        mapCurrent.shown = mapCurrent.order.length;
+        mapCurrent.showCorrect = true;
+        renderMap();
+      });
+      window.MapView.load('../mapa.svg').then(() => startMap(Object.keys(MAP_SCENARIOS)[0]));
     })();
   </script>
 </body>

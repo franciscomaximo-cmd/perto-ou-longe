@@ -5,7 +5,7 @@ const http = require('http');
 const express = require('express');
 const { Server } = require('socket.io');
 const { GameError, createRoom, getRoom, deleteRoom, sweepIdleRooms } = require('./rooms');
-const { devPagesGuard } = require('./devpages');
+const { devPagesGuard, devMapResult } = require('./devpages');
 const { hostRedirect } = require('./redirect');
 
 const PORT = process.env.PORT || 3000;
@@ -15,6 +15,8 @@ const app = express();
 app.use(hostRedirect());
 // /dev/... (pré-visualização das revelações) só fora de produção.
 app.use(devPagesGuard());
+// Contas dos cenários de mapa da pré-visualização (só fora de produção: o guarda de cima).
+app.get('/dev/map-result', devMapResult);
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/health', (req, res) => res.send('ok'));
 // Gerador de QR codes (MIT, sem dependências), servido daqui como o socket.io.js.

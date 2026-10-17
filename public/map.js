@@ -42,9 +42,12 @@
     x: ((lon + 180) / 360) * 100,
     y: ((MAP_TOP - lat) / (MAP_TOP - MAP_BOTTOM)) * 100,
   });
+  // A área do próprio mapa dentro de ".map-inner" (sem a margem de mar da revelação): é a
+  // mesma da camada dos pinos.
+  const mapRect = (inner) => inner.querySelector('.pins').getBoundingClientRect();
   // Ponto do mapa onde se tocou (para escolher o palpite).
   function pointAt(event, inner) {
-    const rect = inner.getBoundingClientRect();
+    const rect = mapRect(inner);
     const fx = (event.clientX - rect.left) / rect.width;
     const fy = (event.clientY - rect.top) / rect.height;
     return { lon: fx * 360 - 180, lat: MAP_TOP - fy * (MAP_TOP - MAP_BOTTOM) };
@@ -57,15 +60,41 @@
       label ? el('span', { class: 'pin-label' }, [face, label]) : null);
   }
 
-  // Muda o zoom e põe o ponto (cx, cy), em frações do mapa, no centro da vista.
-  function setZoom(wrap, level, cx, cy) {
+  // Margem de mar à volta do mapa da revelação, em píxeis: 10% da vista de cada lado, mais o
+  // raio do anel da resposta (que tem tamanho fixo). Assim, um ponto encostado à ponta do mapa
+  // (ex.: Fiji, a 178°) ou ao topo pode ficar afastado das bordas da vista como os outros.
+  // O mapa onde se responde não tem margem.
+  const RING = 17;
+  const margins = (box) => ({ x: Math.round(box.clientWidth * 0.1 + RING), y: Math.round(box.clientHeight * 0.1 + RING) });
+  const padOf = (wrap) => (wrap.dataset.reveal ? margins(wrap.querySelector('.map-box')) : { x: 0, y: 0 });
+
+  // Muda a escala (largura do mapa / largura da vista; 1 = o mundo inteiro à largura da vista)
+  // e põe o ponto (cx, cy), em frações do mapa, no centro da vista.
+  function setScale(wrap, scale, cx, cy) {
     const box = wrap.querySelector('.map-box');
     const inner = wrap.querySelector('.map-inner');
-    wrap.dataset.zoom = String(level);
-    inner.style.width = `${ZOOMS[level] * 100}%`;
-    box.scrollLeft = cx * inner.offsetWidth - box.clientWidth / 2;
-    box.scrollTop = cy * inner.offsetHeight - box.clientHeight / 2;
+    const pad = padOf(wrap);
+    wrap.dataset.scale = String(scale);
+    // (Nível dos botões: o maior zoom "redondo" que não passa desta escala.)
+    wrap.dataset.zoom = String(ZOOMS.reduce((best, z, i) => (z <= scale + 1e-6 ? i : best), 0));
+    inner.style.setProperty('--px', `${pad.x}px`);
+    inner.style.setProperty('--py', `${pad.y}px`);
+    inner.style.width = `calc(${scale * 100}% + ${2 * pad.x}px)`;
+    const map = mapRect(inner);
+    box.scrollLeft = pad.x + cx * map.width - box.clientWidth / 2;
+    box.scrollTop = pad.y + cy * map.height - box.clientHeight / 2;
     if (wrap.relayout) wrap.relayout(); // com outro zoom, as etiquetas chocam de outra maneira
+  }
+  // Muda o zoom para um dos níveis dos botões (ZOOMS).
+  const setZoom = (wrap, level, cx, cy) => setScale(wrap, ZOOMS[level], cx, cy);
+
+  // A escala em que o mundo inteiro cabe na vista (com a margem de mar, na revelação).
+  function wholeScale(wrap) {
+    const box = wrap.querySelector('.map-box');
+    const pad = padOf(wrap);
+    const w = box.clientWidth;
+    const h = Math.max(box.clientHeight, 1);
+    return Math.min(1, (w - 2 * pad.x) / w, (h - 2 * pad.y) / (w * MAP_RATIO));
   }
 
   const narrowScreen = () => window.innerWidth < 600;
@@ -80,6 +109,14 @@
     if (!box.clientWidth) return;
     const full = box.clientWidth * ZOOMS[minZoom()] * MAP_RATIO;
     box.style.height = `${Math.round(Math.min(window.innerHeight * 0.45, full))}px`;
+    // A margem de mar depende do tamanho da vista: acerta-a (mantendo a escala).
+    const inner = wrap.querySelector('.map-inner');
+    if (wrap.dataset.scale) {
+      const pad = padOf(wrap);
+      inner.style.setProperty('--px', `${pad.x}px`);
+      inner.style.setProperty('--py', `${pad.y}px`);
+      inner.style.width = `calc(${Number(wrap.dataset.scale) * 100}% + ${2 * pad.x}px)`;
+    }
   }
   window.addEventListener('resize', () => document.querySelectorAll('.map-wrap').forEach(sizeMapBox));
 
@@ -132,50 +169,77 @@
       // saltar quando o mapa muda de tamanho por dentro).
       btn.addEventListener('mousedown', (e) => e.preventDefault());
       btn.addEventListener('click', () => {
-        const current = Number(wrap.dataset.zoom);
-        // (O enquadramento automático pode ter afastado abaixo do mínimo, para caber tudo.)
-        const level = Math.min(ZOOMS.length - 1, Math.max(Math.min(minZoom(), current), current + Number(btn.dataset.zoom)));
+        const current = Number(wrap.dataset.scale || ZOOMS[minZoom()]);
+        // Escalas possíveis: os níveis redondos e, na revelação, o mundo inteiro com margem. Não
+        // se afasta abaixo do mínimo (a não ser que o enquadramento automático já tenha afastado
+        // mais, para caber tudo).
+        const whole = wholeScale(wrap);
+        const floor = wrap.dataset.reveal ? whole : Math.min(ZOOMS[minZoom()], current);
+        const steps = ZOOMS.concat(wrap.dataset.reveal ? [whole] : []).filter((z) => z >= floor - 1e-6).sort((a, b) => a - b);
+        const up = Number(btn.dataset.zoom) > 0;
+        const next = up ? steps.find((z) => z > current + 1e-3) : steps.filter((z) => z < current - 1e-3).pop();
+        if (next === undefined) return;
         // Mantém o centro da vista ao aproximar ou afastar.
-        const cx = (box.scrollLeft + box.clientWidth / 2) / inner.offsetWidth;
-        const cy = (box.scrollTop + box.clientHeight / 2) / inner.offsetHeight;
+        const map = mapRect(inner);
+        const view = viewRect(box);
+        const cx = ((view.left + view.right) / 2 - map.left) / map.width;
+        const cy = ((view.top + view.bottom) / 2 - map.top) / map.height;
         // Os botões do mapa nunca mexem no scroll da página: fica exatamente onde estava.
         const pageY = window.scrollY;
         const keep = () => { if (window.scrollY !== pageY) window.scrollTo(window.scrollX, pageY); };
-        setZoom(wrap, level, cx, cy);
+        setScale(wrap, next, cx, cy);
         keep();
         requestAnimationFrame(() => { keep(); requestAnimationFrame(keep); });
       });
     });
   }
 
-  // Revelação: enquadra a zona com todos os palpites e o país certo, com alguma margem,
-  // escolhendo o maior zoom em que tudo cabe na vista.
+  // A parte à vista do mapa, no ecrã (sem a moldura de madeira do contentor).
+  function viewRect(box) {
+    const r = box.getBoundingClientRect();
+    const left = r.left + box.clientLeft;
+    const top = r.top + box.clientTop;
+    return { left, top, right: left + box.clientWidth, bottom: top + box.clientHeight, width: box.clientWidth, height: box.clientHeight };
+  }
+
+  // Revelação: enquadra a zona com todos os palpites e o país certo, com uma margem interior
+  // à volta (10% da vista de cada lado, mais o raio do anel da resposta, para nada ficar
+  // encostado ou cortado nas bordas), escolhendo o maior zoom em que tudo cabe assim.
   function frame(wrap, points) {
     const box = wrap.querySelector('.map-box');
     const inner = wrap.querySelector('.map-inner');
     const ps = points.map(toPercent);
-    const minX = Math.min(...ps.map((p) => p.x));
-    const maxX = Math.max(...ps.map((p) => p.x));
-    const minY = Math.min(...ps.map((p) => p.y));
-    const maxY = Math.max(...ps.map((p) => p.y));
-    // Folga mínima, para um só ponto (ou pontos muito juntos) não dar um zoom exagerado.
-    const spanX = Math.max(maxX - minX, 8) * 1.3;
-    const spanY = Math.max(maxY - minY, 14) * 1.3;
+    const minX = Math.min(...ps.map((p) => p.x)) / 100;
+    const maxX = Math.max(...ps.map((p) => p.x)) / 100;
+    const minY = Math.min(...ps.map((p) => p.y)) / 100;
+    const maxY = Math.max(...ps.map((p) => p.y)) / 100;
     sizeMapBox(wrap);
-    // O maior zoom em que cabem todos os pontos (os palpites e o país certo). Se nem no zoom
-    // mínimo do telemóvel couberem (ex.: palpites dos dois lados do mundo), mostra o mapa
-    // inteiro: nunca fica nenhum ponto fora da vista.
-    const fits = (z) => {
-      const w = box.clientWidth * ZOOMS[z];
-      const h = w * MAP_RATIO;
-      return (spanX / 100) * w <= box.clientWidth && (spanY / 100) * h <= Math.max(box.clientHeight, 1);
-    };
-    let level = 0;
-    for (let z = ZOOMS.length - 1; z >= 0; z--) {
-      if (fits(z)) { level = z; break; }
-    }
-    setZoom(wrap, level, (minX + maxX) / 200, (minY + maxY) / 200);
+    const w = box.clientWidth;
+    const h = Math.max(box.clientHeight, 1);
+    const m = margins(box);
+    // Folga mínima, para um só ponto (ou pontos muito juntos) não dar um zoom exagerado.
+    const spanX = Math.max(maxX - minX, 0.06);
+    const spanY = Math.max(maxY - minY, 0.1);
+    // Se os pontos estiverem dos dois lados do mundo, a escala desce até ao mundo inteiro (com a
+    // margem de mar): nunca fica nenhum ponto fora da vista.
+    const scale = Math.max(wholeScale(wrap), Math.min(ZOOMS[ZOOMS.length - 1],
+      (w - 2 * m.x) / (w * spanX), (h - 2 * m.y) / (w * MAP_RATIO * spanY)));
+    setScale(wrap, scale, (minX + maxX) / 2, (minY + maxY) / 2);
+    showWhole(box, wrap.querySelector('.pins .pin.target'));
     return inner.offsetWidth > 0;
+  }
+
+  // Garante que o elemento (o anel da resposta certa) fica por inteiro à vista, com folga:
+  // se for preciso, arrasta a vista o mínimo possível.
+  function showWhole(box, node) {
+    if (!node) return;
+    const view = viewRect(box);
+    const r = node.getBoundingClientRect();
+    const gap = 6;
+    const dx = r.left - gap < view.left ? r.left - gap - view.left : r.right + gap > view.right ? r.right + gap - view.right : 0;
+    const dy = r.top - gap < view.top ? r.top - gap - view.top : r.bottom + gap > view.bottom ? r.bottom + gap - view.bottom : 0;
+    if (dx) box.scrollLeft += dx;
+    if (dy) box.scrollTop += dy;
   }
 
   // Etiquetas dos pinos no mapa (deteção de colisões): cada etiqueta experimenta ficar por
@@ -189,7 +253,7 @@
     // "dentro do mapa" podia estar cortada pela borda do contentor). Com o mundo inteiro no
     // telemóvel, o mapa é mais baixo do que a vista: as etiquetas também podem usar o mar livre
     // por baixo dele.
-    const view = wrap.querySelector('.map-box').getBoundingClientRect();
+    const view = viewRect(wrap.querySelector('.map-box'));
     const bounds = { left: view.left + 4, right: view.right - 4, top: view.top + 4, bottom: view.bottom - 4 };
     const pins = [...wrap.querySelectorAll('.pins .pin')].map((p) => p.getBoundingClientRect());
     const labels = [];
@@ -205,11 +269,11 @@
     }
     const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
     const count = (a, list) => list.filter((b) => overlaps(a, b)).length;
-    // Quanto pior é uma posição: tapar a resposta certa (muito mau), chocar com outra etiqueta,
-    // ficar cortada em cima ou em baixo, tapar um pino e, por fim, ficar longe do seu pino.
-    const badness = (a, [, row, shift]) => count(a, answer) * 40 + count(a, labels) * 10
-      + (a.top < bounds.top || a.bottom > bounds.bottom ? 6 : 0) + count(a, pins)
-      + row * 0.2 + (shift ? 0.1 : 0);
+    // Quanto pior é uma posição: tapar a resposta certa (muito mau), ficar cortada por uma borda
+    // da vista, chocar com outra etiqueta, tapar um pino e, por fim, ficar longe do seu pino.
+    const cut = (a) => a.left < bounds.left - 0.5 || a.right > bounds.right + 0.5 || a.top < bounds.top - 0.5 || a.bottom > bounds.bottom + 0.5;
+    const badness = (a, [, row, shift]) => count(a, answer) * 40 + (cut(a) ? 25 : 0) + count(a, labels) * 10
+      + count(a, pins) + row * 0.2 + (shift ? 0.1 : 0);
     const ROW = 22; // um pouco mais do que a altura de uma etiqueta
     const leaders = [];
     for (const label of wrap.querySelectorAll('.pins .pin-label')) {
@@ -233,7 +297,12 @@
         const right = box.right + shift;
         return shift + (left < bounds.left ? bounds.left - left : right > bounds.right ? bounds.right - right : 0);
       };
-      const options = [0, 1, 2, 3, 4].flatMap((row) => [0, -side, side].flatMap((shift) => [['above', row, shift], ['below', row, shift]]));
+      // Perto de uma borda, a etiqueta vira-se primeiro para dentro do mapa: para baixo quando
+      // o pino está em cima, para a esquerda quando está à direita, etc.
+      const near = 3 * ROW;
+      const vertical = py - bounds.top < near ? ['below', 'above'] : ['above', 'below'];
+      const shifts = bounds.right - px < near + side ? [-side, 0, side] : px - bounds.left < near + side ? [side, 0, -side] : [0, -side, side];
+      const options = [0, 1, 2, 3, 4].flatMap((row) => shifts.flatMap((shift) => vertical.map((where) => [where, row, shift])));
       const apply = ([where, row, shift]) => {
         label.style.top = where === 'below' ? `${14 + row * ROW}px` : 'auto';
         label.style.bottom = where === 'above' ? `${14 + row * ROW}px` : 'auto';
@@ -250,13 +319,23 @@
         if (score < 0.05) break;
       }
       apply(best.option);
-      // Sem lugar perto do pino (taparia outra etiqueta ou a resposta certa): vai para o lugar
-      // livre mais perto, em toda a parte à vista do mapa, ligado ao pino por uma linha fina.
+      const color = label.parentElement.style.getPropertyValue('--c');
+      // Sem lugar perto do pino (taparia outra etiqueta ou a resposta certa, ou ficava cortada):
+      // vai para o lugar livre mais perto, em toda a parte à vista do mapa, ligado ao pino por
+      // uma linha fina.
       if (best.score >= 10) {
         const spot = nearestFreeSpot(box.width, box.height, px, py, bounds, (q) => !count(q, labels) && !count(q, answer));
         if (spot) {
           placeAt(label, spot);
-          leaders.push({ x1: px, y1: py, ...closestPoint(spot, px, py), color: label.parentElement.style.getPropertyValue('--c') });
+          leaders.push({ x1: px, y1: py, ...closestPoint(spot, px, py), color });
+        }
+      } else {
+        // Empurrada para o lado por uma borda, a etiqueta pode já não ficar por cima do pino: a
+        // linha fina passa a ir do pino até ao canto mais perto da etiqueta.
+        const r = label.getBoundingClientRect();
+        if (px < r.left + 4 || px > r.right - 4) {
+          label.classList.remove('lead');
+          leaders.push({ x1: px, y1: py, ...closestPoint(r, px, py), color });
         }
       }
       labels.push(label.getBoundingClientRect());
@@ -302,7 +381,7 @@
       svg.setAttribute('aria-hidden', 'true');
       inner.append(svg);
     }
-    const r = inner.getBoundingClientRect();
+    const r = mapRect(inner); // a camada das linhas cobre o mapa, tal como a dos pinos
     svg.setAttribute('viewBox', `0 0 ${Math.round(r.width)} ${Math.round(r.height)}`);
     svg.replaceChildren(...leaders.map((d) => {
       const line = document.createElementNS(NS, 'line');
@@ -322,6 +401,7 @@
    *   (o mini-retrato, opcional).
    */
   function drawReveal(wrap, { key, ids, answers, center: centerPoint, country, classOf, labelOf, colorOf, faceOf = () => null }) {
+    wrap.dataset.reveal = '1'; // com margem de mar à volta do mapa
     setup(wrap);
     wrap.querySelectorAll('path').forEach((p) => p.classList.toggle('target', p.dataset.c === country));
     const shown = ids.length;
@@ -368,5 +448,5 @@
     if (growing) growing.addEventListener('animationend', () => { if (wrap.relayout) wrap.relayout(); }, { once: true });
   }
 
-  root.MapView = { MAP_TOP, MAP_BOTTOM, ZOOMS, load, loaded, toPercent, pointAt, pin, setZoom, minZoom, sizeMapBox, setup, frame, drawReveal };
+  root.MapView = { MAP_TOP, MAP_BOTTOM, ZOOMS, load, loaded, toPercent, pointAt, pin, setZoom, setScale, minZoom, sizeMapBox, setup, frame, drawReveal };
 })(window);

@@ -350,14 +350,16 @@ textarea:focus { border-color: var(--accent); }
 .map-box::-webkit-scrollbar { display: none; }
 .map-box.dragging { cursor: grabbing; }
 .map-box.dragging .map-inner { cursor: grabbing; }
-.map-inner { position: relative; width: 100%; cursor: crosshair; }
+/* Na revelação, o mapa tem uma margem de mar à volta (--px, --py, postas em JS), para nada
+   ficar encostado às bordas; as camadas dos pinos e das linhas cobrem só o próprio mapa. */
+.map-inner { position: relative; width: 100%; cursor: crosshair; padding: var(--py, 0px) var(--px, 0px); }
 .map-inner svg { display: block; width: 100%; height: auto; aspect-ratio: 360 / 142; }
 .map-inner path { fill: #fff; stroke: #9b96bd; stroke-width: .6; vector-effect: non-scaling-stroke; }
 .map-inner path.target { fill: var(--near); stroke: #1a7a52; }
 /* Botões de zoom por baixo do mapa, para nenhuma etiqueta ficar por cima deles. */
 .map-zoom { display: flex; justify-content: flex-end; gap: 6px; margin-top: -4px; }
 .map-zoom button { width: 38px; height: 38px; padding: 0; font-size: 1.3rem; line-height: 1; }
-.pins { position: absolute; inset: 0; pointer-events: none; }
+.pins { position: absolute; inset: var(--py, 0px) var(--px, 0px); pointer-events: none; }
 /* Cada pino tem a cor do jogador; o anel diz se ficou mais perto (verde) ou mais longe (vermelho). */
 .pin {
   position: absolute; width: 14px; height: 14px; margin: -7px 0 0 -7px;
@@ -799,10 +801,16 @@ html, body { overflow-anchor: none; }
 .won-tb { font-size: .75rem; font-weight: 600; color: var(--muted); margin-left: 6px; }
 
 /* Linhas do mapa até ao país certo */
-.map-inner .lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.map-inner .lines {
+  position: absolute; top: var(--py, 0px); left: var(--px, 0px);
+  width: calc(100% - 2 * var(--px, 0px)); height: calc(100% - 2 * var(--py, 0px)); pointer-events: none; z-index: 1;
+}
 /* Linhas das etiquetas afastadas até aos seus pinos (na cor do jogador, por baixo dos pinos e
-   das etiquetas). */
-.map-inner .leaders { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+   das etiquetas). Podem sair do mapa para a margem de mar. */
+.map-inner .leaders {
+  position: absolute; top: var(--py, 0px); left: var(--px, 0px); overflow: visible;
+  width: calc(100% - 2 * var(--px, 0px)); height: calc(100% - 2 * var(--py, 0px)); pointer-events: none; z-index: 1;
+}
 .map-inner .leaders line { stroke-width: 1.5; stroke-linecap: round; filter: drop-shadow(0 0 1px rgba(0, 0, 0, .7)); }
 .map-inner .lines line { stroke: var(--bg); stroke-width: 2; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
 .map-inner .lines line.near { stroke: #1a7a52; }

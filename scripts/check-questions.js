@@ -5,7 +5,7 @@
 //   - campos obrigatórios preenchidos e categoria existente;
 //   - números: texto que acaba em "?", resposta numérica válida, unidade quando a pergunta é
 //     sobre uma medida (altura, peso, velocidade…), anos sem unidade e inteiros;
-//   - mapas: país que existe no mapa, nome do país e artigo válido;
+//   - mapas: país que existe no mapa, nome do país e artigo válido, e nenhum país-ilha pequeno;
 //   - "Adivinha o Preço": em euros, com o ano e o país (Portugal) no texto;
 //   - nenhuma pede contas de cabeça;
 //   - sem duplicados: texto igual ou muito parecido.
@@ -25,6 +25,23 @@ const ARITHMETIC = /×|elevado|\bsoma\b|Quanto é|segundos tem|horas tem/;
 // Nos preços, o país tem de estar claro.
 const PORTUGAL = /Portugal|portugu[eê]s|Lisboa|Porto|nacional/i;
 
+// Países insulares (países-ilha e arquipélagos) mais pequenos do que o Chipre (~9 000 km²):
+// quase não se veem no mapa e é impossível acertar dentro deles, por isso não podem ser a
+// resposta de uma pergunta de mapa (nem sobre um sítio concreto lá dentro). Código ISO
+// numérico → [nome, área aproximada em km²]. Ficam de fora desta lista, de propósito, Cabo
+// Verde (132) e São Tomé e Príncipe (678), por serem lusófonos. Os países insulares maiores
+// (Chipre, Jamaica, Bahamas, Vanuatu, Fiji…) e os que partilham uma ilha com outro país
+// (Brunei, Timor-Leste) podem continuar a sair.
+const SMALL_ISLANDS = {
+  '028': ['Antígua e Barbuda', 440], '048': ['Barém', 780], '052': ['Barbados', 430],
+  '174': ['Comores', 1900], '184': ['Ilhas Cook', 240], '212': ['Dominica', 750], '296': ['Kiribati', 810],
+  '308': ['Granada', 340], '462': ['Maldivas', 300], '470': ['Malta', 320], '480': ['Maurícia', 2000],
+  '520': ['Nauru', 21], '570': ['Niue', 260], '583': ['Micronésia', 700], '584': ['Ilhas Marshall', 180],
+  '585': ['Palau', 460], '659': ['São Cristóvão e Neves', 260], '662': ['Santa Lúcia', 620],
+  '670': ['São Vicente e Granadinas', 390], '690': ['Seicheles', 460], '702': ['Singapura', 730],
+  '776': ['Tonga', 750], '780': ['Trindade e Tobago', 5100], '798': ['Tuvalu', 26], '882': ['Samoa', 2840],
+};
+
 // Duplicados: o mesmo texto (sem maiúsculas, acentos nem pontuação) ou quase o mesmo: as
 // mesmas palavras com significado, ou 75% delas em comum e a mesma resposta (o mesmo país,
 // nas de mapa).
@@ -42,7 +59,9 @@ function checkQuestions(questions) {
     if (!categoryIds.has(q.category)) fail(q, i, `categoria desconhecida: ${q.category}`);
     if (q.curiosity !== undefined && (typeof q.curiosity !== 'string' || !q.curiosity.trim())) fail(q, i, 'curiosidade vazia');
     if (q.type === 'map') {
-      if (!hasCountry(q.country)) fail(q, i, `país inexistente no mapa: ${q.country}`);
+      const island = SMALL_ISLANDS[q.country];
+      if (island) fail(q, i, `país-ilha demasiado pequeno para o mapa: ${island[0]} (~${island[1]} km², menos do que o Chipre)`);
+      else if (!hasCountry(q.country)) fail(q, i, `país inexistente no mapa: ${q.country}`);
       // Ponto de referência de um sítio concreto: coordenadas válidas e no país certo (até 25 km
       // de folga, porque os contornos do mapa são simplificados junto à costa).
       if (q.point !== undefined) {

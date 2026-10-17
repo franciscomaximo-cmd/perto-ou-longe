@@ -68,6 +68,7 @@ const SPECIAL_SHARE = 0.25;
 const SPECIAL_INTRO_MS = 2500; // anúncio antes da pergunta (não conta para o tempo de responder)
 const LIGHTNING_SECONDS = 10;
 const DARK_MS = 5000;
+const DARK_GRACE_MS = 1500; // folga até o servidor deixar de enviar o texto ("Às escuras")
 const ALL_WIN_SHARE = 0.1;
 const ALL_WIN_KM = 500;
 
@@ -813,10 +814,13 @@ class Room {
       if (special.allWin) for (const id of ids) add(id, 1);
     } else if (type === 'ultimo') {
       // O ponto do "mais perto" (1, ou 2 em cheio) só vai para a metade de baixo da pauta: o
-      // mais perto de entre eles. Os votos contam normalmente para todos.
+      // mais perto de entre eles. Quem é de cima e acerta EM CHEIO fica com o bónus do em cheio
+      // (+1), mas não com o ponto do mais perto. Os votos contam normalmente para todos.
       const bottom = this.bottomHalf();
       const closestPoints = result.exact.length ? 2 : 1;
       for (const id of result.closest) add(id, -closestPoints);
+      special.exactBonus = result.exact.filter((id) => !bottom.includes(id));
+      for (const id of special.exactBonus) add(id, 1);
       const candidates = Object.keys(result.distances).filter((id) => bottom.includes(id));
       let awarded = [];
       if (candidates.length) {
@@ -924,10 +928,14 @@ class Room {
     const { question, answers, votes } = this.current;
     if (!this.current.voting) votes.clear();
     this.current.result = scoreRound(correctOf(question), answers, votes, measureFor(question));
+    // Os pontos normais (uma cópia: as cartas mudam os pontos do resultado), para explicar de
+    // onde vêm os pontos de cada um.
+    const base = { ...this.current.result, points: { ...this.current.result.points } };
     // Ronda especial: o efeito nos pontos (só nestas rondas).
     if (this.current.special) {
       this.current.result = this.applySpecial(this.current.special.type, question, this.current.result, answers);
     }
+    const afterSpecial = { ...this.current.result.points };
     // Cartas usadas nesta ronda (só quando alguém usou uma): por cima de tudo (ver cards.js).
     this.current.result.cards = [];
     if (this.current.cards && this.current.cards.size) {
@@ -937,6 +945,7 @@ class Room {
         points: r.points,
         closest: r.closest,
         winners: sp && sp.type === 'ultimo' ? sp.awarded : r.closest,
+        exactBonus: sp && sp.type === 'ultimo' ? sp.exactBonus : [],
         farthest: r.farthest,
         distances: r.distances,
         multiplier: sp && sp.type === 'dobrar' ? 2 : 1,
@@ -951,6 +960,7 @@ class Room {
       if (player) player.score += pts;
     }
     this.recordStats(question, this.current.result, answers.size);
+    this.recordPointSources(base, afterSpecial, this.current.result.points);
     this.current.order = this.revealOrder(question, this.current.result.distances);
     // Revelação em passos, automática: um palpite de cada vez (pela ordem de `order`), depois
     // a resposta certa, os votos (se houve votação) e por fim os pontos.
@@ -1017,8 +1027,33 @@ class Room {
   // --- Estatísticas e prémios ---------------------------------------------
 
   statsOf(id) {
-    if (!this.stats.has(id)) this.stats.set(id, { closest: 0, exact: 0, farthest: 0, correctVotes: 0, errorSum: 0, answered: 0 });
+    if (!this.stats.has(id)) {
+      this.stats.set(id, {
+        closest: 0, exact: 0, farthest: 0, correctVotes: 0, errorSum: 0, answered: 0,
+        // De onde vieram os pontos (a soma dá a pontuação): o ponto do mais perto, o bónus do
+        // em cheio, os votos certos, as rondas especiais e as cartas (estes dois podem ser < 0).
+        points: { closest: 0, exact: 0, votes: 0, special: 0, cards: 0 },
+      });
+    }
     return this.stats.get(id);
+  }
+
+  // Separa os pontos da ronda pelas suas origens: os normais (base: scoreRound), o que a ronda
+  // especial mudou (afterSpecial − normais) e o que as cartas mudaram (final − afterSpecial).
+  recordPointSources(base, afterSpecial, final) {
+    const exact = new Set(base.exact);
+    for (const id of base.closest) {
+      this.statsOf(id).points.closest += 1;
+      if (exact.has(id)) this.statsOf(id).points.exact += 1;
+    }
+    for (const id of base.correctVoters) this.statsOf(id).points.votes += 1;
+    const ids = new Set([...Object.keys(base.points), ...Object.keys(afterSpecial), ...Object.keys(final)]);
+    for (const id of ids) {
+      const special = (afterSpecial[id] || 0) - (base.points[id] || 0);
+      const cards = (final[id] || 0) - (afterSpecial[id] || 0);
+      if (special) this.statsOf(id).points.special += special;
+      if (cards) this.statsOf(id).points.cards += cards;
+    }
   }
 
   // Duelo: os dois jogadores (pela ordem em que entraram) e, de cada um, as rondas ganhas e os
@@ -1028,7 +1063,7 @@ class Room {
     const ids = [...this.players.keys()].slice(0, DUEL_PLAYERS);
     const stats = Object.fromEntries(ids.map((id) => {
       const s = this.stats.get(id) || {};
-      return [id, { won: s.closest || 0, exact: s.exact || 0 }];
+      return [id, { won: s.closest || 0, exact: s.exact || 0, points: { ...(s.points || { closest: 0, exact: 0, votes: 0, special: 0, cards: 0 }) } }];
     }));
     return { ids, stats };
   }
@@ -1263,12 +1298,16 @@ class Room {
       // Ronda especial (só durante a própria ronda: não passa para o desempate nem para o fim).
       const special = ['answering', 'voting', 'reveal'].includes(this.phase) ? cur.special : null;
       const now = Date.now();
-      // "Às escuras": passado o tempo, o texto deixa de ser enviado (até à revelação).
-      const dark = Boolean(special && special.textUntil && this.phase !== 'reveal' && now >= special.textUntil);
+      // "Às escuras": só enquanto se responde. Os 5 s contam no telemóvel a partir do fim do
+      // anúncio; o servidor deixa de enviar o texto pouco depois (com folga, para quem recarrega
+      // a página). Na votação e na revelação a pergunta volta a aparecer.
+      const answering = this.phase === 'answering';
+      const dark = Boolean(special && special.textUntil && answering && now >= special.textUntil + DARK_GRACE_MS);
       state.special = special ? {
         type: special.type,
-        introMs: this.phase === 'answering' ? Math.max(0, special.introUntil - now) : 0,
-        hideTextMs: special.textUntil && this.phase !== 'reveal' ? Math.max(0, special.textUntil - now) : null,
+        introMs: answering ? Math.max(0, special.introUntil - now) : 0,
+        hideTextMs: special.textUntil && answering ? Math.max(0, special.textUntil - now) : null,
+        darkMs: special.textUntil ? DARK_MS : null,
         answerSeconds: special.type === 'relampago' ? LIGHTNING_SECONDS : null,
       } : null;
       // A carta que ESTE jogador usou nesta ronda (com a pista ou o palpite copiado: só para ele).

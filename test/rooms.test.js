@@ -1074,7 +1074,7 @@ test('duelo: sem fase de votação; pontos como no modo normal (1, em cheio 2, e
   // Marcador e estatísticas do duelo.
   assert.deepEqual(room.players.get(ana).score, 2);
   assert.deepEqual(room.players.get(rui).score, 3);
-  assert.deepEqual(room.stateFor(rui).duel, { ids, stats: { [ana]: { won: 2, exact: 0 }, [rui]: { won: 2, exact: 1 } } });
+  assert.deepEqual(room.stateFor(rui).duel, { ids, stats: { [ana]: { won: 2, exact: 0, points: { closest: 2, exact: 0, votes: 0, special: 0, cards: 0 } }, [rui]: { won: 2, exact: 1, points: { closest: 2, exact: 1, votes: 0, special: 0, cards: 0 } } } });
   room.destroy();
 });
 
@@ -1100,7 +1100,7 @@ test('duelo: empate no fim vai ao desempate; ecrã final sem o quadro de honra d
   const end = room.stateFor(rui);
   assert.deepEqual(end.standings, [[ana], [rui]]);
   assert.deepEqual(end.awards, [], 'sem prémios de turma');
-  assert.deepEqual(end.duel.stats, { [ana]: { won: 3, exact: 0 }, [rui]: { won: 3, exact: 0 } });
+  assert.deepEqual(end.duel.stats, { [ana]: { won: 3, exact: 0, points: { closest: 3, exact: 0, votes: 0, special: 0, cards: 0 } }, [rui]: { won: 3, exact: 0, points: { closest: 3, exact: 0, votes: 0, special: 0, cards: 0 } } });
   // Com "Turma", os prémios continuam lá.
   room.destroy();
 });
@@ -1265,7 +1265,8 @@ test('ronda especial "Último lugar ataca": o ponto do mais perto só vai para a
     const r = room.stateFor(ana).result;
     assert.deepEqual(r.special.awarded, [eva]);
     assert.equal(r.points[eva], 2);
-    assert.equal(r.points[rui], undefined, 'o Rui (de cima) não ganha o ponto do mais perto');
+    assert.equal(r.points[rui], 1, 'o Rui (de cima) acertou em cheio: só o bónus do em cheio, sem o ponto do mais perto');
+    assert.deepEqual(r.special.exactBonus, [rui]);
     room.destroy();
   }
   // Pauta toda empatada: este tipo não pode sair.
@@ -1291,7 +1292,7 @@ test('ronda especial "Último lugar ataca": o ponto do mais perto só vai para a
     answerAll(room, ids, [206, 250]);
     const r = room.stateFor(ids[0]).result;
     assert.deepEqual(room.bottomHalf(), [ids[1]]);
-    assert.deepEqual(r.points, { [ids[1]]: 1 }, 'a Ana acertou em cheio, mas o ponto vai para o Rui');
+    assert.deepEqual(r.points, { [ids[0]]: 1, [ids[1]]: 1 }, 'a Ana acertou em cheio: fica com o bónus (+1), mas o ponto do mais perto vai para o Rui');
     room.destroy();
   }
 });
@@ -1306,7 +1307,7 @@ test('ronda especial "Às escuras": o texto só se vê 5 s (depois só a categor
   let st = room.stateFor(ids[1]);
   assert.equal(st.question.text, q.text, 'nos primeiros 5 s vê-se');
   assert.ok(st.special.hideTextMs > 3000 && st.special.hideTextMs <= 4000);
-  room.current.special.textUntil = Date.now() - 1; // passaram os 5 s
+  room.current.special.textUntil = Date.now() - 2000; // passaram os 5 s (e a folga do servidor)
   st = room.stateFor(ids[1]);
   assert.equal(st.question.text, null, 'o texto deixa de ser enviado');
   assert.equal(st.question.unit, 'metros');
@@ -1319,7 +1320,7 @@ test('ronda especial "Às escuras": o texto só se vê 5 s (depois só a categor
   // Mapa: o texto também desaparece, o mapa continua (a pergunta continua a ser de mapa).
   const m = setup();
   startWith(m.room, m.ids[0], MAP_QUESTION);
-  makeSpecial(m.room, 'escuras', { textUntil: Date.now() - 1 });
+  makeSpecial(m.room, 'escuras', { textUntil: Date.now() - 2000 });
   const ms = m.room.stateFor(m.ids[0]);
   assert.equal(ms.question.text, null);
   assert.equal(ms.question.type, 'map');

@@ -64,3 +64,13 @@ test('laboratório (/dev/lab/…): só em desenvolvimento; os palpites dos bots 
     }
   }
 });
+test('laboratório: os bots variam as frases do chat (nunca a mesma duas vezes seguidas)', () => {
+  const { chatLine, CHAT_LINES } = require('../server/devlab');
+  for (const phase of ['lobby', 'end']) {
+    const lab = {};
+    const said = Array.from({ length: 200 }, () => chatLine(lab, phase));
+    for (let i = 1; i < said.length; i++) assert.notEqual(said[i], said[i - 1], 'repetida seguida');
+    assert.ok(new Set(said).size >= 10, `variadas: ${new Set(said).size}`);
+    assert.ok(said.every((s) => CHAT_LINES[phase].includes(s)));
+  }
+});

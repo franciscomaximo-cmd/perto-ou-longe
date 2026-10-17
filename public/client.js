@@ -669,6 +669,8 @@
   function closeSpecialIntro() {
     clearTimeout(specialIntroTimer);
     $('#special-intro').hidden = true;
+    // "Às escuras": os 5 s de pergunta à vista só começam agora, quando o anúncio desaparece.
+    if (darkAt === Infinity) setDarkAt(Date.now() + ((specialOf() && specialOf().darkMs) || 5000));
   }
   $('#special-intro').addEventListener('click', closeSpecialIntro);
   function renderSpecialIntro() {
@@ -692,28 +694,38 @@
     specialIntroTimer = setTimeout(closeSpecialIntro, s.introMs);
   }
 
-  // "Às escuras": a hora (neste telemóvel) a que o texto desaparece; o ecrã volta a ser
-  // desenhado nesse momento. (O servidor também deixa de enviar o texto, para quem recarrega.)
+  // "Às escuras": a hora (neste telemóvel) a que o texto desaparece, uma vez por ronda.
+  // Enquanto o anúncio está no ecrã, é Infinity (os 5 s só começam quando ele desaparece, em
+  // closeSpecialIntro). Só durante a resposta: na votação e na revelação a pergunta volta.
+  // (O servidor também deixa de enviar o texto, com folga, para quem recarrega a página.)
   let darkAt = null;
   let darkTimer = null;
-  let darkState = null; // o estado de onde veio darkAt (só se recalcula com um estado novo)
-  function trackDark() {
-    if (state === darkState) return;
-    darkState = state;
-    const s = specialOf();
+  let darkKey = null;
+  function setDarkAt(at) {
+    darkAt = at;
     clearTimeout(darkTimer);
-    if (!s || s.hideTextMs === null || s.hideTextMs === undefined) { darkAt = null; return; }
-    darkAt = Date.now() + s.hideTextMs;
     // (Só o texto da pergunta: um render() completo com o estado antigo voltava a acertar o
     // relógio para trás.)
-    if (s.hideTextMs > 0) {
-      darkTimer = setTimeout(() => {
-        if (state && state.phase === 'answering') showQuestion('#ans-question');
-        if (state && state.phase === 'voting') showQuestion('#vote-question');
-      }, s.hideTextMs + 30);
-    }
+    darkTimer = setTimeout(() => {
+      if (state && state.phase === 'answering') showQuestion('#ans-question');
+    }, Math.max(0, at - Date.now()) + 30);
   }
-  const questionHidden = () => Boolean(state.question && (state.question.text === null || (darkAt !== null && Date.now() >= darkAt)));
+  function trackDark() {
+    const s = specialOf();
+    if (!s || !s.darkMs || state.phase !== 'answering') {
+      darkAt = null;
+      darkKey = null;
+      clearTimeout(darkTimer);
+      return;
+    }
+    const key = `${state.code}-${state.gameNumber}-${state.round}`;
+    if (darkKey === key) return;
+    darkKey = key;
+    if (s.introMs > 0) darkAt = Infinity; // à espera do fim do anúncio
+    else setDarkAt(Date.now() + (s.hideTextMs || 0)); // (entrou-se já depois do anúncio)
+  }
+  const questionHidden = () => Boolean(state.phase === 'answering' && state.question
+    && (state.question.text === null || (darkAt !== null && Date.now() >= darkAt)));
   // O texto da pergunta, ou o aviso de que desapareceu (fica a categoria e a unidade).
   function showQuestion(sel) {
     const node = $(sel);
@@ -733,13 +745,30 @@
         : `🙌 Não foi desta: ${listNames(sp.missed.filter((id) => player(id)))} ${sp.missed.length === 1 ? 'ficou' : 'ficaram'} longe. A ronda contou normalmente.`;
     }
     if (sp.type === 'ultimo') {
-      if (!sp.awarded.length) return '🐢 Ninguém da metade de baixo da pauta respondeu: o ponto do mais perto ficou por dar.';
+      const bonus = (sp.exactBonus || []).filter((id) => player(id));
+      const exactNote = bonus.length
+        ? ` ${listNames(bonus)} ${bonus.length === 1 ? 'acertou' : 'acertaram'} em cheio e ${bonus.length === 1 ? 'fica' : 'ficam'} com o bónus do em cheio (+1).`
+        : '';
+      if (!sp.awarded.length) return `🐢 Ninguém da metade de baixo da pauta respondeu: o ponto do mais perto ficou por dar.${exactNote}`;
       return sp.moved
-        ? `🐢 Ponto para o último lugar! ${listNames(sp.awarded)} ${sp.awarded.length === 1 ? 'ganha' : 'ganham'} o ponto do mais perto.`
-        : `🐢 Ponto para o último lugar! ${listNames(sp.awarded)} ${sp.awarded.length === 1 ? 'era' : 'eram'} mesmo o mais perto.`;
+        ? `🐢 Ponto para o último lugar! ${listNames(sp.awarded)} ${sp.awarded.length === 1 ? 'ganha' : 'ganham'} o ponto do mais perto.${exactNote}`
+        : `🐢 Ponto para o último lugar! ${listNames(sp.awarded)} ${sp.awarded.length === 1 ? 'era' : 'eram'} mesmo o mais perto.${exactNote}`;
     }
     return '';
   }
+  // "Último lugar ataca": a frase para quem ficou o mais perto mas é de cima da pauta (explica
+  // porque não teve o ponto do mais perto, e o que a aposta deu). '' nos outros casos.
+  function lastPlaceNote(r) {
+    const sp = r.special;
+    if (!sp || sp.type !== 'ultimo' || !r.closest.includes(state.me) || sp.awarded.includes(state.me)) return '';
+    const bet = (r.cards || []).find((c) => c.id === state.me && c.type === 'aposta');
+    const gain = r.points[state.me] || 0;
+    if ((sp.exactBonus || []).includes(state.me)) {
+      return `Em cheio! Nesta ronda o ponto do mais perto vai para o último lugar, mas ganhas o bónus do em cheio${bet ? ` + ${bet.amount} da aposta 💰` : ''} (+${gain}).`;
+    }
+    return `Ficaste o mais perto, mas nesta ronda só o último lugar pode ganhar esse ponto.${bet ? ' A aposta não conta.' : ''}${gain ? ` (+${gain} dos votos)` : ''}`;
+  }
+
   // O "+N" de cada jogador, com o efeito da ronda especial à vista.
   function gainText(r, id) {
     const gain = r.points[id] || 0;
@@ -754,13 +783,14 @@
 
   // --- Cartas ("truques de aluno") ------------------------------------------------
   // O servidor dá as cartas (state.myHand, só as minhas), valida o uso e calcula os pontos;
-  // aqui mostra-se a "mão" no fundo do ecrã durante a resposta, o painel de cada carta, a carta
+  // aqui mostra-se a "mão" durante a resposta (logo a seguir à resposta, no ecrã de responder:
+  // nunca tapa o "Entregar" nem o campo), o painel de cada carta, a carta
   // usada nesta ronda (state.myCard: a pista da Cábula ou o palpite copiado, só para mim) e,
   // na revelação, quem usou o quê (state.result.cards).
   const CARD_INFO = {
     aposta: { icon: '💰', name: 'Aposta', text: 'Apostas 1, 2 ou 3 pontos. Se ficares mais perto, ganhas a aposta em vez do ponto normal (em cheio, +1). Se ficares mais longe, perdes-a.' },
     rouba: { icon: '🦊', name: 'Rouba ao primeiro', text: 'Se ficares mais perto, em vez do ponto normal roubas 1 ponto ao líder da pauta. Se o líder fores tu, ficas com o ponto normal.' },
-    cabula: { icon: '📝', name: 'Cábula', text: 'Uma pista só para ti: um intervalo largo onde está a resposta (no mapa, o continente).' },
+    cabula: { icon: '📝', name: 'Cábula', text: 'Uma pista só para ti: um intervalo onde está a resposta (no mapa, o continente).' },
     copiar: { icon: '👀', name: 'Copiar pelo colega', text: 'Escolhes um colega que já entregou e vês o palpite dele. Copias se quiseres.' },
     tpc: { icon: '📚', name: 'Trabalho de casa feito', text: 'Os pontos que ganhares nesta ronda contam a dobrar.' },
     atestado: { icon: '🩹', name: 'Atestado médico', text: 'Nesta ronda não perdes pontos nem te podem roubar.' },
@@ -791,7 +821,6 @@
   function renderHand() {
     const show = handVisible();
     $('#card-hand').hidden = !show;
-    document.body.classList.toggle('has-hand', show);
     if (!show) { handKey = ''; closeCardSheet(); return; }
     const key = JSON.stringify([state.myHand, state.myCard, state.myAnswer !== null, state.answered, state.remainingMs == null]);
     if (key !== handKey) {
@@ -920,11 +949,14 @@
       case 'aposta':
         if (o.result === 'won') return `${n} apostou ${o.amount} 💰 e ganhou ${pts(o.points)}!`;
         if (o.result === 'lost') return `${n} apostou ${o.amount} 💰 e perdeu ${pts(o.points)}.`;
+        if (o.result === 'exactLastPlace') return `${n} apostou ${o.amount} 💰 e acertou em cheio! O ponto do mais perto foi para o último lugar, mas ganhou o bónus do em cheio e a aposta (+${o.points}).`;
+        if (o.result === 'closestBlocked') return `${n} apostou ${o.amount} 💰 e ficou o mais perto, mas nesta ronda só o último lugar podia ganhar esse ponto: a aposta não conta.`;
         return `${n} apostou ${o.amount} 💰: não ficou nem mais perto nem mais longe, nada muda.`;
       case 'rouba':
         if (o.result === 'stole') return `${n} usou Rouba ao primeiro 🦊 e roubou ${pts(o.stolen)} ao líder da pauta, ${nameOf(o.victim)}!`;
         if (o.result === 'leader') return `${n} usou Rouba ao primeiro 🦊, mas já ia à frente: ficou com o ponto normal.`;
         if (o.result === 'protected') return `${n} usou Rouba ao primeiro 🦊, mas o líder tinha atestado médico 🩹: ficou com o ponto normal.`;
+        if (o.result === 'closestBlocked') return `${n} usou Rouba ao primeiro 🦊 e ficou o mais perto, mas nesta ronda só o último lugar podia ganhar esse ponto: não houve roubo.`;
         return `${n} usou Rouba ao primeiro 🦊, mas não ficou mais perto.`;
       case 'cabula': return `${n} usou a Cábula 📝.`;
       case 'copiar': return `${n} copiou pelo colega 👀 (${t}).`;
@@ -2019,9 +2051,10 @@
     $('#rev-special-effect').textContent = effect;
     renderCardLog(r);
     const myGain = r.points[state.me] || 0;
-    $('#rev-mine').textContent = myGain > 0 ? `Ganhaste ${myGain} ponto${myGain === 1 ? '' : 's'} nesta ronda!`
+    const gainLine = myGain > 0 ? `Ganhaste ${myGain} ponto${myGain === 1 ? '' : 's'} nesta ronda!`
       : myGain < 0 ? `Perdeste ${-myGain} ponto${myGain === -1 ? '' : 's'} nesta ronda.`
       : 'Nenhum ponto para ti nesta ronda.';
+    $('#rev-mine').textContent = lastPlaceNote(r) || gainLine;
 
     const votesFor = (id) => Object.values(r.votes).filter((t) => t === id).length;
     const answered = Object.keys(r.answers).sort((a, b) => r.distances[a] - r.distances[b]);
@@ -2165,14 +2198,25 @@
     } else {
       $('#end-winner').textContent = TEXTOS.duelEmpate(pair[0] ? pair[0].score : 0, pair[1] ? pair[1].score : 0);
     }
+    // De onde vieram os pontos de cada um (a soma dá a pontuação): assim percebe-se um 2–1 com
+    // "1 ronda ganha" para cada um (ex.: um "Trabalho de casa feito" ou "Pontos a dobrar").
     const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+    const signed = (n) => (n > 0 ? `+${n}` : `−${-n}`);
     $('#end-duel').replaceChildren(...pair.map((p) => {
       const s = state.duel.stats[p.id] || { won: 0, exact: 0 };
+      const src = s.points || { closest: s.won, exact: s.exact, votes: 0, special: 0, cards: 0 };
+      const lines = [
+        `🎯 Mais perto: ${plural(s.won, 'ronda', 'rondas')} (${signed(src.closest || 0)})`,
+        src.exact ? `💯 Em cheio: ${plural(s.exact, 'vez', 'vezes')} (${signed(src.exact)})` : null,
+        src.votes ? `🗳️ Votos certos: ${signed(src.votes)}` : null,
+        src.special ? `📝 Rondas especiais: ${signed(src.special)}` : null,
+        src.cards ? `🃏 Cartas: ${signed(src.cards)}` : null,
+      ].filter(Boolean);
       return el('div', { class: `duel-card${winner && winner.id === p.id ? ' win' : ''}` }, [
         avatar(p, 'm'),
         el('b', { class: 'duel-card-name', text: p.name }),
-        el('span', { text: `${plural(s.won, 'ronda ganha', 'rondas ganhas')}` }),
-        el('span', { text: `${plural(s.exact, 'em cheio', 'em cheio')}` }),
+        el('ul', { class: 'duel-sources' }, lines.map((text) => el('li', { text }))),
+        el('span', { class: 'duel-total', text: `= ${plural(p.score, 'ponto', 'pontos')}` }),
       ]);
     }));
   }

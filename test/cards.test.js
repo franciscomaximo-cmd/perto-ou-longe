@@ -177,7 +177,9 @@ test('📝 Cábula: intervalo largo com a resposta (só para quem usa); no mapa,
       assert.equal(h.kind, 'range');
       assert.ok(h.min <= q.answer && q.answer <= h.max, `${q.answer} em [${h.min}, ${h.max}]`);
       assert.ok(h.min >= 0, 'sem negativos numa resposta positiva');
-      assert.ok(h.max - h.min >= (/^Em que ano/.test(q.text) ? 80 : Math.abs(q.answer) * 0.5), `largo: [${h.min}, ${h.max}]`);
+      const w = h.max - h.min;
+      if (/^Em que ano/.test(q.text)) assert.ok(w >= 20 && w <= 30, `anos: entre 20 e 30 (${h.min}–${h.max})`);
+      else assert.ok(w >= Math.abs(q.answer) * 0.38 && w <= Math.abs(q.answer) * 0.6 + 4, `~40% da resposta: [${h.min}, ${h.max}]`);
     }
   }
   assert.deepEqual(Cards.cabulaHint(MAP_Q, continentOf), { kind: 'continent', text: 'Ásia' });
@@ -207,7 +209,8 @@ test('👀 Copiar pelo colega: só de quem já entregou; o palpite só vai para 
   room.useCard(ana, { card: 'copiar', target: rui });
   assert.deepEqual(room.stateFor(ana).myCard, { type: 'copiar', target: rui, copied: 321 });
   assert.equal(room.stateFor(eva).myCard, null);
-  assert.ok(!JSON.stringify(room.stateFor(eva)).includes('321'), 'a Eva não vê o palpite do Rui');
+  assert.ok(!JSON.stringify(room.stateFor(eva)).includes('"copied"'), 'a Eva não vê o palpite do Rui');
+  assert.equal(room.stateFor(eva).myAnswer, null);
   // Copiar é opcional: a Ana responde o que quiser.
   room.submitAnswer(ana, 210);
   assert.equal(room.current.answers.get(ana), 210);
@@ -274,7 +277,8 @@ test('⏰ Mais tempo: +15 s só para quem a usa (e só com tempo limite)', () =>
   room.useCard(ids[0], { card: 'tempo' });
   const mine = room.stateFor(ids[0]).remainingMs;
   const other = room.stateFor(ids[1]).remainingMs;
-  assert.ok(mine - other > 14000 && mine - other <= 15000, `Ana: ${mine} ms; Rui: ${other} ms`);
+  // (Duas leituras do relógio: entre elas pode passar 1 ms ou outro.)
+  assert.ok(mine - other > 14900 && mine - other <= 15100, `Ana: ${mine} ms; Rui: ${other} ms`);
   // Passado o tempo normal: o Rui já não responde; a Ana ainda pode.
   room.current.baseDeadline = Date.now() - 1;
   room.current.extra.set(ids[0], Date.now() + 10000);
@@ -417,4 +421,101 @@ test('na revelação, todos veem quem usou o quê (sem a pista); a pontuação n
   toReveal(room, ids[0]);
   assert.deepEqual(room.stateFor(ids[0]).result.cards, []);
   room.destroy();
+});
+
+// --- "Último lugar ataca" com em cheio e Aposta ------------------------------------------------
+
+// Ronda "Último lugar ataca" com a Ana à frente (5), o Rui no meio (3) e a Eva em último (0).
+function lastPlace(answers, aposta) {
+  const { room, ids } = game();
+  setScores(room, ids, [5, 3, 0]);
+  room.current.special = { type: 'ultimo', introUntil: 0, textUntil: null };
+  if (aposta) {
+    give(room, ids[0], [aposta.card || 'aposta', 'tpc']);
+    room.useCard(ids[0], aposta.card === 'rouba' ? { card: 'rouba' } : { card: 'aposta', amount: aposta.amount });
+  }
+  ids.forEach((id, i) => room.submitAnswer(id, answers[i]));
+  toReveal(room, ids[0]);
+  const r = room.stateFor(ids[1]).result;
+  room.destroy();
+  return { r, ids };
+}
+
+test('"Último lugar ataca": quem é de cima e acerta EM CHEIO fica com o bónus do em cheio (o ponto vai para o último)', () => {
+  const { r, ids } = lastPlace([206, 300, 100]);
+  assert.deepEqual(r.special.exactBonus, [ids[0]]);
+  assert.deepEqual(r.special.awarded, [ids[2]]);
+  assert.deepEqual(r.points, { [ids[0]]: 1, [ids[2]]: 1 }, 'Ana: +1 do em cheio; Eva (último lugar): o ponto do mais perto');
+});
+
+test('"Último lugar ataca" + Aposta: em cheio ganha o bónus e a aposta; mais perto sem ser em cheio, a aposta não conta', () => {
+  {
+    const { r, ids } = lastPlace([206, 300, 100], { amount: 3 });
+    assert.equal(r.points[ids[0]], 4, 'bónus do em cheio (1) + 3 da aposta');
+    const [o] = r.cards;
+    assert.equal(o.result, 'exactLastPlace');
+    assert.equal(o.points, 4);
+    assert.equal(r.points[ids[2]], 1, 'o ponto do mais perto continua a ir para a Eva');
+  }
+  {
+    const { r, ids } = lastPlace([205, 300, 100], { amount: 3 });
+    assert.equal(r.points[ids[0]] || 0, 0, 'ficou o mais perto, mas nem ganha nem perde');
+    assert.equal(r.cards[0].result, 'closestBlocked');
+    assert.equal(r.points[ids[2]], 1);
+  }
+  // Rouba ao primeiro, de cima e mais perto: não rouba (e diz porquê).
+  {
+    const { room, ids } = game();
+    setScores(room, ids, [5, 3, 0]);
+    room.current.special = { type: 'ultimo', introUntil: 0, textUntil: null };
+    give(room, ids[1], ['rouba', 'tpc']);
+    room.useCard(ids[1], { card: 'rouba' });
+    [300, 205, 100].forEach((v, i) => room.submitAnswer(ids[i], v));
+    toReveal(room, ids[0]);
+    const r = room.stateFor(ids[0]).result;
+    assert.equal(r.cards[0].result, 'closestBlocked');
+    assert.equal(r.points[ids[1]] || 0, 0);
+    room.destroy();
+  }
+});
+
+test('"Às escuras": a pergunta volta a aparecer na votação e na revelação', () => {
+  const { room, ids } = game();
+  room.current.special = { type: 'escuras', introUntil: Date.now() - 9000, textUntil: Date.now() - 4000 };
+  assert.equal(room.stateFor(ids[0]).question.text, null, 'a responder: escondida');
+  [100, 200, 300].forEach((v, i) => room.submitAnswer(ids[i], v));
+  assert.equal(room.phase, 'voting');
+  assert.equal(room.stateFor(ids[0]).question.text, Q.text, 'na votação: volta');
+  assert.equal(room.stateFor(ids[0]).special.hideTextMs, null);
+  toReveal(room, ids[0]);
+  assert.equal(room.stateFor(ids[0]).question.text, Q.text, 'na revelação: volta');
+  room.destroy();
+});
+
+test('a origem dos pontos de cada um soma a pontuação (para o ecrã final do duelo explicar o resultado)', () => {
+  for (let run = 0; run < 20; run++) {
+    const { room, ids } = game(['Ana', 'Rui'], { mode: 'duelo', rounds: 5 });
+    const specials = [null, 'dobrar', 'todos', 'ultimo', 'escuras'];
+    for (let round = 0; round < 5; round++) {
+      room.current.question = Q;
+      const sp = specials[(run + round) % specials.length];
+      if (sp) room.current.special = { type: sp, introUntil: 0, textUntil: null };
+      // Às vezes, cartas.
+      if ((run + round) % 2) {
+        give(room, ids[0], ['tpc', 'aposta']);
+        room.useCard(ids[0], round % 4 ? { card: 'tpc' } : { card: 'aposta', amount: 2 });
+      }
+      room.submitAnswer(ids[0], [206, 200, 150, 300][(run + round) % 4]);
+      room.submitAnswer(ids[1], [210, 206, 190, 100][(run * 3 + round) % 4]);
+      toReveal(room, ids[0]);
+      if (round < 4) room.nextQuestion(ids[0]);
+    }
+    const st = room.stateFor(ids[0]);
+    for (const id of ids) {
+      const p = st.duel.stats[id].points;
+      const sum = p.closest + p.exact + p.votes + p.special + p.cards;
+      assert.equal(sum, room.players.get(id).score, `run ${run}: ${JSON.stringify(p)} → ${room.players.get(id).score}`);
+    }
+    room.destroy();
+  }
 });

@@ -17,9 +17,24 @@ const { centerOf } = require('./geo');
 
 const BOT_NAMES = ['Bot Beatriz', 'Bot Duarte', 'Bot Inês', 'Bot Tomás', 'Bot Leonor', 'Bot Afonso',
   'Bot Matilde', 'Bot Gonçalo', 'Bot Carolina', 'Bot Rodrigo', 'Bot Mariana', 'Bot Vicente'];
-const CHAT_LINES = ['Boa sorte a todos!', 'Esta vai ser fácil…', 'Quem perder paga os lanches 😄', 'Já estou pronto!',
-  'Bem jogado!', 'Para a próxima ganho eu!', 'Que pergunta difícil!', 'Alguém sabe a capital da Mongólia?',
-  'Não vale copiar 👀', 'Estou com sorte hoje 🍀'];
+// Frases curtas dos bots no chat: umas para a sala de espera, outras para o fim do jogo.
+const CHAT_LINES = {
+  lobby: ['Boa sorte a todos!', 'Esta vai ser fácil…', 'Quem perder paga os lanches 😄', 'Já estou pronto!',
+    'Hoje ganho eu 💪', 'Alguém sabe a capital da Mongólia?', 'Não vale copiar 👀', 'Estou com sorte hoje 🍀',
+    'Vamos lá, turma!', 'Espero que saiam perguntas de mapa 🗺️', 'Trouxe a cábula 📝', 'Quem é o favorito?',
+    'Já fiz o trabalho de casa 📚', 'Bora começar!', 'Tenho um bom pressentimento', 'Hoje não vou ficar em último 🐢',
+    'Olá a todos! 👋', 'Quanto tempo temos para responder?', 'Prometo não chutar números ao calhas', 'Atenção às rondas especiais!'],
+  end: ['Bem jogado!', 'Para a próxima ganho eu!', 'Que pergunta difícil aquela!', 'Foi por pouco 😅',
+    'Parabéns ao vencedor! 🏆', 'Mais uma?', 'Não acredito que falhei aquela', 'Aquela do mapa foi difícil 🗺️',
+    'Boa jogada a todos', 'Fiquei tão perto!', 'Revanche? ⚔️', 'Gostei das rondas especiais',
+    'Para a próxima trago a cábula 📝', 'Que sorte! 🍀', 'Já estava a ver que não', 'Bom jogo, turma! 👏'],
+};
+// Uma frase ao acaso, sem repetir a última que se disse nesta turma.
+function chatLine(lab, phase) {
+  const list = CHAT_LINES[phase === 'end' ? 'end' : 'lobby'].filter((line) => line !== lab.lastLine);
+  lab.lastLine = list[Math.floor(Math.random() * list.length)];
+  return lab.lastLine;
+}
 const TICK_MS = 400;
 
 const rand = () => Math.random();
@@ -170,7 +185,7 @@ function createLab({ broadcast, emitReaction }) {
     // Chat: de vez em quando, um bot escreve (na sala de espera e no fim).
     if (lab.options.chat && lab.bots.size && (room.phase === 'lobby' || room.phase === 'end') && now >= lab.nextChat) {
       if (lab.nextChat) {
-        try { room.chatSend(pick([...lab.bots]), pick(CHAT_LINES), now); changed = true; } catch { /* ex.: silenciado */ }
+        try { room.chatSend(pick([...lab.bots]), chatLine(lab, room.phase), now); changed = true; } catch { /* ex.: silenciado */ }
       }
       lab.nextChat = now + 7000 + rand() * 8000;
     }
@@ -200,6 +215,12 @@ function createLab({ broadcast, emitReaction }) {
         specialRounds: room.settings.specialRounds,
         cards: room.settings.cards,
         special: room.current && room.current.special && ['answering', 'voting', 'reveal'].includes(room.phase) ? room.current.special.type : null,
+        // (Só no laboratório: a resposta certa da pergunta atual, para testar o "em cheio".)
+        answer: (() => {
+          const q = room.phase === 'tiebreak' && room.tiebreak ? room.tiebreak.question : room.current && room.current.question;
+          if (!q || room.phase === 'lobby') return null;
+          return q.type === 'map' ? `${q.label} (toca dentro do país)` : `${q.answer}${q.unit ? ` ${q.unit}` : ''}`;
+        })(),
         forcedSpecial: lab ? lab.forcedSpecial : null,
         options: lab ? lab.options : null,
         players: [...room.players.values()].map((p) => ({
@@ -264,6 +285,21 @@ function createLab({ broadcast, emitReaction }) {
     res.json({ forcedSpecial: type });
   });
 
+  // Muda os pontos de um jogador (para testar, por exemplo, "Último lugar ataca" ou o "Rouba
+  // ao primeiro" sem a pauta toda empatada).
+  router.post('/score', (req, res) => {
+    const room = roomOf(req, res);
+    if (!room) return;
+    const p = room.players.get(req.body.playerId);
+    const score = Math.round(Number(req.body.score));
+    if (!p) return fail(res, 'Esse jogador já não está na turma.');
+    if (!Number.isFinite(score) || score < 0 || score > 999) return fail(res, 'Pontos entre 0 e 999.');
+    if (room.phase === 'lobby') return fail(res, 'Muda os pontos depois de começar o jogo.');
+    p.score = score;
+    broadcast(room);
+    res.json({ name: p.name, score });
+  });
+
   // Dá a um jogador estas cartas (já, se o jogo estiver a decorrer, e em cada jogo novo).
   router.post('/cards', (req, res) => {
     const room = roomOf(req, res);
@@ -284,4 +320,4 @@ function createLab({ broadcast, emitReaction }) {
   return router;
 }
 
-module.exports = { createLab, guessFor };
+module.exports = { createLab, guessFor, chatLine, CHAT_LINES };

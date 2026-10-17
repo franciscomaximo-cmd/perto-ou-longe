@@ -34,9 +34,7 @@
   <!-- Duelo: anúncio no início ("Duelo! Ana vs Bruno", com os bonecos frente a frente). -->
   <div id="duel-intro" class="duel-intro" role="dialog" aria-label="Início do duelo" hidden></div>
 
-  <!-- Cartas: a "mão" no fundo do ecrã durante a resposta, e o painel de cada carta
-       (explicação, escolhas e "Usar"). -->
-  <div id="card-hand" class="card-hand" role="toolbar" aria-label="As tuas cartas" hidden></div>
+  <!-- Cartas: o painel de cada carta (explicação, escolhas e "Usar"); a mão está no ecrã de responder. -->
   <div id="card-sheet" class="sheet card-sheet" role="dialog" aria-modal="true" aria-labelledby="card-sheet-title" hidden>
     <div class="card-sheet-box"></div>
   </div>
@@ -280,6 +278,8 @@
         <p class="sheet-title" data-t="aTuaResposta">A tua resposta</p>
         <p id="ans-mine" class="big-number"></p>
       </div>
+      <!-- Cartas: a "mão", logo a seguir à resposta (nunca tapa o "Entregar" nem o campo). -->
+      <div id="card-hand" class="card-hand" role="toolbar" aria-label="As tuas cartas" hidden></div>
       <p id="ans-watch" class="hint center" hidden>Não estás neste desempate. Fica a ver quem fica à frente.</p>
       <p id="ans-author" class="card center paper" hidden>Esta pergunta é tua! Não respondes, mas vais poder votar em quem ficou mais longe.</p>
 

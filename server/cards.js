@@ -7,7 +7,8 @@
 // Ordem dos efeitos numa ronda (em Room.reveal):
 //   1. pontos normais (scoreRound: mais perto 1, em cheio 2, votos certos 1);
 //   2. ronda especial (rooms.js, applySpecial): "Pontos a dobrar" ×2, "Toda a turma ganha" +1,
-//      "Último lugar ataca" (o ponto do mais perto muda de dono);
+//      "Último lugar ataca" (o ponto do mais perto muda de dono; quem é de cima e acerta em
+//      cheio fica só com o bónus do em cheio, +1, e com a aposta, se a usou);
 //   3. cartas (applyCards, abaixo), por esta ordem:
 //      a) Aposta e Rouba ao primeiro trocam o ponto do "mais perto" de quem as usou;
 //      b) Trabalho de grupo: +1 se o colega escolhido ficou mais perto;
@@ -40,16 +41,24 @@ function dealHand(deck, randomInt) {
 
 const tidy = (x) => Number(Number(x).toPrecision(12));
 
-// Pista da "Cábula": no mapa, o continente; nos números, um intervalo largo (~60% da resposta;
-// 80 anos nas perguntas "Em que ano…") que contém a resposta, que não fica sempre ao meio, e
-// com limites "redondos".
+// Respostas que são anos ("Em que ano…", ou um ano com "a.C."): a pista é um intervalo de anos.
+const isYearQuestion = (question) => /\bem que ano\b/i.test(question.text || '') || question.unit === 'a.C.';
+
+// Pista da "Cábula": no mapa, o continente; nos números, um intervalo que contém a resposta, que
+// não fica sempre ao meio, e com limites "redondos":
+//   - anos: 20 anos, com os limites de 5 em 5 (fica entre 20 e 30 anos);
+//   - os outros números: cerca de 40% da resposta (ex.: 206 → um intervalo de ~80), pelo
+//     menos 4 nos números inteiros pequenos (ex.: 8 → "entre 6 e 10").
 function cabulaHint(question, continentOf, random = Math.random) {
   if (question.type === 'map') return { kind: 'continent', text: continentOf(question.country) || 'desconhecido' };
   const a = question.answer;
-  const isYear = /^Em que ano\b/.test(question.text || '');
-  let width = isYear ? 80 : Math.max(Math.abs(a) * 0.6, Number.isInteger(a) ? 4 : 0);
-  if (!width) width = 4;
   const pos = 0.15 + 0.7 * random();
+  if (isYearQuestion(question)) {
+    const width = 20;
+    return { kind: 'range', min: Math.floor((a - width * pos) / 5) * 5, max: Math.ceil((a + width * (1 - pos)) / 5) * 5 };
+  }
+  let width = Math.max(Math.abs(a) * 0.4, Number.isInteger(a) ? 4 : 0);
+  if (!width) width = 4;
   const step = 10 ** Math.floor(Math.log10(width / 5));
   let min = tidy(Math.floor((a - width * pos) / step) * step);
   const max = tidy(Math.ceil((a + width * (1 - pos)) / step) * step);
@@ -63,13 +72,15 @@ function cabulaHint(question, continentOf, random = Math.random) {
  *   points     pontos da ronda já com a ronda especial { id: n }
  *   closest    quem ficou mesmo mais perto; winners: quem ficou com o ponto do mais perto
  *              (igual a closest, exceto em "Último lugar ataca")
+ *   exactBonus em "Último lugar ataca": os de cima da pauta que acertaram em cheio (ficam com o
+ *              bónus do em cheio, não com o ponto do mais perto)
  *   farthest   quem ficou mais longe; distances { id: distância } (só quem respondeu)
  *   multiplier 2 em "Pontos a dobrar", senão 1
  *   scores     pauta ANTES desta ronda { id: pontos } (todos os jogadores)
  *   uses       { id: { type, amount, target } } (as cartas usadas nesta ronda)
  * @returns { points, outcomes } — outcomes: o que aconteceu a cada carta (para a revelação).
  */
-function applyCards({ points, closest, winners = closest, farthest, distances, multiplier = 1, scores, uses }) {
+function applyCards({ points, closest, winners = closest, exactBonus = [], farthest, distances, multiplier = 1, scores, uses }) {
   const pts = { ...points };
   const add = (id, n) => { pts[id] = (pts[id] || 0) + n; };
   const m = multiplier;
@@ -79,11 +90,19 @@ function applyCards({ points, closest, winners = closest, farthest, distances, m
   const outcomes = {};
 
   // a) Aposta: em vez do ponto normal, a aposta (em cheio, +1); mais longe, perde-a.
+  //    Em "Último lugar ataca", quem é de cima da pauta e fica o mais perto não ganha o ponto
+  //    do mais perto: em cheio, ganha a aposta (o bónus do em cheio já veio da ronda especial);
+  //    sem ser em cheio, a aposta não conta (nem ganha nem perde).
   for (const [id, u] of usesOf('aposta')) {
     if (winners.includes(id)) {
       const gain = (u.amount + (distances[id] === 0 ? 1 : 0)) * m;
       add(id, gain - normalPoint(id));
       outcomes[id] = { result: 'won', amount: u.amount, points: gain };
+    } else if (exactBonus.includes(id)) {
+      add(id, u.amount * m);
+      outcomes[id] = { result: 'exactLastPlace', amount: u.amount, points: (u.amount + 1) * m };
+    } else if (closest.includes(id)) {
+      outcomes[id] = { result: 'closestBlocked', amount: u.amount };
     } else if (farthest.includes(id) && id in distances) {
       add(id, -u.amount);
       outcomes[id] = { result: 'lost', amount: u.amount, points: u.amount };
@@ -97,7 +116,11 @@ function applyCards({ points, closest, winners = closest, farthest, distances, m
   const leaders = Object.keys(scores).filter((id) => scores[id] === top);
   let victim = null;
   for (const [id] of usesOf('rouba')) {
-    if (!winners.includes(id)) { outcomes[id] = { result: 'notClosest' }; continue; }
+    if (!winners.includes(id)) {
+      // (Ficou o mais perto, mas em "Último lugar ataca" esse ponto não era para ele.)
+      outcomes[id] = { result: closest.includes(id) ? 'closestBlocked' : 'notClosest' };
+      continue;
+    }
     if (leaders.includes(id)) { outcomes[id] = { result: 'leader' }; continue; }
     // O líder roubado: dos que não têm atestado, o que ficou mais longe nesta ronda.
     const open = leaders.filter((l) => !protectedIds.includes(l));

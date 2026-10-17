@@ -55,6 +55,14 @@
       <div class="dev-bar"><label>Jogador <select id="lab-player"></select></label></div>
       <div class="dev-bar" id="lab-card-pick"></div>
       <div class="dev-bar"><button id="lab-give" type="button">🃏 Dar estas cartas</button></div>
+      <h3>Pontos</h3>
+      <p class="dev-note">Muda os pontos do jogador escolhido em cima (a meio do jogo), por exemplo para testar "Último lugar
+        ataca" ou o "Rouba ao primeiro" sem a pauta toda empatada. A resposta certa da pergunta atual aparece no estado
+        da turma (para testar o "em cheio").</p>
+      <div class="dev-bar">
+        <label>Pontos <input id="lab-score" type="number" min="0" max="999" value="5" style="width:90px"></label>
+        <button id="lab-set-score" type="button">✏️ Mudar os pontos</button>
+      </div>
       <p id="lab-msg" class="dev-note" role="status"></p>
       <ul id="lab-players" class="dev-lab-players"></ul>
       <details class="dev-row">
@@ -565,6 +573,12 @@
             : data.now ? '🃏 Cartas dadas: já estão na mão.' : '🃏 Cartas guardadas: entram quando o jogo começar.');
         }
       });
+      $('#lab-set-score').addEventListener('click', async () => {
+        const playerId = $('#lab-player').value;
+        if (!playerId) return say('Escolhe o jogador.');
+        const data = await post('score', { playerId, score: Number($('#lab-score').value) });
+        if (data) say(`✏️ ${data.name} passa a ter ${data.score} pontos.`);
+      });
       $('#lab-room').addEventListener('change', render);
 
       function render() {
@@ -576,6 +590,7 @@
         $('#lab-status').textContent = room
           ? `${room.mode === 'duelo' ? '⚔️ Duelo' : '🏫 Turma'} · ${PHASES[room.phase] || room.phase}${room.round ? ` · pergunta ${room.round} de ${room.total}` : ''}`
             + `${room.special ? ` · ${SPECIALS[room.special]}` : ''} · rondas especiais ${room.specialRounds ? 'ligadas' : 'desligadas'} · cartas ${room.cards ? 'ligadas' : 'desligadas'}`
+            + `${room.answer ? ` · resposta: ${room.answer}` : ''}`
           : '';
         document.querySelectorAll('#lab-specials button').forEach((b) => b.classList.toggle('on', Boolean(room) && (room.forcedSpecial || '') === b.dataset.type && Boolean(room.forcedSpecial)));
         if (room && room.options) for (const k of ['cards', 'reactions', 'chat']) $(`#lab-opt-${k}`).checked = room.options[k];

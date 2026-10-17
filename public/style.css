@@ -785,7 +785,7 @@ textarea:focus { border-color: var(--accent); }
 .target-list .miss { margin-left: 4px; color: var(--muted); font-weight: 400; }
 
 /* Botões do anfitrião. "Saltar" fica no fluxo da página, logo a seguir ao cenário (nunca por
-   cima da lista de palpites). "Próxima pergunta" fica logo a seguir à classificação, sem tapar
+   cima da lista de palpites). "Venha a próxima!" fica logo a seguir à classificação, sem tapar
    os resultados. */
 #btn-step { width: 100%; min-height: 48px; }
 #btn-tb-next {
@@ -1179,6 +1179,8 @@ body.has-actions #toast { bottom: calc(132px + env(safe-area-inset-bottom)); }
 @keyframes spin { to { transform: rotate(360deg); } }
 
 .confetti { position: fixed; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 20; }
+/* Fora do ecrã, as animações ficam em pausa (client.js marca estes elementos com .offscreen). */
+.offscreen, .offscreen * { animation-play-state: paused !important; }
 
 @media (prefers-reduced-motion: reduce) {
   .results li.shake { animation: none; }
@@ -1235,15 +1237,24 @@ body.has-actions #toast { bottom: calc(132px + env(safe-area-inset-bottom)); }
 .vote-title { font-size: 1.9rem; line-height: 1.15; color: var(--giz); }
 
 /* --- Revelação: o cenário na televisão pendurada na parede da tasca --- */
+/* Moldura fina (a madeira à volta e um rebordo escuro de vidro), para o cenário ocupar quase
+   toda a largura; em cima, a faixa da legenda faz de "testa" da televisão. */
 .reveal-stage.tv {
-  padding: 10px; border-radius: 22px;
+  padding: 6px; border-radius: 16px;
   background: var(--tex-madeira);
-  box-shadow: inset 0 0 0 3px var(--madeira-escura), inset 0 2px 0 rgba(255, 255, 255, .18), 0 12px 24px rgba(0, 0, 0, .5);
+  box-shadow: inset 0 0 0 2px var(--madeira-escura), inset 0 2px 0 rgba(255, 255, 255, .18), 0 10px 20px rgba(0, 0, 0, .45);
 }
-.reveal-stage.tv.has-captions { padding-top: 62px; }
-.reveal-stage.tv .rv-caption { top: 6px; }
+.reveal-stage.tv.has-captions { padding-top: 58px; }
+.reveal-stage.tv .rv-caption { top: 4px; }
 /* O vidro do ecrã: um rebordo escuro à volta do cenário. */
-.reveal-stage.tv > svg, .reveal-stage.tv > .tgt-board { box-shadow: 0 0 0 4px #141819, 0 0 0 6px rgba(0, 0, 0, .35); border-radius: 10px; }
+.reveal-stage.tv > svg, .reveal-stage.tv > .tgt-board { box-shadow: 0 0 0 2px #141819; border-radius: 10px; }
+/* No telemóvel, a televisão estende-se quase até às bordas do ecrã (como o mapa) e a madeira
+   fica ainda mais fina. */
+@media (max-width: 599px) {
+  .reveal-stage.tv { margin: 0 -12px; padding: 4px; border-radius: 12px; }
+  .reveal-stage.tv.has-captions { padding-top: 56px; }
+  .reveal-stage.tv > svg, .reveal-stage.tv > .tgt-board { border-radius: 8px; }
+}
 /* Legenda da vez e resumo final: em papel, com as letras da casa. */
 .rv-caption-box { background: var(--papel); color: var(--tinta); }
 .rv-caption-name { color: #6a5646; font-family: var(--letra-titulo); font-weight: 400; font-size: 1.25rem; }

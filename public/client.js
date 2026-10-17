@@ -62,6 +62,7 @@
     vaiDisto: 'Vai disto!',
     // Revelação
     despacha: 'Despacha!',
+    venhaProxima: 'Venha a próxima!',
     contaCerta: 'A conta certa:',
     // Classificação e fim do jogo
     contasDaCasa: 'As contas da casa',
@@ -542,6 +543,8 @@
     }
     // Fora da revelação, o tema da ronda é desmontado (para as animações e os eventos).
     if (phase !== 'reveal') revealCtl.destroy();
+    // O confetti não passa para o ecrã seguinte.
+    if (phase !== lastPhase) stopConfetti();
     // Fora da sala de espera (o jogo começou, ou saiu), fecham o editor do boneco (sem
     // guardar) e a confirmação.
     if (phase !== 'lobby') {
@@ -1389,16 +1392,27 @@
   // A resposta certa "rola" do zero até ao valor final (~1 s): ver public/reveal/index.js.
   const countUp = (node, value, unit) => window.RevealThemes.kit.countUp(node, value, unit);
 
-  // Confetti leve, desenhado num <canvas> por cima de tudo durante ~2 s.
+  // Confetti leve, desenhado num <canvas> por cima de tudo durante ~2 s. Para não pesar no
+  // telemóvel: poucas partículas (menos ainda em ecrãs pequenos), um só de cada vez, e para
+  // logo que as partículas saem do ecrã, quando a página fica escondida ou quando o ecrã do
+  // jogo muda (stopConfetti). Com movimento reduzido, não há confetti.
+  let confettiRun = null; // { frame, canvas }
+  function stopConfetti() {
+    if (!confettiRun) return;
+    cancelAnimationFrame(confettiRun.frame);
+    confettiRun.canvas.remove();
+    confettiRun = null;
+  }
   function confetti() {
-    if (reducedMotion()) return;
+    if (reducedMotion() || document.hidden || confettiRun) return;
     const canvas = el('canvas', { class: 'confetti', 'aria-hidden': 'true' });
     document.body.append(canvas);
     const ctx = canvas.getContext('2d');
     const W = (canvas.width = window.innerWidth);
     const H = (canvas.height = window.innerHeight);
-    const colors = ['#ffcb47', '#3ddc97', '#f4f1ff', '#4dabf7', '#f783ac', '#9775fa'];
-    const parts = Array.from({ length: 90 }, () => ({
+    const colors = ['#e6c15a', '#7ed39b', '#f3ead7', '#4dabf7', '#b8323f', '#f783ac'];
+    const count = W < 500 ? 40 : 60;
+    const parts = Array.from({ length: count }, () => ({
       x: W / 2 + (Math.random() - 0.5) * W * 0.3,
       y: H * 0.35,
       vx: (Math.random() - 0.5) * 9,
@@ -1411,22 +1425,33 @@
     const start = performance.now();
     const frame = (now) => {
       ctx.clearRect(0, 0, W, H);
+      let visible = 0;
       for (const p of parts) {
         p.vy += 0.25;
         p.x += p.vx;
         p.y += p.vy;
         p.rot += p.spin;
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rot);
+        if (p.y - p.size > H || p.x < -p.size || p.x > W + p.size) continue; // já saiu do ecrã
+        visible += 1;
+        ctx.setTransform(Math.cos(p.rot), Math.sin(p.rot), -Math.sin(p.rot), Math.cos(p.rot), p.x, p.y);
         ctx.fillStyle = p.color;
         ctx.fillRect(-p.size / 2, -p.size / 4, p.size, p.size / 2);
-        ctx.restore();
       }
-      if (now - start < 2200) requestAnimationFrame(frame);
-      else canvas.remove();
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      if (visible && now - start < 2200 && !document.hidden) confettiRun.frame = requestAnimationFrame(frame);
+      else stopConfetti();
     };
-    requestAnimationFrame(frame);
+    confettiRun = { canvas, frame: requestAnimationFrame(frame) };
+  }
+
+  // Animações fora do ecrã (ou em ecrãs escondidos) ficam em pausa: o boneco que "respira" na
+  // sala de espera e no editor, os festejos e os brindes do fim e o cenário da revelação.
+  // (CSS: .offscreen.) Voltam a andar quando aparecem.
+  if ('IntersectionObserver' in window) {
+    const visibility = new IntersectionObserver((entries) => {
+      for (const entry of entries) entry.target.classList.toggle('offscreen', !entry.isIntersecting);
+    });
+    for (const sel of ['#char-card-preview', '#char-preview', '#end-stage', '#end-awards', '#rev-stage']) visibility.observe($(sel));
   }
 
   // Sons curtos gerados com a Web Audio API (sem ficheiros). Ligados por defeito; a
@@ -1555,7 +1580,7 @@
     $('#rev-points-box').hidden = !showPoints;
 
     // A revelação corre sozinha; o anfitrião pode saltar enquanto ainda há palpites por
-    // mostrar. Depois só lhe resta "Próxima pergunta".
+    // mostrar. Depois só lhe resta "Venha a próxima!".
     const host = isHost();
     // "Saltar" fica logo a seguir ao cenário (no fluxo da página: nunca tapa a lista).
     const stepBtn = $('#btn-step');
@@ -1611,7 +1636,7 @@
     const last = state.round >= state.totalRounds;
     // Só há desempate para o 1.º lugar.
     const tied = standingGroups()[0].length > 1;
-    $('#btn-next').textContent = !last ? 'Próxima pergunta' : tied ? 'Ir ao desempate' : 'Ver classificação final';
+    $('#btn-next').textContent = !last ? TEXTOS.venhaProxima : tied ? 'Ir ao desempate' : 'Ver classificação final';
     $('#rev-hint').textContent = host ? '' : 'À espera do anfitrião…';
   }
 
@@ -1688,7 +1713,15 @@
   }
 
   function renderEnd() {
-    renderScores('#end-scores', { size: 'l' });
+    // A classificação final só se redesenha se mudar alguma coisa (no fim chegam atualizações
+    // por outros motivos, ex.: alguém sai ou volta a ligar-se).
+    const scoresKey = JSON.stringify([state.me, state.hostId, state.standings, state.tiebreakWinner,
+      state.players.map((p) => [p.id, p.name, p.score, p.connected, p.color, p.character])]);
+    const scoresBox = $('#end-scores');
+    if (scoresBox.dataset.key !== scoresKey) {
+      scoresBox.dataset.key = scoresKey;
+      renderScores('#end-scores', { size: 'l' });
+    }
     // Quem ganhou a festejar, com o seu festejo e o animal (só se redesenha se mudar, para a
     // animação não recomeçar a cada atualização).
     const top = standingGroups()[0].slice(0, 3);

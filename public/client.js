@@ -2027,6 +2027,11 @@
     }
     $('#rev-curiosity').hidden = !(showCorrect && r.curiosity);
     $('#rev-curiosity').textContent = r.curiosity ? `💡 ${r.curiosity}` : '';
+    // A resposta certa (e a curiosidade) ficam sempre por cima dos palpites de cada um: logo a
+    // seguir ao cenário (ou ao mapa) e antes da lista dos palpites. (Por baixo do cenário, para
+    // ele não saltar quando a resposta aparece.)
+    const guessList = isMap ? $('#rev-map-list') : $('#rev-guess-list');
+    if (guessList.previousElementSibling !== $('#rev-curiosity')) guessList.before(answerBox, $('#rev-curiosity'));
     revealEffects(r, shown, showCorrect);
 
     $('#rev-votes-box').hidden = !showVotes;

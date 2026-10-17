@@ -294,6 +294,7 @@
 
   $('#set-custom').addEventListener('change', (e) => act('settings:update', { playerQuestions: e.target.checked }));
   $('#set-special').addEventListener('change', (e) => act('settings:update', { specialRounds: e.target.checked }));
+  $('#set-cards').addEventListener('change', (e) => act('settings:update', { cards: e.target.checked }));
   // Modo de jogo: "Turma" (3 a 12) ou "Duelo" (2).
   $$('#set-mode button').forEach((b) => b.addEventListener('click', () => {
     if (state && state.settings.mode !== b.dataset.mode) act('settings:update', { mode: b.dataset.mode });
@@ -636,7 +637,7 @@
     dobrar: { icon: '✖️2', name: 'Pontos a dobrar', rule: () => 'Todos os pontos desta ronda contam a dobrar.' },
     relampago: { icon: '⚡', name: 'Ronda relâmpago', rule: () => 'Só tens 10 segundos para responder!' },
     todos: {
-      icon: '🤝', name: 'Toda a turma ganha',
+      icon: '🙌', name: 'Toda a turma ganha',
       rule: (isMap) => (isMap
         ? 'Se todos ficarem a menos de 500 km do país, todos ganham +1.'
         : 'Se todos ficarem a menos de 10% da resposta certa, todos ganham +1.'),
@@ -728,8 +729,8 @@
     if (sp.type === 'dobrar') return '✖️2 Pontos a dobrar: todos os pontos desta ronda contaram a dobrar.';
     if (sp.type === 'todos') {
       return sp.allWin
-        ? '🤝 Toda a turma ganha! +1 para todos.'
-        : `🤝 Não foi desta: ${listNames(sp.missed.filter((id) => player(id)))} ${sp.missed.length === 1 ? 'ficou' : 'ficaram'} longe. A ronda contou normalmente.`;
+        ? '🙌 Toda a turma ganha! +1 para todos.'
+        : `🙌 Não foi desta: ${listNames(sp.missed.filter((id) => player(id)))} ${sp.missed.length === 1 ? 'ficou' : 'ficaram'} longe. A ronda contou normalmente.`;
     }
     if (sp.type === 'ultimo') {
       if (!sp.awarded.length) return '🐢 Ninguém da metade de baixo da pauta respondeu: o ponto do mais perto ficou por dar.';
@@ -743,11 +744,211 @@
   function gainText(r, id) {
     const gain = r.points[id] || 0;
     if (!gain) return '';
+    if (gain < 0) return `−${-gain}`; // (com as cartas: aposta perdida, roubo)
     const sp = r.special;
     if (sp && sp.type === 'dobrar') return `+${gain} ×2`;
-    if (sp && sp.type === 'todos' && sp.allWin) return `+${gain} (🤝 +1)`;
+    if (sp && sp.type === 'todos' && sp.allWin) return `+${gain} (🙌 +1)`;
     if (sp && sp.type === 'ultimo' && sp.awarded.includes(id)) return `+${gain} 🐢`;
     return `+${gain}`;
+  }
+
+  // --- Cartas ("truques de aluno") ------------------------------------------------
+  // O servidor dá as cartas (state.myHand, só as minhas), valida o uso e calcula os pontos;
+  // aqui mostra-se a "mão" no fundo do ecrã durante a resposta, o painel de cada carta, a carta
+  // usada nesta ronda (state.myCard: a pista da Cábula ou o palpite copiado, só para mim) e,
+  // na revelação, quem usou o quê (state.result.cards).
+  const CARD_INFO = {
+    aposta: { icon: '💰', name: 'Aposta', text: 'Apostas 1, 2 ou 3 pontos. Se ficares mais perto, ganhas a aposta em vez do ponto normal (em cheio, +1). Se ficares mais longe, perdes-a.' },
+    rouba: { icon: '🦊', name: 'Rouba ao primeiro', text: 'Se ficares mais perto, em vez do ponto normal roubas 1 ponto ao líder da pauta. Se o líder fores tu, ficas com o ponto normal.' },
+    cabula: { icon: '📝', name: 'Cábula', text: 'Uma pista só para ti: um intervalo largo onde está a resposta (no mapa, o continente).' },
+    copiar: { icon: '👀', name: 'Copiar pelo colega', text: 'Escolhes um colega que já entregou e vês o palpite dele. Copias se quiseres.' },
+    tpc: { icon: '📚', name: 'Trabalho de casa feito', text: 'Os pontos que ganhares nesta ronda contam a dobrar.' },
+    atestado: { icon: '🩹', name: 'Atestado médico', text: 'Nesta ronda não perdes pontos nem te podem roubar.' },
+    tempo: { icon: '⏰', name: 'Mais tempo', text: 'Ganhas mais 15 segundos para responder.' },
+    grupo: { icon: '🤝', name: 'Trabalho de grupo', text: 'Escolhes um colega: se ele ficar mais perto, também ganhas 1 ponto.' },
+  };
+  const pts = (n) => `${n} ${n === 1 ? 'ponto' : 'pontos'}`;
+
+  // A mão só aparece a quem está a responder a uma pergunta normal (não no desempate).
+  function handVisible() {
+    return Boolean(state && state.phase === 'answering' && state.myHand && state.question && state.question.author !== state.me);
+  }
+  // Colegas que já entregaram (para copiar) e colegas a responder (para o trabalho de grupo).
+  const colleaguesAnswered = () => (state.answered || []).filter((id) => id !== state.me && player(id));
+  const colleaguesPlaying = () => state.players.filter((p) => p.id !== state.me && p.id !== state.question.author).map((p) => p.id);
+  // Porque é que esta carta não se pode usar agora ('' = pode).
+  function cardBlocked(c) {
+    if (c.used) return 'Já a usaste.';
+    if (state.myCard) return 'Já usaste uma carta nesta ronda.';
+    if (state.myAnswer !== null) return 'Já entregaste: as cartas usam-se antes.';
+    if (c.type === 'tempo' && state.remainingMs == null) return 'Só quando há tempo limite.';
+    if (c.type === 'copiar' && !colleaguesAnswered().length) return 'Ainda nenhum colega entregou.';
+    if (c.type === 'grupo' && !colleaguesPlaying().length) return 'Não há colegas para o grupo.';
+    return '';
+  }
+
+  let handKey = '';
+  function renderHand() {
+    const show = handVisible();
+    $('#card-hand').hidden = !show;
+    document.body.classList.toggle('has-hand', show);
+    if (!show) { handKey = ''; closeCardSheet(); return; }
+    const key = JSON.stringify([state.myHand, state.myCard, state.myAnswer !== null, state.answered, state.remainingMs == null]);
+    if (key !== handKey) {
+      handKey = key;
+      $('#card-hand').replaceChildren(...state.myHand.map((c) => {
+        const blocked = cardBlocked(c);
+        const info = CARD_INFO[c.type];
+        return el('button', {
+          type: 'button',
+          class: `school-card${blocked ? ' off' : ''}${c.used ? ' used' : ''}`,
+          'aria-label': `${info.name}${blocked ? ` (${blocked})` : ''}`,
+          onclick: () => openCardSheet(c.type),
+        }, [
+          el('span', { class: 'school-card-icon', text: info.icon, 'aria-hidden': 'true' }),
+          el('span', { class: 'school-card-text-wrap' }, [
+            el('span', { class: 'school-card-name', text: info.name }),
+            el('span', { class: 'school-card-state', text: c.used ? 'usada' : blocked || 'Toca para ver' }),
+          ]),
+        ]);
+      }));
+    }
+    if (openCard) renderCardSheet();
+  }
+
+  // Painel de uma carta: a explicação, as escolhas (aposta, colega) e "Usar".
+  let openCard = null;
+  let cardChoice = null;
+  function openCardSheet(type) {
+    openCard = type;
+    cardChoice = null;
+    $('#card-sheet').hidden = false;
+    renderCardSheet();
+  }
+  function closeCardSheet() {
+    openCard = null;
+    $('#card-sheet').hidden = true;
+  }
+  $('#card-sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeCardSheet(); });
+  $('#card-sheet').addEventListener('keydown', (e) => { if (e.key === 'Escape') closeCardSheet(); });
+  function renderCardSheet() {
+    const c = state.myHand && state.myHand.find((x) => x.type === openCard);
+    if (!c || !handVisible()) { closeCardSheet(); return; }
+    const info = CARD_INFO[c.type];
+    const blocked = cardBlocked(c);
+    const choose = (value, label) => el('button', {
+      type: 'button', class: cardChoice === value ? 'on' : '', text: label,
+      onclick: () => { cardChoice = value; renderCardSheet(); },
+    });
+    let options = null;
+    let needs = false;
+    if (!blocked && c.type === 'aposta') {
+      needs = true;
+      options = el('div', { class: 'chips card-choices' }, [1, 2, 3].map((n) => choose(n, `Aposto ${n}`)));
+    } else if (!blocked && (c.type === 'copiar' || c.type === 'grupo')) {
+      needs = true;
+      const ids = c.type === 'copiar' ? colleaguesAnswered() : colleaguesPlaying();
+      options = el('div', { class: 'chips card-choices' }, ids.map((id) => choose(id, nameOf(id))));
+    }
+    const use = () => {
+      const payload = { card: c.type };
+      if (c.type === 'aposta') payload.amount = cardChoice;
+      if (c.type === 'copiar' || c.type === 'grupo') payload.target = cardChoice;
+      act('card:use', payload, closeCardSheet);
+    };
+    $('#card-sheet .card-sheet-box').replaceChildren(...[
+      el('div', { class: 'school-card big' }, [
+        el('span', { class: 'school-card-icon', text: info.icon, 'aria-hidden': 'true' }),
+        el('h2', { id: 'card-sheet-title', class: 'school-card-name', text: info.name }),
+        el('p', { class: 'school-card-text', text: info.text }),
+      ]),
+      blocked ? el('p', { class: 'card-blocked', text: blocked }) : null,
+      needs && !blocked ? el('p', { class: 'hint', text: c.type === 'aposta' ? 'Quantos pontos apostas?' : c.type === 'copiar' ? 'Por quem copias?' : 'Com quem fazes o trabalho?' }) : null,
+      options,
+      el('div', { class: 'card-sheet-actions' }, [
+        el('button', { type: 'button', class: 'ghost', text: 'Fechar', onclick: closeCardSheet }),
+        el('button', { type: 'button', class: 'primary', text: 'Usar', disabled: blocked || (needs && cardChoice === null) ? '' : null, onclick: use }),
+      ]),
+    ].filter(Boolean));
+    // (el() põe atributos com setAttribute: tira o "disabled" quando pode usar.)
+    const btn = $('#card-sheet .card-sheet-actions .primary');
+    if (!(blocked || (needs && cardChoice === null))) btn.removeAttribute('disabled');
+  }
+
+  // A carta usada nesta ronda, junto à resposta (só para quem a usou).
+  function renderMyCard() {
+    const box = $('#ans-card');
+    const u = state.phase === 'answering' ? state.myCard : null;
+    box.hidden = !u;
+    if (!u) return;
+    const info = CARD_INFO[u.type];
+    const head = el('b', { text: `${info.icon} ${info.name}` });
+    const isMap = state.question.type === 'map';
+    let body = info.text;
+    let extra = null;
+    if (u.type === 'cabula' && u.hint) {
+      body = u.hint.kind === 'continent'
+        ? `Pista: fica em ${u.hint.text}.`
+        : `Pista: a resposta está entre ${fmt(u.hint.min)} e ${fmt(u.hint.max)}${state.question.unit ? ` ${state.question.unit}` : ''}.`;
+    } else if (u.type === 'copiar') {
+      body = isMap ? `Vês onde ${nameOf(u.target)} tocou no mapa.` : `${nameOf(u.target)} respondeu ${withUnit(u.copied, state.question.unit)}.`;
+      if (state.myAnswer === null) {
+        extra = el('button', {
+          type: 'button', class: 'ghost', text: isMap ? 'Copiar o sítio' : 'Copiar este palpite',
+          onclick: () => {
+            if (isMap) { mapPick = u.copied; renderAnswer(); return; }
+            $('#ans-input').value = String(u.copied).replace('.', ',');
+            $('#ans-input').dispatchEvent(new Event('input'));
+          },
+        });
+      }
+    } else if (u.type === 'aposta') {
+      body = `Apostaste ${pts(u.amount)}.`;
+    } else if (u.type === 'grupo') {
+      body = `Fazes o trabalho de grupo com ${nameOf(u.target)}.`;
+    } else if (u.type === 'tempo') {
+      body = 'Tens mais 15 segundos para responder.';
+    }
+    box.replaceChildren(...[head, el('span', { text: ` · ${body}` }), extra].filter(Boolean));
+  }
+
+  // Revelação: quem usou o quê e o que aconteceu.
+  function cardOutcomeText(o) {
+    const n = nameOf(o.id);
+    const t = o.target ? nameOf(o.target) : '';
+    switch (o.type) {
+      case 'aposta':
+        if (o.result === 'won') return `${n} apostou ${o.amount} 💰 e ganhou ${pts(o.points)}!`;
+        if (o.result === 'lost') return `${n} apostou ${o.amount} 💰 e perdeu ${pts(o.points)}.`;
+        return `${n} apostou ${o.amount} 💰: não ficou nem mais perto nem mais longe, nada muda.`;
+      case 'rouba':
+        if (o.result === 'stole') return `${n} usou Rouba ao primeiro 🦊 e roubou ${pts(o.stolen)} ao líder da pauta, ${nameOf(o.victim)}!`;
+        if (o.result === 'leader') return `${n} usou Rouba ao primeiro 🦊, mas já ia à frente: ficou com o ponto normal.`;
+        if (o.result === 'protected') return `${n} usou Rouba ao primeiro 🦊, mas o líder tinha atestado médico 🩹: ficou com o ponto normal.`;
+        return `${n} usou Rouba ao primeiro 🦊, mas não ficou mais perto.`;
+      case 'cabula': return `${n} usou a Cábula 📝.`;
+      case 'copiar': return `${n} copiou pelo colega 👀 (${t}).`;
+      case 'tpc':
+        return o.result === 'doubled'
+          ? `${n} tinha o Trabalho de casa feito 📚: os pontos contaram a dobrar (+${o.points})!`
+          : `${n} tinha o Trabalho de casa feito 📚, mas não ganhou pontos nesta ronda.`;
+      case 'atestado':
+        if (o.result === 'blockedTheft') return `${n} tinha atestado médico 🩹: o roubo não passou!`;
+        if (o.result === 'saved') return `${n} tinha atestado médico 🩹: não perdeu pontos.`;
+        return `${n} tinha atestado médico 🩹 (desta vez não foi preciso).`;
+      case 'tempo': return `${n} pediu Mais tempo ⏰.`;
+      case 'grupo':
+        return o.result === 'helped'
+          ? `${n} fez Trabalho de grupo 🤝 com ${t} e ganhou ${pts(o.points)}!`
+          : `${n} fez Trabalho de grupo 🤝 com ${t}, mas ${t} não ficou mais perto.`;
+      default: return '';
+    }
+  }
+  function renderCardLog(r) {
+    const log = $('#rev-cards');
+    const items = (r.cards || []).map(cardOutcomeText).filter(Boolean);
+    log.hidden = !items.length;
+    log.replaceChildren(...items.map((text) => el('li', { text })));
   }
 
   // --- Desenho ------------------------------------------------------------
@@ -823,6 +1024,7 @@
     trackDark();
     renderSpecialIntro();
     renderSpecialTags();
+    renderHand();
     // No duelo, a "Média da turma" das pautas não faz sentido.
     $$('.grades-avg').forEach((n) => { n.hidden = Boolean(state && state.settings && state.settings.mode === 'duelo'); });
     tick();
@@ -974,6 +1176,8 @@
     $('#set-custom').disabled = !host;
     $('#set-special').checked = state.settings.specialRounds !== false;
     $('#set-special').disabled = !host;
+    $('#set-cards').checked = state.settings.cards !== false;
+    $('#set-cards').disabled = !host;
     renderCustomForm(custom);
     $('#set-rounds').min = state.minRounds;
     $('#set-rounds').max = state.maxRounds;
@@ -1406,6 +1610,7 @@
     }
     const answering = tb ? tb.ids : author ? state.players.map((p) => p.id).filter((id) => id !== author) : null;
     progressList('#ans-progress', state.answered, answering);
+    renderMyCard();
   }
 
   function missText(exact, dist, isMap) {
@@ -1812,8 +2017,11 @@
     const effect = specialEffectText(r);
     $('#rev-special-effect').hidden = !effect;
     $('#rev-special-effect').textContent = effect;
+    renderCardLog(r);
     const myGain = r.points[state.me] || 0;
-    $('#rev-mine').textContent = myGain ? `Ganhaste ${myGain} ponto${myGain === 1 ? '' : 's'} nesta ronda!` : 'Nenhum ponto para ti nesta ronda.';
+    $('#rev-mine').textContent = myGain > 0 ? `Ganhaste ${myGain} ponto${myGain === 1 ? '' : 's'} nesta ronda!`
+      : myGain < 0 ? `Perdeste ${-myGain} ponto${myGain === -1 ? '' : 's'} nesta ronda.`
+      : 'Nenhum ponto para ti nesta ronda.';
 
     const votesFor = (id) => Object.values(r.votes).filter((t) => t === id).length;
     const answered = Object.keys(r.answers).sort((a, b) => r.distances[a] - r.distances[b]);

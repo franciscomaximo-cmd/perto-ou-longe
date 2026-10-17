@@ -13,6 +13,7 @@
 
 const { CATEGORIES } = require('../server/rooms');
 const { hasCountry, distanceToCountry } = require('../server/geo');
+const { continentOf } = require('../server/continents');
 
 // Palavra inteira, também com acentos (o \b do JavaScript não conhece letras acentuadas).
 const wordsRegex = (list) => new RegExp(`(?<!\\p{L})(${list.join('|')})(?!\\p{L})`, 'iu');
@@ -69,6 +70,8 @@ function checkQuestions(questions) {
         if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) fail(q, i, 'ponto de referência inválido');
         else if (hasCountry(q.country) && distanceToCountry(q.country, q.point) > 25) fail(q, i, `o ponto de referência fica a ${distanceToCountry(q.country, q.point)} km do país`);
       }
+      // A carta "Cábula" diz o continente: todos os países das perguntas de mapa têm de o ter.
+      if (!continentOf(q.country)) fail(q, i, `país sem continente em server/continents.js: ${q.country}`);
       if (!q.label || !q.label.trim()) fail(q, i, 'falta o nome do país (label)');
       if (!['', 'o', 'a', 'os', 'as'].includes(q.article)) fail(q, i, `artigo inválido: ${JSON.stringify(q.article)}`);
       if (q.text !== undefined && !/\?$/.test(q.text)) fail(q, i, 'o texto tem de acabar em "?"');

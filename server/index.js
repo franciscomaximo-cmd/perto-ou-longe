@@ -158,6 +158,8 @@ io.on('connection', (socket) => {
     // Chat (sala de espera e fim): as mensagens vão no room:state.
     'chat:send': (room, id, p) => room.chatSend(id, p.text),
     'chat:mute': (room, id, p) => room.chatMute(id, p.playerId, p.muted),
+    // Cartas: { card, amount (Aposta), target (Copiar, Trabalho de grupo) }.
+    'card:use': (room, id, p) => room.useCard(id, { card: p.card, amount: p.amount, target: p.target }),
   };
   for (const [event, action] of Object.entries(actions)) {
     handle(socket, event, (payload) => {

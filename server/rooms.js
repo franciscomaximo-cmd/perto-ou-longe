@@ -4,6 +4,8 @@ const crypto = require('crypto');
 const { scoreRound, shuffle, distance } = require('./game');
 const { distanceToCountry, centerOf } = require('./geo');
 const { ThemeDeck } = require('./themes');
+const Cards = require('./cards');
+const { continentOf } = require('./continents');
 const CharacterOptions = require('../public/reveal/character-options');
 const { revealPace } = require('../public/reveal/pace');
 // Perguntas de mapa: o texto é montado com o artigo guardado de cada país
@@ -236,7 +238,8 @@ class Room {
     this.notify = notify; // chamado quando o estado muda fora de um pedido de um jogador (temporizadores)
     this.players = new Map();
     this.hostId = null;
-    this.settings = { mode: 'turma', rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0, categories: [], playerQuestions: false, specialRounds: true };
+    this.settings = { mode: 'turma', rounds: DEFAULT_ROUNDS, answerTime: 0, voteTime: 0, categories: [], playerQuestions: false, specialRounds: true, cards: true };
+    this.hands = new Map(); // id -> [{ type, used }]: as cartas de cada jogador neste jogo
     this.specialPlan = new Set(); // rondas especiais deste jogo (números das rondas)
     this.lastSpecialType = null;
     this.customQuestions = new Map(); // id do autor -> pergunta escrita no lobby
@@ -379,6 +382,7 @@ class Room {
     if (settings.categories !== undefined) this.settings.categories = cleanCategories(settings.categories);
     if (settings.playerQuestions !== undefined) this.settings.playerQuestions = Boolean(settings.playerQuestions);
     if (settings.specialRounds !== undefined) this.settings.specialRounds = Boolean(settings.specialRounds);
+    if (settings.cards !== undefined) this.settings.cards = Boolean(settings.cards);
     // No duelo não há perguntas dos jogadores (com 2, quem escreveu ficava sem adversário).
     if (this.isDuel()) this.settings.playerQuestions = false;
     // Regras novas: todos voltam a "não pronto" (ninguém começa sem as ver) e os clientes
@@ -591,6 +595,7 @@ class Room {
     this.questions = this.pickQuestions();
     this.specialPlan = new Set(this.settings.specialRounds ? planSpecialRounds(this.questions.length) : []);
     this.lastSpecialType = null;
+    this.dealCards();
     this.round = 0;
     this.gameNumber += 1; // identifica o jogo (ex.: o cliente conta feitos uma vez por jogo)
     this.standings = null;
@@ -657,6 +662,99 @@ class Room {
     // O anúncio da ronda especial não conta para o tempo de responder.
     const seconds = special && answerTime > 0 ? answerTime + SPECIAL_INTRO_MS / 1000 : answerTime;
     this.setPhase('answering', seconds, () => this.endAnswering());
+    // Cartas desta ronda: { id: { type, amount, target, hint, copied } }; e o fim do tempo de
+    // cada um ("Mais tempo" dá +15 s só a quem a usou).
+    this.current.cards = new Map();
+    this.current.baseDeadline = this.deadline;
+    this.current.extra = new Map();
+  }
+
+  // --- Cartas ("truques de aluno") -------------------------------------------
+
+  // No início de cada jogo: 2 cartas diferentes ao acaso para cada jogador (só com a opção ligada).
+  dealCards() {
+    this.hands = new Map();
+    if (!this.settings.cards) return;
+    const deck = Cards.deckFor({ duel: this.isDuel(), answerTime: this.settings.answerTime });
+    for (const id of this.players.keys()) {
+      this.hands.set(id, Cards.dealHand(deck, (n) => crypto.randomInt(n)).map((type) => ({ type, used: false })));
+    }
+  }
+
+  // Até quando este jogador pode responder (null = sem tempo limite).
+  answerDeadlineOf(playerId) {
+    const cur = this.current;
+    if (!cur || !cur.baseDeadline) return null;
+    return cur.extra.get(playerId) || cur.baseDeadline;
+  }
+
+  // Com "Mais tempo" em jogo, quem não a usou fica sem tempo ao fim do tempo normal.
+  timeUpFor(playerId, now = Date.now()) {
+    const cur = this.current;
+    if (!cur || !cur.extra || !cur.extra.size) return false;
+    return now > this.answerDeadlineOf(playerId);
+  }
+
+  // Usar uma carta: só na fase de resposta (nunca no desempate), antes de entregar, uma por
+  // ronda. A pista da Cábula e o palpite copiado ficam só no estado de quem usou a carta.
+  useCard(playerId, { card, amount, target } = {}, now = Date.now()) {
+    if (!this.settings.cards) throw new GameError('As cartas estão desligadas neste jogo.');
+    if (this.phase === 'tiebreak') throw new GameError('Não se usam cartas no desempate.');
+    if (this.phase !== 'answering') throw new GameError('Só podes usar cartas enquanto respondes.');
+    const hand = this.hands.get(playerId);
+    if (!this.players.has(playerId) || !hand) throw new GameError('Não tens cartas neste jogo.');
+    const cur = this.current;
+    if (cur.question.author === playerId) throw new GameError('Esta pergunta é tua: não usas cartas nela.');
+    if (cur.answers.has(playerId)) throw new GameError('Já entregaste: as cartas usam-se antes de entregar.');
+    if (this.timeUpFor(playerId, now)) throw new GameError('O teu tempo acabou.');
+    if (cur.cards.has(playerId)) throw new GameError('Já usaste uma carta nesta ronda.');
+    const slot = hand.find((c) => c.type === card && !c.used);
+    if (!slot) throw new GameError(hand.some((c) => c.type === card) ? 'Já usaste essa carta.' : 'Não tens essa carta.');
+    const use = { type: card };
+    if (card === 'aposta') {
+      if (!Cards.BET_AMOUNTS.includes(amount)) throw new GameError('Aposta 1, 2 ou 3 pontos.');
+      use.amount = amount;
+    } else if (card === 'copiar') {
+      if (target === playerId || !cur.answers.has(target)) throw new GameError('Só podes copiar por um colega que já entregou.');
+      use.target = target;
+      use.copied = cur.answers.get(target);
+    } else if (card === 'grupo') {
+      if (target === playerId || !this.players.has(target) || cur.question.author === target) {
+        throw new GameError('Escolhe um colega para o trabalho de grupo.');
+      }
+      use.target = target;
+    } else if (card === 'tempo') {
+      if (!cur.baseDeadline) throw new GameError('Só há mais tempo quando há tempo limite para responder.');
+      this.giveExtraTime(playerId, cur.baseDeadline + Cards.EXTRA_SECONDS * 1000, now);
+    } else if (card === 'cabula') {
+      use.hint = Cards.cabulaHint(cur.question, continentOf);
+    }
+    slot.used = true;
+    cur.cards.set(playerId, use);
+    this.touch();
+  }
+
+  // "Mais tempo": o tempo da ronda estica até ao fim do tempo extra; ao fim do tempo normal, os
+  // outros deixam de poder responder (e a ronda avança assim que os que têm tempo extra entregam).
+  giveExtraTime(playerId, until, now = Date.now()) {
+    const cur = this.current;
+    cur.extra.set(playerId, until);
+    if (until > this.deadline) {
+      if (this.timer) clearTimeout(this.timer);
+      this.deadline = until;
+      this.timer = setTimeout(() => {
+        this.timer = null;
+        this.endAnswering();
+        this.notify(this);
+      }, until - now);
+    }
+    if (!this.baseTimer && cur.baseDeadline > now) {
+      this.baseTimer = setTimeout(() => {
+        this.baseTimer = null;
+        this.checkProgress();
+        this.notify(this);
+      }, cur.baseDeadline - now + 50);
+    }
   }
 
   // --- Rondas especiais ----------------------------------------------------
@@ -750,7 +848,9 @@ class Room {
 
   clearTimer() {
     if (this.timer) clearTimeout(this.timer);
+    if (this.baseTimer) clearTimeout(this.baseTimer);
     this.timer = null;
+    this.baseTimer = null;
     this.deadline = null;
   }
 
@@ -763,6 +863,7 @@ class Room {
     const { answers, question } = this.phase === 'tiebreak' ? this.tiebreak : this.current;
     if (question.author === playerId) throw new GameError('Esta pergunta é tua: não respondes, mas podes votar.');
     if (answers.has(playerId)) throw new GameError('Já respondeste a esta pergunta.');
+    if (this.phase === 'answering' && this.timeUpFor(playerId)) throw new GameError('O teu tempo acabou.');
     answers.set(playerId, validAnswer(question, value));
     this.touch();
     this.checkProgress();
@@ -794,7 +895,7 @@ class Room {
       if (online.every((p) => !ids.includes(p.id) || answers.has(p.id))) this.revealTiebreak();
     } else if (
       this.phase === 'answering' &&
-      online.every((p) => this.current.answers.has(p.id) || p.id === this.current.question.author)
+      online.every((p) => this.current.answers.has(p.id) || p.id === this.current.question.author || this.timeUpFor(p.id))
     ) {
       this.endAnswering();
     } else if (
@@ -826,6 +927,24 @@ class Room {
     // Ronda especial: o efeito nos pontos (só nestas rondas).
     if (this.current.special) {
       this.current.result = this.applySpecial(this.current.special.type, question, this.current.result, answers);
+    }
+    // Cartas usadas nesta ronda (só quando alguém usou uma): por cima de tudo (ver cards.js).
+    this.current.result.cards = [];
+    if (this.current.cards && this.current.cards.size) {
+      const r = this.current.result;
+      const sp = r.special;
+      const { points, outcomes } = Cards.applyCards({
+        points: r.points,
+        closest: r.closest,
+        winners: sp && sp.type === 'ultimo' ? sp.awarded : r.closest,
+        farthest: r.farthest,
+        distances: r.distances,
+        multiplier: sp && sp.type === 'dobrar' ? 2 : 1,
+        scores: Object.fromEntries([...this.players.values()].map((p) => [p.id, p.score])),
+        uses: Object.fromEntries([...this.current.cards].map(([id, u]) => [id, { type: u.type, amount: u.amount, target: u.target }])),
+      });
+      r.points = points;
+      r.cards = outcomes;
     }
     for (const [id, pts] of Object.entries(this.current.result.points)) {
       const player = this.players.get(id);
@@ -1079,6 +1198,7 @@ class Room {
     this.tiebreak = null;
     this.tiebreakWinner = null;
     this.customQuestions.clear(); // no jogo seguinte cada um escreve uma pergunta nova
+    this.hands = new Map(); // as cartas não passam para o jogo seguinte
     for (const p of this.players.values()) p.score = 0;
     this.resetReady(); // para o jogo seguinte, todos dizem outra vez que estão prontos
     // Quem saiu durante o jogo não fica a ocupar lugar na sala nova.
@@ -1151,6 +1271,13 @@ class Room {
         hideTextMs: special.textUntil && this.phase !== 'reveal' ? Math.max(0, special.textUntil - now) : null,
         answerSeconds: special.type === 'relampago' ? LIGHTNING_SECONDS : null,
       } : null;
+      // A carta que ESTE jogador usou nesta ronda (com a pista ou o palpite copiado: só para ele).
+      const mine = cur.cards && ['answering', 'voting', 'reveal'].includes(this.phase) ? cur.cards.get(playerId) : null;
+      state.myCard = mine ? { ...mine } : null;
+      // Com "Mais tempo" em jogo, o tempo que falta é o de cada um.
+      if (this.phase === 'answering' && cur.extra && cur.extra.size && cur.baseDeadline) {
+        state.remainingMs = Math.max(0, this.answerDeadlineOf(playerId) - now);
+      }
       state.question = {
         text: dark ? null : cur.question.text,
         unit: cur.question.unit || '',
@@ -1201,6 +1328,9 @@ class Room {
     }
     // Duelo: o marcador e o ecrã final próprio (sem o "Quadro de honra" da turma).
     state.duel = this.duelInfo();
+    // As cartas deste jogador (só as dele; nunca as dos outros).
+    const hand = this.phase !== 'lobby' && this.hands.get(playerId);
+    state.myHand = hand ? hand.map((c) => ({ ...c })) : null;
     if (this.phase === 'end') state.awards = this.isDuel() ? [] : this.awards();
     return state;
   }

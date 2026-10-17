@@ -149,7 +149,7 @@ test('só o anfitrião começa e configura', () => {
   assert.throws(() => startGame(room, ids[1]), /anfitrião/);
   assert.throws(() => room.updateSettings(ids[1], { answerTime: 30 }), /anfitrião/);
   room.updateSettings(ids[0], { answerTime: 30, voteTime: 5 });
-  assert.deepEqual(room.settings, { mode: 'turma', rounds: DEFAULT_ROUNDS, answerTime: 30, voteTime: 10, categories: [], playerQuestions: false, specialRounds: false });
+  assert.deepEqual(room.settings, { mode: 'turma', rounds: DEFAULT_ROUNDS, answerTime: 30, voteTime: 10, categories: [], playerQuestions: false, specialRounds: false, cards: true });
   assert.equal(new Room('X', () => {}).settings.specialRounds, true, 'rondas especiais ligadas por defeito');
 });
 

@@ -12,7 +12,7 @@
 // Sai com código 1 se encontrar problemas. (test/questions.test.js usa checkQuestions.)
 
 const { CATEGORIES } = require('../server/rooms');
-const { hasCountry } = require('../server/geo');
+const { hasCountry, distanceToCountry } = require('../server/geo');
 
 // Palavra inteira, também com acentos (o \b do JavaScript não conhece letras acentuadas).
 const wordsRegex = (list) => new RegExp(`(?<!\\p{L})(${list.join('|')})(?!\\p{L})`, 'iu');
@@ -43,6 +43,13 @@ function checkQuestions(questions) {
     if (q.curiosity !== undefined && (typeof q.curiosity !== 'string' || !q.curiosity.trim())) fail(q, i, 'curiosidade vazia');
     if (q.type === 'map') {
       if (!hasCountry(q.country)) fail(q, i, `país inexistente no mapa: ${q.country}`);
+      // Ponto de referência de um sítio concreto: coordenadas válidas e no país certo (até 25 km
+      // de folga, porque os contornos do mapa são simplificados junto à costa).
+      if (q.point !== undefined) {
+        const { lat, lon } = q.point || {};
+        if (!Number.isFinite(lat) || !Number.isFinite(lon) || Math.abs(lat) > 90 || Math.abs(lon) > 180) fail(q, i, 'ponto de referência inválido');
+        else if (hasCountry(q.country) && distanceToCountry(q.country, q.point) > 25) fail(q, i, `o ponto de referência fica a ${distanceToCountry(q.country, q.point)} km do país`);
+      }
       if (!q.label || !q.label.trim()) fail(q, i, 'falta o nome do país (label)');
       if (!['', 'o', 'a', 'os', 'as'].includes(q.article)) fail(q, i, `artigo inválido: ${JSON.stringify(q.article)}`);
       if (q.text !== undefined && !/\?$/.test(q.text)) fail(q, i, 'o texto tem de acabar em "?"');

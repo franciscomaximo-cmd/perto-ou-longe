@@ -896,7 +896,10 @@ class Room {
           correct: correctOf(cur.question),
           // Só nas perguntas de mapa: para pintar o país e assinalar o centro.
           country: cur.question.country,
-          center: cur.question.country ? centerOf(cur.question.country) : undefined,
+          // Ponto de referência no mapa (o anel e as linhas dos palpites): o sítio concreto da
+          // pergunta, se houver (ex.: o Poço de Kola), senão o centro do país. Só para desenhar:
+          // a distância de cada palpite conta sempre até ao país.
+          center: cur.question.country ? (cur.question.point || centerOf(cur.question.country)) : undefined,
           answers: Object.fromEntries(cur.answers),
           votes: Object.fromEntries(cur.votes),
           step: cur.step,

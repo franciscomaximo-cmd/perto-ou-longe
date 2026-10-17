@@ -433,13 +433,25 @@
       if (!wrap.relayout || relayoutFrame) return;
       relayoutFrame = requestAnimationFrame(() => { relayoutFrame = 0; wrap.relayout(); });
     }, { passive: true });
-    wrap.querySelectorAll('[data-zoom]').forEach((btn) => btn.addEventListener('click', () => {
-      const level = Math.min(ZOOMS.length - 1, Math.max(minZoom(), Number(wrap.dataset.zoom) + Number(btn.dataset.zoom)));
-      // Mantém o centro da vista ao aproximar ou afastar.
-      const cx = (box.scrollLeft + box.clientWidth / 2) / inner.offsetWidth;
-      const cy = (box.scrollTop + box.clientHeight / 2) / inner.offsetHeight;
-      setZoom(wrap, level, cx, cy);
-    }));
+    wrap.querySelectorAll('[data-zoom]').forEach((btn) => {
+      // O botão não fica com o foco (no Safari do iPhone, um botão focado podia fazer a página
+      // saltar quando o mapa muda de tamanho por dentro).
+      btn.addEventListener('mousedown', (e) => e.preventDefault());
+      btn.addEventListener('click', () => {
+        const current = Number(wrap.dataset.zoom);
+        // (O enquadramento automático pode ter afastado abaixo do mínimo, para caber tudo.)
+        const level = Math.min(ZOOMS.length - 1, Math.max(Math.min(minZoom(), current), current + Number(btn.dataset.zoom)));
+        // Mantém o centro da vista ao aproximar ou afastar.
+        const cx = (box.scrollLeft + box.clientWidth / 2) / inner.offsetWidth;
+        const cy = (box.scrollTop + box.clientHeight / 2) / inner.offsetHeight;
+        // Os botões do mapa nunca mexem no scroll da página: fica exatamente onde estava.
+        const pageY = window.scrollY;
+        const keep = () => { if (window.scrollY !== pageY) window.scrollTo(window.scrollX, pageY); };
+        setZoom(wrap, level, cx, cy);
+        keep();
+        requestAnimationFrame(() => { keep(); requestAnimationFrame(keep); });
+      });
+    });
   }
 
   // Cada pergunta de mapa começa no zoom mínimo (2× no telemóvel), centrada no meio do mapa;
@@ -466,11 +478,17 @@
     const spanX = Math.max(maxX - minX, 8) * 1.3;
     const spanY = Math.max(maxY - minY, 14) * 1.3;
     sizeMapBox(wrap);
-    let level = minZoom();
-    for (let z = ZOOMS.length - 1; z > minZoom(); z--) {
+    // O maior zoom em que cabem todos os pontos (os palpites e o país certo). Se nem no zoom
+    // mínimo do telemóvel couberem (ex.: palpites dos dois lados do mundo), mostra o mapa
+    // inteiro: nunca fica nenhum ponto fora da vista.
+    const fits = (z) => {
       const w = box.clientWidth * ZOOMS[z];
       const h = w * MAP_RATIO;
-      if ((spanX / 100) * w <= box.clientWidth && (spanY / 100) * h <= box.clientHeight) { level = z; break; }
+      return (spanX / 100) * w <= box.clientWidth && (spanY / 100) * h <= Math.max(box.clientHeight, 1);
+    };
+    let level = 0;
+    for (let z = ZOOMS.length - 1; z >= 0; z--) {
+      if (fits(z)) { level = z; break; }
     }
     setZoom(wrap, level, (minX + maxX) / 200, (minY + maxY) / 200);
     return inner.offsetWidth > 0;
@@ -1423,12 +1441,21 @@
     const ids = order.slice(0, shown);
     const clsOf = (id) => (showCorrect && r.closest.includes(id) ? 'near' : showCorrect && r.farthest.includes(id) ? 'far' : '');
     const center = r.center && toPercent(r.center);
-    wrap.querySelector('.lines').replaceChildren(...(center ? ids.map((id) => {
-      const p = toPercent(r.answers[id]);
+    // Linha de cada palpite até à resposta, pelo caminho mais curto: se for mais perto pelo
+    // outro lado dos 180° (ex.: um palpite em Tonga para Fiji), a linha sai por uma borda do
+    // mapa e volta a entrar pela outra, em vez de o atravessar todo.
+    const segment = (a, b, cls) => {
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
-      for (const [k, v] of Object.entries({ x1: p.x, y1: p.y, x2: center.x, y2: center.y })) line.setAttribute(k, v);
-      line.setAttribute('class', clsOf(id));
+      for (const [k, v] of Object.entries({ x1: a.x, y1: a.y, x2: b.x, y2: b.y })) line.setAttribute(k, v);
+      line.setAttribute('class', cls);
       return line;
+    };
+    wrap.querySelector('.lines').replaceChildren(...(center ? ids.flatMap((id) => {
+      const p = toPercent(r.answers[id]);
+      const dx = center.x - p.x;
+      if (Math.abs(dx) <= 50) return [segment(p, center, clsOf(id))];
+      const shift = dx > 0 ? -100 : 100; // a resposta "do outro lado" do mapa
+      return [segment(p, { x: center.x + shift, y: center.y }, clsOf(id)), segment({ x: p.x - shift, y: p.y }, center, clsOf(id))];
     }) : []));
     wrap.querySelector('.pins').replaceChildren(
       center ? pin(r.center, 'target') : null,

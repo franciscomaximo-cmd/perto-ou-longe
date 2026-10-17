@@ -16,11 +16,30 @@ function polygonsOf(geometry) {
   return [];
 }
 
-// id ISO numérico (ex.: "586") -> lista de polígonos, cada um com [contorno, ...buracos].
+// Países que atravessam a longitude de 180° (Rússia, Fiji…): no mapa, o contorno salta de
+// 180 para -180 a meio. "Desdobra-se" cada anel para as longitudes ficarem seguidas (podem
+// passar de 180, ex.: a Chukotka da Rússia fica perto de 190), senão o centro, o "dentro do
+// país" e as distâncias davam a volta ao mundo.
+function unwrapRing(ring) {
+  const out = [];
+  for (const [lon, lat] of ring) {
+    let l = lon;
+    if (out.length) {
+      const prev = out[out.length - 1][0];
+      while (l - prev > 180) l -= 360;
+      while (l - prev < -180) l += 360;
+    }
+    out.push([l, lat]);
+  }
+  return out;
+}
+
+// id ISO numérico (ex.: "586") -> lista de polígonos, cada um com [contorno, ...buracos],
+// com os anéis já desdobrados.
 const COUNTRIES = new Map(
   feature(world, world.objects.countries).features
     .filter((f) => f.id)
-    .map((f) => [f.id, polygonsOf(f.geometry)]),
+    .map((f) => [f.id, polygonsOf(f.geometry).map((rings) => rings.map(unwrapRing))]),
 );
 
 function haversine(lat1, lon1, lat2, lon2) {
@@ -39,8 +58,11 @@ function insideRing(lon, lat, ring) {
   return inside;
 }
 
+// Um anel desdobrado pode ir além de ±180: experimenta o ponto também com a longitude mais ou
+// menos uma volta (ex.: um toque em -179,9° na parte de Fiji que ficou do outro lado).
 function insideCountry(polygons, lon, lat) {
-  return polygons.some(([outer, ...holes]) => insideRing(lon, lat, outer) && !holes.some((h) => insideRing(lon, lat, h)));
+  return [lon, lon + 360, lon - 360].some((l) => polygons.some(([outer, ...holes]) => insideRing(l, lat, outer)
+    && !holes.some((h) => insideRing(l, lat, h))));
 }
 
 // Ponto do segmento mais perto do palpite, numa projeção plana local centrada no palpite
@@ -96,7 +118,8 @@ function centerOf(id) {
       best = { area: Math.abs(area), lon: cx / (3 * area), lat: cy / (3 * area) };
     }
   }
-  return best && { lat: Math.round(best.lat * 100) / 100, lon: Math.round(best.lon * 100) / 100 };
+  // (O anel desdobrado pode dar um centro além de ±180: volta a pô-lo dentro do mapa.)
+  return best && { lat: Math.round(best.lat * 100) / 100, lon: Math.round(wrapLon(best.lon) * 100) / 100 };
 }
 
 module.exports = { distanceToCountry, hasCountry, centerOf, haversine };

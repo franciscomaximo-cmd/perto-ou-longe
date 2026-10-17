@@ -3,18 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#3e2716">
+  <meta name="theme-color" content="#2f4f3e">
   <title>Mais Coisa, Menos Coisa</title>
-  <meta name="description" content="Mais Coisa, Menos Coisa: o jogo de tasca para jogar com amigos no telemóvel. Adivinha números e descobre quem falhou por mais.">
+  <meta name="description" content="Mais Coisa, Menos Coisa: o jogo da sala de aula para jogar com amigos no telemóvel. Adivinha números e descobre quem falhou por mais.">
   <meta property="og:title" content="Mais Coisa, Menos Coisa">
-  <meta property="og:description" content="O jogo de tasca para jogar com amigos no telemóvel: adivinha números e descobre quem falhou por mais.">
+  <meta property="og:description" content="O jogo da sala de aula para jogar com amigos no telemóvel: adivinha números e descobre quem falhou por mais.">
   <meta property="og:type" content="website">
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
-  <!-- Letras: "Caveat Brush" (pintada à mão) nos títulos e "Atkinson Hyperlegible" (muito
-       legível) no texto e nos números; sem ligação à internet, ficam as letras do sistema. -->
+  <!-- Letras: "Caveat" (manuscrita, de giz e de caneta) nos títulos e "Atkinson Hyperlegible"
+       (muito legível) no texto e nos números; sem ligação à internet, ficam as do sistema. -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Caveat+Brush&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=Caveat:wght@600;700&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -30,42 +30,48 @@
   <main>
     <!-- Entrada -->
     <section id="screen-home" class="screen">
-      <!-- Entrada da tasca: a parede de azulejo, o letreiro (logótipo) e, por baixo, um quadro
-           de ardósia com o nome e o número da mesa escritos a giz. -->
-      <div class="tiles" aria-hidden="true"></div>
+      <!-- Entrada da escola: o logótipo (o nome escrito a giz no quadro) e, por baixo, uma folha
+           de caderno com o nome e o código da turma escritos a caneta. -->
       <h1 class="logo">
-        <svg class="sign" viewBox="0 0 320 150" role="img" aria-label="Mais Coisa, Menos Coisa">
+        <svg class="sign" viewBox="0 0 320 172" role="img" aria-label="Mais Coisa, Menos Coisa">
           <defs>
-            <linearGradient id="sign-wood" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stop-color="#8a5a32"/><stop offset=".55" stop-color="#6b4423"/><stop offset="1" stop-color="#4e301a"/>
+            <linearGradient id="logo-madeira" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stop-color="#e2bb84"/><stop offset=".6" stop-color="#d6aa6c"/><stop offset="1" stop-color="#c4955a"/>
             </linearGradient>
+            <radialGradient id="logo-quadro" cx=".3" cy=".25" r=".9">
+              <stop offset="0" stop-color="#3a5d4a"/><stop offset="1" stop-color="#2f4f3e"/>
+            </radialGradient>
           </defs>
-          <!-- Cordas e pregos de onde pende o letreiro -->
-          <path d="M70,0 L92,30 M250,0 L228,30" stroke="#c9a56b" stroke-width="3" stroke-linecap="round"/>
-          <rect x="8" y="26" width="304" height="116" rx="14" fill="url(#sign-wood)" stroke="#3e2716" stroke-width="4"/>
-          <!-- Veios da madeira -->
-          <path d="M20,52 C90,46 140,58 210,50 S290,56 300,52 M18,92 C80,98 150,86 220,94 S290,88 302,94 M24,124 C100,118 170,130 240,122 S292,126 298,122" fill="none" stroke="#3e2716" stroke-width="1.6" opacity=".35"/>
-          <circle cx="92" cy="34" r="4" fill="#d8c3a0"/><circle cx="228" cy="34" r="4" fill="#d8c3a0"/>
-          <text x="160" y="80" text-anchor="middle" class="sign-line" font-size="40">Mais Coisa,</text>
-          <text x="160" y="124" text-anchor="middle" class="sign-line" font-size="40">Menos Coisa</text>
+          <!-- Moldura de madeira clara e o quadro verde -->
+          <rect x="4" y="4" width="312" height="148" rx="8" fill="url(#logo-madeira)" stroke="#a87a3e" stroke-width="2"/>
+          <rect x="16" y="16" width="288" height="124" rx="3" fill="url(#logo-quadro)"/>
+          <!-- Pó de giz mal apagado -->
+          <path d="M40,46 C90,38 120,52 170,42 M190,120 C230,112 260,124 290,114" fill="none" stroke="#f4f2ea" stroke-width="10" stroke-linecap="round" opacity=".06"/>
+          <text x="160" y="72" text-anchor="middle" class="sign-line" font-size="42">Mais Coisa,</text>
+          <text x="160" y="122" text-anchor="middle" class="sign-line" font-size="42">Menos Coisa</text>
+          <!-- Rebordo com um pau de giz e o apagador -->
+          <rect x="24" y="150" width="272" height="10" rx="3" fill="#c4955a" stroke="#a87a3e" stroke-width="1.5"/>
+          <rect x="70" y="145" width="30" height="6" rx="2.5" fill="#f4f2ea"/>
+          <rect x="200" y="140" width="46" height="12" rx="3" fill="#1f4e9e"/>
+          <rect x="200" y="148" width="46" height="5" rx="2" fill="#6b5a3a"/>
         </svg>
       </h1>
       <p class="tagline" data-t="slogan">Adivinha números e descobre quem falhou por mais.</p>
       <!-- Ao voltar a ligar, se a sala já não existe (ex.: o servidor reiniciou num deploy). -->
       <p id="home-notice" class="home-notice" role="status" hidden></p>
 
-      <div class="slate stack">
+      <div class="notebook spiral paper stack">
         <label class="field"><span data-t="oTeuNome">O teu nome</span>
           <input id="home-name" maxlength="16" autocomplete="nickname" enterkeyhint="next">
         </label>
-        <button id="btn-create" class="primary" data-t="abrirMesa">Abrir mesa</button>
+        <button id="btn-create" class="primary" data-t="criarTurma">Criar turma</button>
 
-        <div class="divider"><span data-t="ouSenta">ou senta-te numa mesa já aberta</span></div>
+        <div class="divider"><span data-t="ouEntra">ou entra numa turma que já existe</span></div>
 
-        <label class="field"><span data-t="numeroMesa">Número da mesa</span>
+        <label class="field"><span data-t="codigoTurma">Código da turma</span>
           <input id="home-code" class="code-input" maxlength="4" autocomplete="off" autocapitalize="characters" spellcheck="false" enterkeyhint="go">
         </label>
-        <button id="btn-join" class="wood" data-t="sentar">Sentar à mesa</button>
+        <button id="btn-join" class="label-btn" data-t="entrarTurma">Entrar na turma</button>
       </div>
 
       <details class="rules paper">
@@ -85,20 +91,21 @@
 
     <!-- Sala de espera -->
     <section id="screen-lobby" class="screen" hidden>
-      <div class="tiles" aria-hidden="true"></div>
-      <h1 class="lobby-title" data-t="aMesa">À mesa</h1>
-      <!-- O número da mesa numa plaquinha de ardósia, com o QR do convite por baixo. -->
-      <div class="table-plate">
-        <p class="plate-label" data-t="numeroMesa">Número da mesa</p>
+      <h1 class="lobby-title" data-t="salaDeAula">Sala de aula</h1>
+      <!-- O código da turma escrito a giz no quadro, com o QR do convite num post-it. -->
+      <div class="chalkboard class-code">
+        <p class="code-label" data-t="codigoTurma">Código da turma</p>
         <div id="lobby-code" class="big-code"></div>
-        <div id="lobby-qr" class="qr" role="img" aria-label="QR code com o convite para a mesa"></div>
-        <p class="hint center" data-t="qrDica">Aponta a câmara do telemóvel para te sentares.</p>
+        <div class="post-it">
+          <div id="lobby-qr" class="qr" role="img" aria-label="QR code com o convite para a turma"></div>
+          <p class="hint center" data-t="qrDica">Aponta a câmara do telemóvel para entrares.</p>
+        </div>
       </div>
-      <button id="btn-share" class="ghost" data-t="chamarGente">Chamar mais gente</button>
+      <button id="btn-share" class="ghost" data-t="chamarColegas">Chamar colegas</button>
 
-      <!-- Quem está à mesa, como uma conta de tasca escrita num bloco. -->
-      <div class="bill paper">
-        <h2><span data-t="jogadores">À mesa estão…</span> <span id="lobby-count" class="muted"></span></h2>
+      <!-- A chamada: quem está na turma, numa folha pautada. -->
+      <div class="roll paper">
+        <h2><span data-t="chamada">Chamada</span> <span id="lobby-count" class="muted"></span></h2>
         <ul id="lobby-players" class="players"></ul>
       </div>
 
@@ -113,8 +120,8 @@
         </div>
       </div>
 
-      <div class="card menu paper">
-        <h2 data-t="ementa">Ementa da casa</h2>
+      <div class="card worksheet paper">
+        <h2 data-t="regrasAula">Regras da aula</h2>
         <label class="slider">
           <span>Número de perguntas <output id="out-rounds"></output></span>
           <input type="range" id="set-rounds" min="3" max="30" step="1">
@@ -163,12 +170,12 @@
         <p id="custom-status" class="hint center"></p>
       </form>
 
-      <button class="ghost btn-leave" data-t="levantar">Levantar da mesa</button>
+      <button class="ghost btn-leave" data-t="sairSala">Sair da sala</button>
 
       <!-- Barra fixa no fundo do ecrã: o botão principal (jogadores: "Estou pronto"; anfitrião:
            "Começar jogo") com a mensagem "Faltam X…" logo acima. A sala de espera tem espaço
            livre no fim para a barra não tapar nada. O anfitrião só pode começar quando todos
-           os jogadores ligados estiverem prontos. -->
+           os jogadores ligados estiverem presentes. -->
       <div class="lobby-actions">
         <p id="lobby-hint" class="hint center"></p>
         <button id="btn-ready" class="primary" type="button" hidden></button>
@@ -179,20 +186,20 @@
     <!-- Responder -->
     <section id="screen-answer" class="screen" hidden>
       <p id="ans-tiebreak" class="card center paper" hidden></p>
-      <!-- A pergunta escrita a giz no quadro do "Prato do dia", com a categoria num papel colado. -->
-      <div class="slate board">
-        <p class="board-title" data-t="pratoDoDia">Prato do dia</p>
+      <!-- A pergunta escrita a giz no quadro ("Pergunta do teste"), com a categoria num post-it. -->
+      <div class="chalkboard board">
+        <p class="board-title" data-t="perguntaTeste">Pergunta do teste</p>
         <p id="ans-cat" class="cat-label"></p>
         <p id="ans-question" class="question"></p>
         <p id="ans-unit" class="unit"></p>
       </div>
 
-      <!-- O palpite num bloco de pedidos. -->
-      <form id="ans-form" class="order-pad paper" autocomplete="off">
-        <p class="pad-title" data-t="oTeuPedido">O teu pedido</p>
+      <!-- A resposta numa folha de teste. -->
+      <form id="ans-form" class="test-sheet paper" autocomplete="off">
+        <p class="sheet-title" data-t="aTuaResposta">A tua resposta</p>
         <input id="ans-input" class="number-input" inputmode="decimal" placeholder="O teu palpite" enterkeyhint="send">
         <p id="ans-preview" class="hint center"></p>
-        <button class="primary" type="submit" data-t="estaDito">Está dito!</button>
+        <button class="primary" type="submit" data-t="entregar">Entregar</button>
       </form>
       <div id="ans-map" class="map-wrap" hidden>
         <div class="map-box"><div class="map-inner"><div class="pins"></div></div></div>
@@ -200,16 +207,16 @@
           <button type="button" data-zoom="-1" aria-label="Afastar">−</button>
           <button type="button" data-zoom="1" aria-label="Aproximar">+</button>
         </div>
-        <button id="btn-map-answer" class="primary" type="button" disabled>Está dito!</button>
+        <button id="btn-map-answer" class="primary" type="button" disabled>Entregar</button>
       </div>
-      <div id="ans-done" class="order-pad paper center" hidden>
-        <p class="pad-title" data-t="oTeuPedido">O teu pedido</p>
+      <div id="ans-done" class="test-sheet paper center" hidden>
+        <p class="sheet-title" data-t="aTuaResposta">A tua resposta</p>
         <p id="ans-mine" class="big-number"></p>
       </div>
       <p id="ans-watch" class="hint center" hidden>Não estás neste desempate. Fica a ver quem fica à frente.</p>
       <p id="ans-author" class="card center paper" hidden>Esta pergunta é tua! Não respondes, mas vais poder votar em quem ficou mais longe.</p>
 
-      <h3 data-t="quemJaPediu">Quem já pediu</h3>
+      <h3 data-t="quemJaEntregou">Quem já entregou</h3>
       <ul id="ans-progress" class="players"></ul>
       <button class="ghost btn-force" hidden>Avançar já</button>
     </section>
@@ -217,11 +224,11 @@
     <!-- Votar -->
     <section id="screen-vote" class="screen" hidden>
       <p id="vote-question" class="question small"></p>
-      <h2 class="center vote-title" data-t="votarTitulo">Quem é que disse a maior barbaridade?</h2>
+      <h2 class="center vote-title" data-t="votarTitulo">Quem é que disse a maior asneira?</h2>
       <p class="hint center" data-t="votarDica">Vota em quem achas que ficou mais longe. Os palpites só se veem no fim.</p>
 
       <div id="vote-options" class="options"></div>
-      <button id="btn-vote" class="primary" disabled data-t="vaiDisto">Vai disto!</button>
+      <button id="btn-vote" class="primary" disabled data-t="votar">Votar</button>
       <p id="vote-status" class="card center paper" hidden></p>
 
       <h3>Quem já votou</h3>
@@ -237,10 +244,10 @@
       <!-- Perguntas de números: o tema da ronda desenha-se em #rev-stage (public/reveal/);
            a lista por baixo é comum a todos os temas. -->
       <div id="rev-numbers" class="target-wrap" hidden>
-        <!-- O cenário do tema aparece na televisão pendurada na parede da tasca (moldura comum). -->
-        <div id="rev-stage" class="reveal-stage tv"></div>
+        <!-- O cenário do tema aparece projetado num quadro interativo (moldura comum e fina). -->
+        <div id="rev-stage" class="reveal-stage screen-frame"></div>
         <!-- Só o anfitrião: logo a seguir ao cenário (nas de mapa, client.js muda-o para lá). -->
-        <button id="btn-step" class="primary" hidden data-t="despacha">Despacha!</button>
+        <button id="btn-step" class="primary" hidden data-t="jaChega">Já chega!</button>
         <ol id="rev-guess-list" class="target-list"></ol>
       </div>
       <div id="rev-map" class="map-wrap" hidden>
@@ -256,18 +263,18 @@
 
       <!-- 2. Resposta certa (e uma curiosidade, se houver) -->
       <div id="rev-answer" class="answer-box reveal-in" hidden>
-        <span class="label" data-t="contaCerta">A conta certa:</span>
+        <span class="label" data-t="respostaCerta">Resposta certa:</span>
         <strong id="rev-correct"></strong>
       </div>
       <p id="rev-curiosity" class="curiosity reveal-in" hidden></p>
 
-      <!-- 3. Pontos e classificação ("As contas da casa", num talão), no topo dos resultados -->
+      <!-- 3. Pontos e classificação (a "Pauta" afixada), no topo dos resultados -->
       <div id="rev-points-box" class="reveal-in stack" hidden>
         <p id="rev-mine" class="mine"></p>
-        <div class="receipt paper">
-          <h3 class="receipt-title" data-t="contasDaCasa">As contas da casa</h3>
+        <div class="grades paper">
+          <h3 class="grades-title" data-t="pauta">Pauta</h3>
           <ol id="rev-scores" class="scores"></ol>
-          <p class="receipt-total"><span data-t="totalMesa">Total da mesa</span> <b></b></p>
+          <p class="grades-avg"><span data-t="mediaTurma">Média da turma</span> <b></b></p>
         </div>
         <button id="btn-next" class="primary" hidden></button>
         <h3>Esta ronda</h3>
@@ -289,17 +296,17 @@
       <h2 class="center">Desempate</h2>
       <p id="tbr-question" class="question small"></p>
       <div class="answer-box">
-        <span class="label" data-t="contaCerta">A conta certa:</span>
+        <span class="label" data-t="respostaCerta">Resposta certa:</span>
         <strong id="tbr-correct"></strong>
       </div>
       <p id="tbr-curiosity" class="curiosity" hidden></p>
       <ul id="tbr-list" class="results"></ul>
       <p id="tbr-status" class="hint"></p>
 
-      <div class="receipt paper">
-        <h3 class="receipt-title" data-t="contasDaCasa">As contas da casa</h3>
+      <div class="grades paper">
+        <h3 class="grades-title" data-t="pauta">Pauta</h3>
         <ol id="tbr-scores" class="scores"></ol>
-        <p class="receipt-total"><span data-t="totalMesa">Total da mesa</span> <b></b></p>
+        <p class="grades-avg"><span data-t="mediaTurma">Média da turma</span> <b></b></p>
       </div>
       <button id="btn-tb-next" class="primary" hidden></button>
       <p id="tbr-hint" class="hint center"></p>
@@ -307,21 +314,20 @@
 
     <!-- Fim -->
     <section id="screen-end" class="screen" hidden>
-      <div class="tiles" aria-hidden="true"></div>
-      <h1 class="end-title" data-t="fechaConta">Fecha a conta!</h1>
+      <h1 class="end-title" data-t="toqueSaida">Toque de saída!</h1>
       <!-- Quem ganhou, em grande, a festejar (com o animal de estimação). -->
       <div id="end-stage" class="end-stage" aria-hidden="true"></div>
       <p id="end-winner" class="winner"></p>
-      <div class="receipt paper">
-        <h3 class="receipt-title" data-t="contasDaCasa">As contas da casa</h3>
+      <div class="grades paper">
+        <h3 class="grades-title" data-t="pauta">Pauta</h3>
         <ol id="end-scores" class="scores"></ol>
-        <p class="receipt-total"><span data-t="totalMesa">Total da mesa</span> <b></b></p>
+        <p class="grades-avg"><span data-t="mediaTurma">Média da turma</span> <b></b></p>
       </div>
-      <h3 id="end-awards-title" data-t="brindes">Brindes da casa</h3>
+      <h3 id="end-awards-title" data-t="quadroHonra">Quadro de honra</h3>
       <div id="end-awards" class="awards"></div>
-      <button id="btn-again" class="primary" hidden data-t="maisUmaRodada">Mais uma rodada!</button>
+      <button id="btn-again" class="primary" hidden data-t="maisUmaAula">Mais uma aula!</button>
       <p id="end-hint" class="hint center"></p>
-      <button class="ghost btn-leave" data-t="levantar">Levantar da mesa</button>
+      <button class="ghost btn-leave" data-t="sairSala">Sair da sala</button>
     </section>
   </main>
 

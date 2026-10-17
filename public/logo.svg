@@ -1,18 +1,24 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 150" role="img" aria-label="Mais Coisa, Menos Coisa">
-  <!-- Logótipo de "Mais Coisa, Menos Coisa": letreiro de tasca, uma tábua de madeira pendurada
-       com o nome pintado à mão. (No jogo, o mesmo letreiro está dentro do index.html, para usar
-       a letra "Caveat Brush"; aqui ficam alternativas de sistema.) -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 172" role="img" aria-label="Mais Coisa, Menos Coisa">
+  <!-- Logótipo de "Mais Coisa, Menos Coisa": o nome escrito a giz num quadro verde com moldura de
+       madeira clara, com um pau de giz e o apagador no rebordo. (No jogo, o mesmo quadro está
+       dentro do index.html, para usar a letra "Caveat"; aqui ficam alternativas de sistema.) -->
   <defs>
-    <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8a5a32"/><stop offset=".55" stop-color="#6b4423"/><stop offset="1" stop-color="#4e301a"/>
+    <linearGradient id="madeira" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e2bb84"/><stop offset=".6" stop-color="#d6aa6c"/><stop offset="1" stop-color="#c4955a"/>
     </linearGradient>
+    <radialGradient id="quadro" cx=".3" cy=".25" r=".9">
+      <stop offset="0" stop-color="#3a5d4a"/><stop offset="1" stop-color="#2f4f3e"/>
+    </radialGradient>
   </defs>
-  <path d="M70,0 L92,30 M250,0 L228,30" stroke="#c9a56b" stroke-width="3" stroke-linecap="round"/>
-  <rect x="8" y="26" width="304" height="116" rx="14" fill="url(#wood)" stroke="#3e2716" stroke-width="4"/>
-  <path d="M20,52 C90,46 140,58 210,50 S290,56 300,52 M18,92 C80,98 150,86 220,94 S290,88 302,94 M24,124 C100,118 170,130 240,122 S292,126 298,122" fill="none" stroke="#3e2716" stroke-width="1.6" opacity=".35"/>
-  <circle cx="92" cy="34" r="4" fill="#d8c3a0"/><circle cx="228" cy="34" r="4" fill="#d8c3a0"/>
-  <g font-family="'Caveat Brush', 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive" font-size="40" fill="#f3ead7" stroke="#3e2716" stroke-width="5" paint-order="stroke" text-anchor="middle">
-    <text x="160" y="80">Mais Coisa,</text>
-    <text x="160" y="124">Menos Coisa</text>
+  <rect x="4" y="4" width="312" height="148" rx="8" fill="url(#madeira)" stroke="#a87a3e" stroke-width="2"/>
+  <rect x="16" y="16" width="288" height="124" rx="3" fill="url(#quadro)"/>
+  <path d="M40,46 C90,38 120,52 170,42 M190,120 C230,112 260,124 290,114" fill="none" stroke="#f4f2ea" stroke-width="10" stroke-linecap="round" opacity=".06"/>
+  <g font-family="Caveat, 'Segoe Print', 'Bradley Hand', 'Comic Sans MS', cursive" font-weight="700" font-size="42" fill="#f4f2ea" text-anchor="middle">
+    <text x="160" y="72">Mais Coisa,</text>
+    <text x="160" y="122">Menos Coisa</text>
   </g>
+  <rect x="24" y="150" width="272" height="10" rx="3" fill="#c4955a" stroke="#a87a3e" stroke-width="1.5"/>
+  <rect x="70" y="145" width="30" height="6" rx="2.5" fill="#f4f2ea"/>
+  <rect x="200" y="140" width="46" height="12" rx="3" fill="#1f4e9e"/>
+  <rect x="200" y="148" width="46" height="5" rx="2" fill="#6b5a3a"/>
 </svg>

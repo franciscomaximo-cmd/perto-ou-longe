@@ -1,49 +1,50 @@
-/* --- Estilo "tasca" -----------------------------------------------------------------------
-   Paleta (reutilizável em todo o lado) e os papéis que cada cor tem no jogo. O fundo geral é um
-   quadro de ardósia com letra de giz; os cartões de papel (classe .paper: ementa, conta,
-   guardanapo) trocam as mesmas variáveis por tinta escura sobre papel, por isso tudo o que
-   está lá dentro (texto, campos, botões, chips) se adapta sozinho. Contrastes (WCAG AA):
-   giz/ardósia 11,7:1; tinta/papel 13,6:1; papel/tinto 8,5:1; palha/ardósia 7,8:1. */
+/* --- Estilo "escola" (sala de aula portuguesa) -------------------------------------------
+   Paleta (reutilizável em todo o lado) e os papéis que cada cor tem no jogo. O fundo geral é o
+   quadro verde, com letra de giz; as folhas (classe .paper: caderno, teste, pauta, fichas)
+   trocam as mesmas variáveis por grafite e caneta sobre papel creme, por isso tudo o que está lá
+   dentro (texto, campos, botões, chips) se adapta sozinho. Contrastes (WCAG AA): giz/quadro
+   8,1:1; grafite/papel 14,2:1; caneta/papel 7,5:1; vermelho/papel 5,6:1; grafite/lápis 9,0:1. */
 :root {
   /* Paleta */
-  --tinto: #7a1f2b;          /* vermelho tinto */
-  --tinto-vivo: #b8323f;     /* o vermelho da toalha */
-  --papel: #f3ead7;          /* branco sujo, cor de papel */
-  --papel-2: #e8dbbd;
-  --pardo: #d9bf94;          /* papel pardo */
-  --azulejo: #1d4f91;        /* azul azulejo */
-  --garrafa: #1e5b3a;        /* verde garrafa */
-  --madeira: #6b4423;        /* castanho madeira */
-  --madeira-clara: #8a5a32;
-  --madeira-escura: #3e2716;
-  --palha: #e6c15a;          /* amarelo palha */
-  --ardosia: #253130;        /* quadro de ardósia */
-  --ardosia-2: #2f3c3a;
-  --giz: #f2efe4;
-  --tinta: #2b1d16;          /* texto escrito no papel */
-  /* Letras: pintada à mão nos títulos; muito legível no texto e nos números. */
-  --letra-titulo: "Caveat Brush", "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
+  --quadro: #2f4f3e;         /* verde de quadro */
+  --quadro-2: #3a5d4a;
+  --giz: #f4f2ea;            /* branco de giz */
+  --giz-suave: #cfdbcf;
+  --lapis: #f2c230;          /* amarelo de lápis */
+  --lapis-escuro: #b98c0f;
+  --caneta: #1f4e9e;         /* azul de caneta */
+  --correcao: #c0281f;       /* vermelho de correção */
+  --papel: #fdf8e8;          /* papel creme */
+  --grafite: #26262b;        /* texto escrito no papel */
+  --madeira: #d6aa6c;        /* madeira clara (carteira, moldura do quadro) */
+  --madeira-escura: #a87a3e;
+  --post-it: #ffe97a;
+  /* Letras: manuscrita (giz, caneta) nos títulos; muito legível no texto e nos números. */
+  --letra-titulo: "Caveat", "Segoe Print", "Bradley Hand", "Comic Sans MS", cursive;
   --letra-texto: "Atkinson Hyperlegible", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
-  /* Texturas leves (CSS e SVG, sem imagens) */
-  --tex-ardosia: radial-gradient(60% 40% at 20% 10%, rgba(255, 255, 255, .06), transparent 70%),
-    radial-gradient(50% 35% at 85% 60%, rgba(255, 255, 255, .04), transparent 70%);
-  --tex-madeira: repeating-linear-gradient(176deg, rgba(0, 0, 0, .12) 0 2px, transparent 2px 13px),
-    linear-gradient(var(--madeira-clara), var(--madeira) 55%, #4e301a);
-  --tex-toalha: linear-gradient(90deg, rgba(184, 50, 63, .55) 50%, transparent 50%),
-    linear-gradient(rgba(184, 50, 63, .55) 50%, transparent 50%);
-  --tex-azulejo: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%23f3ead7'/%3E%3Cpath d='M16 3 C20 9 23 12 29 16 C23 20 20 23 16 29 C12 23 9 20 3 16 C9 12 12 9 16 3Z' fill='%231d4f91'/%3E%3Ccircle cx='16' cy='16' r='3.2' fill='%23f3ead7'/%3E%3Cpath d='M0 0h5v1H1v4H0zM32 0h-5v1h4v4h1zM0 32h5v-1H1v-4H0zM32 32h-5v-1h4v-4h1z' fill='%231d4f91'/%3E%3C/svg%3E");
+  /* Texturas leves (CSS, sem imagens) */
+  --tex-quadro: radial-gradient(60% 40% at 20% 10%, rgba(255, 255, 255, .07), transparent 70%),
+    radial-gradient(50% 35% at 85% 65%, rgba(255, 255, 255, .05), transparent 70%);
+  --tex-madeira: repeating-linear-gradient(90deg, rgba(120, 80, 30, .1) 0 2px, transparent 2px 17px),
+    linear-gradient(#e2bb84, var(--madeira) 60%, #c4955a);
+  /* Folha pautada (linhas azuis e margem vermelha) e quadriculada. */
+  --tex-pautado: linear-gradient(90deg, transparent 26px, rgba(192, 40, 31, .55) 26px 28px, transparent 28px),
+    repeating-linear-gradient(transparent 0 31px, rgba(31, 78, 158, .22) 31px 32px);
+  --tex-quadriculado: linear-gradient(90deg, transparent 26px, rgba(192, 40, 31, .55) 26px 28px, transparent 28px),
+    linear-gradient(rgba(31, 78, 158, .11) 1px, transparent 1px) 0 0 / 18px 18px,
+    linear-gradient(90deg, rgba(31, 78, 158, .11) 1px, transparent 1px) 0 0 / 18px 18px;
 
-  /* Papéis no jogo (sobre a ardósia) */
-  --bg: var(--ardosia);
-  --bg-2: #2c3836;
-  --card: var(--ardosia-2);
-  --line: #4b5a57;
+  /* Papéis no jogo (sobre o quadro verde) */
+  --bg: var(--quadro);
+  --bg-2: #355747;
+  --card: var(--quadro-2);
+  --line: #5a7a68;
   --text: var(--giz);
-  --muted: #c3c6bb;
-  --near: #7ed39b;
-  --far: #ff8f80;
-  --accent: var(--palha);
-  --accent-ink: var(--tinta);
+  --muted: var(--giz-suave);
+  --near: #a6f0bf;
+  --far: #ffc4bb;
+  --accent: var(--lapis);
+  --accent-ink: var(--grafite);
   --radius: 14px;
 }
 
@@ -53,32 +54,50 @@
 html, body { margin: 0; }
 body {
   min-height: 100dvh;
-  background: var(--tex-ardosia), var(--bg);
+  background: var(--tex-quadro), var(--bg);
   background-attachment: fixed;
   color: var(--text);
   font: 17px/1.45 var(--letra-texto);
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Cartões de papel (ementa, conta, guardanapo): tinta escura sobre papel. */
+/* Folhas de papel (caderno, teste, pauta, fichas): grafite e caneta sobre papel creme. */
 .paper {
   --card: var(--papel);
-  --bg: #fffaf0;
-  --bg-2: #efe3c8;
-  --line: #cdbb98;
-  --text: var(--tinta);
-  --muted: #6a5646;
-  --near: var(--garrafa);
-  --far: var(--tinto);
-  --accent: var(--tinto);
-  --accent-ink: var(--papel);
+  --bg: #fffdf5;
+  --bg-2: #f3ecd6;
+  --line: #d9cfb3;
+  --text: var(--grafite);
+  --muted: #5c574d;
+  --near: #1d7038;
+  --far: var(--correcao);
+  --accent: var(--caneta);
+  --accent-ink: #ffffff;
   background: var(--papel);
   color: var(--text);
-  border-radius: 6px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, .35);
+  border-radius: 4px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, .3);
 }
-/* Faixa de azulejo azul e branco (parede da tasca). */
-.tiles { height: 26px; border-radius: 6px; background: var(--tex-azulejo) 0 0 / 26px 26px; box-shadow: 0 2px 8px rgba(0, 0, 0, .3); }
+/* Post-it amarelo, colado com um bocadinho de fita-cola. */
+.post-it {
+  position: relative; background: var(--post-it); color: var(--grafite);
+  border-radius: 2px; box-shadow: 0 6px 12px rgba(0, 0, 0, .3); transform: rotate(-1.5deg);
+}
+.post-it::before {
+  content: ""; position: absolute; left: 50%; top: -8px; width: 46px; height: 14px; transform: translateX(-50%) rotate(2deg);
+  background: rgba(255, 255, 255, .55); border: 1px solid rgba(255, 255, 255, .6);
+}
+/* Quadro de giz com moldura de madeira clara. */
+.chalkboard {
+  padding: 16px 16px 18px; border-radius: 6px;
+  background: var(--tex-quadro), var(--quadro);
+  border: 10px solid var(--madeira);
+  border-image: var(--tex-madeira) 10;
+  box-shadow: 0 8px 18px rgba(0, 0, 0, .35), inset 0 0 30px rgba(0, 0, 0, .3);
+  color: var(--giz);
+}
+/* Folha de caderno pautado (linhas azuis, margem vermelha). */
+.notebook { padding: 16px 16px 18px 40px; background: var(--tex-pautado), var(--papel); }
 
 main {
   max-width: 480px;
@@ -94,10 +113,10 @@ h1, h2 { font-family: var(--letra-titulo); font-weight: 400; letter-spacing: .01
 h2 { font-size: 1.5rem; }
 h3 { font-size: 0.95rem; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; }
 
-/* Letreiro (logótipo): tábua de madeira pendurada, com o nome pintado. */
-.logo { text-align: center; margin: 12px 0 0; color: var(--palha); font-size: 2.4rem; }
-.logo .sign { display: block; width: min(100%, 340px); height: auto; margin: 0 auto; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .45)); }
-.sign-line { font-family: var(--letra-titulo); fill: var(--papel); stroke: var(--madeira-escura); stroke-width: 5px; paint-order: stroke; }
+/* Logótipo: o nome escrito a giz num quadro, com o pau de giz e o apagador no rebordo. */
+.logo { text-align: center; margin: 12px 0 0; color: var(--lapis); font-size: 2.4rem; }
+.logo .sign { display: block; width: min(100%, 340px); height: auto; margin: 0 auto; filter: drop-shadow(0 8px 10px rgba(0, 0, 0, .35)); }
+.sign-line { font-family: var(--letra-titulo); font-weight: 700; fill: var(--giz); }
 .logo.small { font-size: 2.2rem; }
 .tagline { text-align: center; color: var(--muted); margin: 0 0 8px; }
 /* Aviso no ecrã inicial quando a sala desapareceu (ex.: o servidor reiniciou). */
@@ -138,20 +157,18 @@ button {
 }
 button:active { transform: scale(.98); }
 button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
-/* Botão principal: placa pintada a vermelho tinto, com a borda de carimbo (tracejado de papel
-   por dentro). Botão "de madeira": tábua com o texto a branco sujo. */
+/* Botão principal: etiqueta amarela (cor de lápis), levantada do papel. Botão secundário
+   (.label-btn): etiqueta escolar branca com o contorno a caneta azul. */
 button.primary {
-  background: linear-gradient(#8e2632, var(--tinto)); border-color: #4f121b; color: var(--papel);
-  box-shadow: inset 0 0 0 3px var(--tinto), inset 0 0 0 4.5px rgba(243, 234, 215, .55), 0 3px 0 #4f121b;
-  letter-spacing: .02em;
+  background: var(--lapis); border-color: var(--lapis-escuro); color: var(--grafite);
+  box-shadow: 0 3px 0 var(--lapis-escuro), 0 6px 12px rgba(0, 0, 0, .22);
 }
-button.primary:active { box-shadow: inset 0 0 0 3px var(--tinto), inset 0 0 0 4.5px rgba(243, 234, 215, .55); transform: translateY(2px); }
-button.wood {
-  background: var(--tex-madeira); border-color: var(--madeira-escura); color: var(--papel);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), 0 3px 0 var(--madeira-escura);
-  text-shadow: 0 1px 0 rgba(0, 0, 0, .35);
+button.primary:active { box-shadow: 0 1px 0 var(--lapis-escuro); transform: translateY(2px); }
+button.label-btn {
+  background: var(--papel); border-color: var(--caneta); color: var(--caneta);
+  box-shadow: inset 0 0 0 3px var(--papel), inset 0 0 0 4px rgba(31, 78, 158, .35), 0 3px 0 rgba(0, 0, 0, .2);
 }
-button.wood:active { box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2); transform: translateY(2px); }
+button.label-btn:active { box-shadow: inset 0 0 0 3px var(--papel), inset 0 0 0 4px rgba(31, 78, 158, .35); transform: translateY(2px); }
 button.ghost { background: transparent; border-color: transparent; color: var(--muted); font-weight: 700; padding: 10px; text-decoration: underline; text-underline-offset: 3px; }
 
 .divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .9rem; margin: 6px 0; }
@@ -168,91 +185,68 @@ button.ghost { background: transparent; border-color: transparent; color: var(--
 .rules summary { cursor: pointer; font-weight: 600; color: var(--text); }
 .rules ol { padding-left: 20px; }
 
-/* Barra de topo */
+/* Barra de topo: o rebordo de madeira clara do quadro. */
 #topbar {
   position: sticky; top: 0; z-index: 5;
   display: flex; align-items: center; justify-content: space-between; gap: 8px;
   padding: calc(10px + env(safe-area-inset-top)) 16px 10px;
   background: var(--tex-madeira);
   border-bottom: 3px solid var(--madeira-escura);
-  box-shadow: 0 3px 10px rgba(0, 0, 0, .35);
-  color: var(--papel);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .3);
+  color: var(--grafite);
   font-weight: 700;
 }
-#tb-round { font-family: var(--letra-titulo); font-size: 1.3rem; font-weight: 400; }
-#tb-code { background: var(--ardosia); color: var(--giz); }
-#topbar .icon-btn { background: rgba(0, 0, 0, .25); }
+#tb-round { font-family: var(--letra-titulo); font-size: 1.45rem; font-weight: 700; }
+#tb-code { background: var(--quadro); color: var(--giz); }
+#topbar .icon-btn { background: rgba(0, 0, 0, .12); }
 .pill { background: var(--card); border-radius: 999px; padding: 4px 12px; font-size: .9rem; letter-spacing: .1em; }
 .timer { background: var(--accent); color: var(--accent-ink); letter-spacing: 0; min-width: 4ch; text-align: center; }
 .timer.urgent { background: var(--far); color: #fff; animation: pulse 1s infinite; }
 @keyframes pulse { 50% { transform: scale(1.08); } }
 
-/* --- Entrada da tasca (ecrã inicial) --- */
+/* --- Ecrã inicial --- */
 .tagline { font-size: 1rem; }
-/* Quadro de ardósia com moldura de madeira: o nome e o número da mesa escritos a giz. */
-.slate {
-  padding: 16px 16px 18px; border-radius: 10px;
-  background: var(--tex-ardosia), var(--ardosia);
-  border: 9px solid var(--madeira);
-  border-image: var(--tex-madeira) 9;
-  box-shadow: 0 8px 18px rgba(0, 0, 0, .45), inset 0 0 24px rgba(0, 0, 0, .35);
+/* O nome e o código da turma escritos a caneta numa folha de caderno, com argolas em cima. */
+.notebook.spiral {
+  padding-top: 28px;
+  background: radial-gradient(circle at 15px 11px, var(--quadro) 5px, transparent 5.5px) 0 0 / 30px 22px repeat-x,
+    var(--tex-pautado), var(--papel);
 }
-.slate .field > span, .table-plate .plate-label { font-family: var(--letra-titulo); font-weight: 400; font-size: 1.45rem; color: var(--giz); }
-.slate input {
-  background: rgba(255, 255, 255, .04); border: 0; border-bottom: 2px dashed rgba(242, 239, 228, .55); border-radius: 8px 8px 0 0;
-  color: var(--giz); font-weight: 700;
+.notebook .field > span { font-family: var(--letra-titulo); font-weight: 700; font-size: 1.55rem; color: var(--caneta); line-height: 1.1; }
+.notebook input {
+  background: transparent; border: 0; border-bottom: 2px solid rgba(31, 78, 158, .5); border-radius: 0;
+  color: var(--caneta); font-weight: 700;
 }
-.slate input:focus { border-bottom-color: var(--palha); background: rgba(255, 255, 255, .08); }
-.slate .divider { color: var(--muted); }
-.slate .divider::before, .slate .divider::after { background: rgba(242, 239, 228, .3); }
-/* "Como se joga": num papel pardo. */
-.rules.paper { --card: var(--pardo); background: var(--pardo); color: var(--tinta); padding: 12px 16px; margin-top: 4px; }
-.rules.paper summary { color: var(--tinta); font-family: var(--letra-titulo); font-weight: 400; font-size: 1.35rem; }
+.notebook input:focus { border-bottom-color: var(--correcao); background: rgba(31, 78, 158, .05); }
+/* "Como se joga": numa folha simples. */
+.rules.paper { padding: 12px 16px; margin-top: 4px; }
+.rules.paper summary { font-family: var(--letra-titulo); font-weight: 700; font-size: 1.5rem; color: var(--caneta); }
 
-/* --- À mesa (sala de espera) --- */
-.lobby-title { font-size: 2.6rem; text-align: center; color: var(--giz); margin: 4px 0 0; }
-/* A mesa com toalha aos quadrados e, em cima, a plaquinha de ardósia com o número da mesa e o
-   QR do convite. */
-.table-plate {
-  display: flex; flex-direction: column; align-items: center; gap: 6px;
-  padding: 18px; border-radius: 14px;
-  background: var(--tex-toalha), var(--papel); background-size: 28px 28px;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, .35);
-}
-.table-plate > * { position: relative; }
-.table-plate .plate-label, .table-plate .big-code {
-  background: var(--tex-ardosia), var(--ardosia); border: 6px solid var(--madeira); border-image: var(--tex-madeira) 6;
-  margin: 0; padding: 0 18px;
-}
-.table-plate .plate-label { border-bottom: 0; padding-top: 4px; line-height: 1.2; }
-.table-plate .big-code { border-top: 0; padding-bottom: 6px; margin-top: -6px; }
-.table-plate .hint { background: var(--papel); color: var(--tinta); padding: 2px 10px; border-radius: 6px; font-weight: 700; }
-/* A conta: lista de quem está à mesa, escrita num bloco de papel com linhas e margem a
-   vermelho, com o fundo rasgado. */
-.bill {
-  padding: 12px 14px 22px 30px;
-  background:
-    linear-gradient(90deg, transparent 20px, rgba(184, 50, 63, .55) 20px 22px, transparent 22px),
-    repeating-linear-gradient(transparent 0 33px, rgba(29, 79, 145, .18) 33px 34px),
-    var(--papel);
-  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 16px 100%;
-  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 16px 100%;
-  border-radius: 6px 6px 0 0;
-}
-.bill h2 { margin: 0 0 6px; }
-.bill .players { gap: 0; }
-.bill .players li { background: transparent; border-radius: 0; padding: 8px 2px; border-bottom: 1px dashed var(--line); flex-wrap: wrap; row-gap: 4px; }
+/* --- Sala de aula (sala de espera) --- */
+.lobby-title { font-size: 2.9rem; font-weight: 700; text-align: center; color: var(--giz); margin: 4px 0 0; }
+/* O código da turma escrito a giz no quadro, com o QR num post-it colado por baixo. */
+.class-code { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; }
+.class-code .code-label { margin: 0; font-family: var(--letra-titulo); font-weight: 700; font-size: 1.55rem; color: var(--giz-suave); }
+.class-code .big-code { color: var(--giz); margin-top: -4px; }
+.class-code .post-it { padding: 14px 14px 10px; margin-top: 8px; }
+.class-code .post-it .qr { margin: 0 auto; }
+.class-code .post-it .hint { color: var(--grafite); font-weight: 700; margin-top: 6px; max-width: 190px; }
+/* A chamada: lista de quem está na turma, escrita numa folha pautada. */
+.roll { padding: 12px 14px 14px 40px; background: linear-gradient(90deg, transparent 26px, rgba(192, 40, 31, .55) 26px 28px, transparent 28px), var(--papel); }
+.roll h2 { margin: 0 0 4px; color: var(--caneta); font-weight: 700; }
+.roll .players { gap: 0; }
+.roll .players li { background: transparent; border-radius: 0; padding: 8px 2px; border-bottom: 1px solid rgba(31, 78, 158, .25); flex-wrap: wrap; row-gap: 4px; }
 /* Nomes compridos: o estado passa para a linha de baixo, encostado à direita. */
-.bill .players li .who { min-width: 0; overflow-wrap: anywhere; }
-.bill .lobby-extras { margin-left: auto; }
-/* Para quem não é anfitrião, a ementa fica só para ler: menos desmaiada do que um botão inativo. */
-.menu button:disabled, .menu input:disabled { opacity: .85; }
-.paper .ready-badge { background: rgba(43, 29, 22, .07); }
-.paper .ready-badge.on { background: var(--garrafa); color: var(--papel); }
-/* Ementa da casa (configuração): moldura dupla, como uma ementa de papel. */
-.menu { border-radius: 4px; outline: 2px solid var(--line); outline-offset: -8px; padding: 18px 20px; }
-.menu > h2 { text-align: center; color: var(--tinto); }
-.menu > h2::before, .menu > h2::after { content: " ~ "; color: var(--muted); }
+.roll .players li .who { min-width: 0; overflow-wrap: anywhere; }
+.roll .lobby-extras { margin-left: auto; }
+.paper .ready-badge { background: rgba(38, 38, 43, .07); }
+/* "Presente!": carimbo verde. */
+.paper .ready-badge.on { background: var(--near); color: #ffffff; transform: rotate(-3deg); }
+/* Regras da aula (configuração): uma ficha em papel quadriculado. */
+.worksheet { background: var(--tex-quadriculado), var(--papel); padding: 18px 18px 18px 40px; border-radius: 4px; }
+.worksheet > h2 { text-align: center; color: var(--caneta); font-weight: 700; }
+/* Para quem não é anfitrião, as regras ficam só para ler: menos desmaiadas do que um botão inativo. */
+.worksheet button:disabled, .worksheet input:disabled { opacity: .85; }
 
 /* Sala */
 .big-code { font-size: 3.4rem; font-weight: 800; letter-spacing: .25em; text-align: center; color: var(--accent); margin-right: -.25em; }
@@ -1094,7 +1088,7 @@ button.danger { background: var(--far); border-color: var(--far); color: #fff; }
   position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
   display: flex; flex-direction: column; gap: 8px;
   padding: 18px max(16px, calc((100% - 448px) / 2)) calc(12px + env(safe-area-inset-bottom));
-  background: linear-gradient(rgba(37, 49, 48, 0), var(--ardosia) 22%);
+  background: linear-gradient(rgba(47, 79, 62, 0), var(--quadro) 22%);
 }
 .lobby-actions .hint { font-size: .85rem; }
 .lobby-actions .hint:empty { display: none; }
@@ -1200,122 +1194,108 @@ body.has-actions #toast { bottom: calc(132px + env(safe-area-inset-bottom)); }
 }
 
 /* =====================================================================================
-   Estilo "tasca" no resto do jogo (as mesmas variáveis do início do ficheiro)
+   Estilo "escola" no resto do jogo (as mesmas variáveis do início do ficheiro)
    ===================================================================================== */
 
-/* --- Pergunta: escrita a giz no quadro do "Prato do dia" --- */
+/* --- Pergunta: escrita a giz no quadro, com a categoria num post-it --- */
 .board { display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 12px 16px 16px; }
-.board-title { margin: 0; font-family: var(--letra-titulo); font-size: 1.55rem; line-height: 1.1; color: var(--palha); }
+.board-title { margin: 0; font-family: var(--letra-titulo); font-weight: 700; font-size: 1.7rem; line-height: 1.1; color: var(--lapis); }
 .board .question { color: var(--giz); margin: 2px 0 0; }
-.board .unit { color: var(--palha); }
-/* A categoria num papelinho colado com fita-cola. */
+.board .unit { color: var(--lapis); }
 .cat-label {
-  position: relative; margin: 4px 0 2px; transform: rotate(-2deg);
-  color: var(--tinta); background: var(--papel); border-radius: 2px; padding: 4px 12px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, .35);
-}
-.cat-label::before {
-  content: ""; position: absolute; left: 50%; top: -7px; width: 38px; height: 12px; transform: translateX(-50%) rotate(3deg);
-  background: rgba(243, 234, 215, .55); border: 1px solid rgba(255, 255, 255, .35);
+  position: relative; margin: 6px 0 2px; transform: rotate(-2deg);
+  color: var(--grafite); background: var(--post-it); border-radius: 2px; padding: 4px 12px;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, .3);
 }
 
-/* --- Palpite: bloco de pedidos (papel com linhas e argolas em cima) --- */
-.order-pad {
-  display: flex; flex-direction: column; gap: 10px; position: relative;
-  padding: 26px 16px 16px; border-radius: 4px 4px 8px 8px;
-  background:
-    radial-gradient(circle at 12px 9px, var(--ardosia) 4px, transparent 4.5px) 0 0 / 34px 18px repeat-x,
-    linear-gradient(var(--tinto) 0 18px, transparent 18px),
-    repeating-linear-gradient(transparent 0 31px, rgba(29, 79, 145, .16) 31px 32px),
-    var(--papel);
-}
-.pad-title { margin: 0; font-family: var(--letra-titulo); font-size: 1.4rem; color: var(--tinto); }
-.order-pad .number-input { background: #fffaf0; }
-.order-pad .big-number { color: var(--tinta); margin: 0; }
+/* --- A resposta numa folha de teste (pautada, com margem vermelha) --- */
+.test-sheet { display: flex; flex-direction: column; gap: 10px; padding: 16px 16px 16px 40px; background: var(--tex-pautado), var(--papel); }
+.sheet-title { margin: 0; font-family: var(--letra-titulo); font-weight: 700; font-size: 1.6rem; color: var(--caneta); }
+.test-sheet .number-input { background: #fffdf5; color: var(--caneta); }
+.test-sheet .big-number { color: var(--caneta); margin: 0; }
 
 /* --- Votação --- */
-.vote-title { font-size: 1.9rem; line-height: 1.15; color: var(--giz); }
+.vote-title { font-size: 2.1rem; font-weight: 700; line-height: 1.1; color: var(--giz); }
 
-/* --- Revelação: o cenário na televisão pendurada na parede da tasca --- */
-/* Moldura fina (a madeira à volta e um rebordo escuro de vidro), para o cenário ocupar quase
-   toda a largura; em cima, a faixa da legenda faz de "testa" da televisão. */
-.reveal-stage.tv {
-  padding: 6px; border-radius: 16px;
-  background: var(--tex-madeira);
-  box-shadow: inset 0 0 0 2px var(--madeira-escura), inset 0 2px 0 rgba(255, 255, 255, .18), 0 10px 20px rgba(0, 0, 0, .45);
+/* --- Revelação: o cenário projetado num quadro interativo, com moldura FINA --- */
+/* Rebordo de plástico claro (quadro interativo) e, por baixo, o tabuleiro dos marcadores; em
+   cima, a faixa da legenda. A moldura é fina para o cenário ocupar quase toda a largura. */
+.reveal-stage.screen-frame {
+  padding: 5px; border-radius: 10px;
+  background: #e6e9ec;
+  box-shadow: inset 0 0 0 1px #b5bcc2, 0 8px 18px rgba(0, 0, 0, .35);
 }
-.reveal-stage.tv.has-captions { padding-top: 58px; }
-.reveal-stage.tv .rv-caption { top: 4px; }
-/* O vidro do ecrã: um rebordo escuro à volta do cenário. */
-.reveal-stage.tv > svg, .reveal-stage.tv > .tgt-board { box-shadow: 0 0 0 2px #141819; border-radius: 10px; }
-/* No telemóvel, a televisão estende-se quase até às bordas do ecrã (como o mapa) e a madeira
-   fica ainda mais fina. */
+.reveal-stage.screen-frame::after {
+  content: ""; position: absolute; left: 22%; right: 22%; bottom: -7px; height: 7px;
+  background: #cfd5da; border-radius: 0 0 6px 6px; box-shadow: 0 3px 6px rgba(0, 0, 0, .25);
+}
+.reveal-stage.screen-frame.has-captions { padding-top: 58px; }
+.reveal-stage.screen-frame .rv-caption { top: 4px; }
+.reveal-stage.screen-frame > svg, .reveal-stage.screen-frame > .tgt-board { box-shadow: 0 0 0 1px #9aa3aa; border-radius: 6px; }
+/* No telemóvel, o quadro estende-se quase até às bordas do ecrã (como o mapa). */
 @media (max-width: 599px) {
-  .reveal-stage.tv { margin: 0 -12px; padding: 4px; border-radius: 12px; }
-  .reveal-stage.tv.has-captions { padding-top: 56px; }
-  .reveal-stage.tv > svg, .reveal-stage.tv > .tgt-board { border-radius: 8px; }
+  .reveal-stage.screen-frame { margin: 0 -12px; padding: 3px; border-radius: 8px; }
+  .reveal-stage.screen-frame.has-captions { padding-top: 56px; }
+  .reveal-stage.screen-frame > svg, .reveal-stage.screen-frame > .tgt-board { border-radius: 5px; }
 }
-/* Legenda da vez e resumo final: em papel, com as letras da casa. */
-.rv-caption-box { background: var(--papel); color: var(--tinta); }
-.rv-caption-name { color: #6a5646; font-family: var(--letra-titulo); font-weight: 400; font-size: 1.25rem; }
-.rv-caption-value { color: var(--tinta); }
-.rv-summary { background: var(--papel); color: var(--tinta); }
-.rv-summary .near b { color: var(--garrafa); }
-.rv-summary .far b { color: var(--tinto); }
+/* Legenda da vez e resumo final: em papel, com a letra manuscrita no nome. */
+.rv-caption-box { background: var(--papel); color: var(--grafite); }
+.rv-caption-name { color: #5c574d; font-family: var(--letra-titulo); font-weight: 700; font-size: 1.35rem; }
+.rv-caption-value { color: var(--grafite); }
+.rv-summary { background: var(--papel); color: var(--grafite); }
+.rv-summary .near b { color: #1d7038; }
+.rv-summary .far b { color: var(--correcao); }
 
-/* --- A conta certa: um papelinho de conta, com a resposta em grande --- */
+/* --- Resposta certa: corrigida a vermelho --- */
 .answer-box {
-  background: var(--papel); color: var(--tinta);
-  border: 2px dashed rgba(122, 31, 43, .45); outline: 6px solid var(--papel); outline-offset: -1px;
-  margin: 6px; box-shadow: 0 6px 16px rgba(0, 0, 0, .35); border-radius: 6px;
+  background: var(--papel); color: var(--grafite);
+  border: 2px solid rgba(192, 40, 31, .35); border-radius: 4px;
+  margin: 6px; box-shadow: 0 6px 16px rgba(0, 0, 0, .3);
 }
 .answer-box .label {
-  opacity: 1; color: var(--tinto); font-family: var(--letra-titulo); font-size: 1.5rem;
+  opacity: 1; color: var(--correcao); font-family: var(--letra-titulo); font-weight: 700; font-size: 1.6rem;
   text-transform: none; letter-spacing: 0;
 }
 
-/* --- As contas da casa: talão de papel com linhas tracejadas e o total em baixo --- */
-.receipt {
-  padding: 14px 18px 24px;
-  -webkit-mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 16px 100%;
-  mask: conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) 50% / 16px 100%;
-  border-radius: 4px 4px 0 0;
+/* --- Pauta afixada: folha presa com pioneses, com as notas a caneta vermelha --- */
+.grades { position: relative; padding: 24px 16px 14px; border-radius: 2px; }
+.grades::before, .grades::after {
+  content: ""; position: absolute; top: 8px; width: 12px; height: 12px; border-radius: 50%;
+  background: radial-gradient(circle at 35% 35%, #ff8a80, var(--correcao)); box-shadow: 0 2px 2px rgba(0, 0, 0, .35);
 }
-.receipt-title {
-  margin: 0 0 6px; text-align: center; text-transform: none; letter-spacing: 0;
-  font-family: var(--letra-titulo); font-weight: 400; font-size: 1.6rem; color: var(--tinto);
-  padding-bottom: 6px; border-bottom: 2px dashed var(--line);
+.grades::before { left: 12px; }
+.grades::after { right: 12px; }
+.grades-title {
+  margin: 0 0 4px; text-align: center; text-transform: none; letter-spacing: 0;
+  font-family: var(--letra-titulo); font-weight: 700; font-size: 1.9rem; color: var(--grafite);
+  padding-bottom: 4px; border-bottom: 2px solid var(--grafite);
 }
-.receipt .scores { gap: 0; }
-.receipt .scores li { background: transparent; border-radius: 0; padding: 8px 2px; border-bottom: 1px dashed var(--line); }
-.receipt .scores li.first { background: linear-gradient(90deg, rgba(230, 193, 90, .45), transparent 85%); }
-.receipt .scores li.me { outline: 0; box-shadow: inset 4px 0 0 var(--tinto); padding-left: 10px; }
-.receipt-total {
+.grades .scores { gap: 0; }
+.grades .scores li { background: transparent; border-radius: 0; padding: 8px 2px; border-bottom: 1px solid var(--line); }
+.grades .scores .pts { font-family: var(--letra-titulo); font-weight: 700; font-size: 1.55rem; color: var(--correcao); }
+.grades .scores li.first { background: linear-gradient(90deg, rgba(242, 194, 48, .35), transparent 85%); }
+.grades .scores li.me { outline: 0; box-shadow: inset 4px 0 0 var(--caneta); padding-left: 10px; }
+.grades-avg {
   display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
-  margin: 8px 0 0; padding-top: 8px; border-top: 3px double var(--tinta);
-  font-weight: 700; text-transform: uppercase; letter-spacing: .04em; font-size: .9rem;
+  margin: 8px 0 0; padding-top: 6px; border-top: 2px solid var(--grafite);
+  font-weight: 700; font-size: .95rem;
 }
-.receipt-total b { font-size: 1.1rem; text-transform: none; letter-spacing: 0; }
+.grades-avg b { font-family: var(--letra-titulo); font-size: 1.45rem; color: var(--correcao); }
 
-/* --- Fecha a conta! --- */
-.end-title { font-size: 2.8rem; text-align: center; color: var(--giz); margin: 4px 0 0; }
-.winner { font-family: var(--letra-titulo); font-weight: 400; font-size: 1.6rem; line-height: 1.2; color: var(--palha); }
-/* Brindes da casa: guardanapos de papel. */
-.award { background: var(--papel); color: var(--tinta); border: 1px solid #cdbb98; box-shadow: 0 4px 12px rgba(0, 0, 0, .3); }
-.award .title { color: var(--tinto); }
-.award .why { color: #6a5646; }
-.award.me { border: 2px solid var(--tinto); }
+/* --- Toque de saída! --- */
+.end-title { font-size: 2.9rem; font-weight: 700; text-align: center; color: var(--giz); margin: 4px 0 0; }
+.winner { font-family: var(--letra-titulo); font-weight: 700; font-size: 1.75rem; line-height: 1.15; color: var(--lapis); }
+/* Quadro de honra: folhas de papel. */
+.award { background: var(--papel); color: var(--grafite); border: 1px solid #d9cfb3; box-shadow: 0 4px 12px rgba(0, 0, 0, .25); }
+.award .title { color: var(--caneta); }
+.award .why { color: #5c574d; }
+.award.me { border: 2px solid var(--caneta); }
 
-/* --- Mapa antigo / papel de embrulho: terra cor de pergaminho, mar esverdeado --- */
+/* --- Mapa-mundo escolar pendurado na parede: varões de madeira em cima e em baixo, mar azul
+   e terra creme (o país certo, os marcadores e as distâncias ficam com as cores fortes). --- */
 .map-box {
-  border: 3px solid var(--madeira);
-  background:
-    radial-gradient(70% 60% at 30% 25%, rgba(255, 255, 255, .22), transparent 70%),
-    radial-gradient(60% 50% at 80% 80%, rgba(62, 39, 22, .12), transparent 70%),
-    #9fbdb8;
+  border: 0; border-top: 9px solid var(--madeira); border-bottom: 9px solid var(--madeira-escura);
+  background: radial-gradient(70% 60% at 30% 25%, rgba(255, 255, 255, .25), transparent 70%), #a9d3ee;
 }
-.map-inner path { fill: #f2e3c0; stroke: #8a6a45; }
-.map-inner path.target { fill: var(--near); stroke: var(--garrafa); }
-@media (max-width: 599px) {
-  .map-box { border-left: 0; border-right: 0; }
-}
+.map-inner path { fill: #fbf1cf; stroke: #6b5a3a; }
+.map-inner path.target { fill: #49b86c; stroke: #1d7038; }

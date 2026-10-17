@@ -1,6 +1,6 @@
 # Mais Coisa, Menos Coisa
 
-Jogo multijogador para telemóveis, com ar de tasca portuguesa (antes chamava-se "Perto ou Longe"). Todos respondem com um número à mesma pergunta e depois votam em quem acham que ficou **mais longe** da resposta certa.
+Jogo multijogador para telemóveis, com ar de sala de aula portuguesa (antes chamava-se "Perto ou Longe"). Todos respondem com um número à mesma pergunta e depois votam em quem acham que ficou **mais longe** da resposta certa.
 
 O endereço do site, o nome do serviço no Render (`render.yaml`) e as chaves do `localStorage` (`pertoOuLonge.*`) mantêm o nome antigo de propósito: assim os jogadores não perdem o boneco e o progresso guardados.
 

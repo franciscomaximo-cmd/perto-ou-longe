@@ -12,7 +12,7 @@
   const numberFormat = new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 3 });
   const reducedMotion = () => window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-  // --- Textos do estilo "tasca" ---------------------------------------------------------
+  // --- Textos do estilo "escola" (sala de aula) --------------------------------------------
   // Todos os textos novos num só sítio, para se poderem mudar facilmente. No HTML, um elemento
   // com data-t="chave" recebe o texto TEXTOS[chave] ao abrir a página (o HTML já traz o mesmo
   // texto, para o caso de o script demorar). Os textos com valores (ex.: o número de jogadores)
@@ -22,57 +22,56 @@
     slogan: 'Adivinha números e descobre quem falhou por mais.',
     // Ecrã inicial
     oTeuNome: 'O teu nome',
-    abrirMesa: 'Abrir mesa',
-    ouSenta: 'ou senta-te numa mesa já aberta',
-    numeroMesa: 'Número da mesa',
-    sentar: 'Sentar à mesa',
+    criarTurma: 'Criar turma',
+    ouEntra: 'ou entra numa turma que já existe',
+    codigoTurma: 'Código da turma',
+    entrarTurma: 'Entrar na turma',
     comoSeJoga: 'Como se joga',
     // Sala de espera
-    aMesa: 'À mesa',
-    mesa: 'Mesa',
-    qrDica: 'Aponta a câmara do telemóvel para te sentares.',
-    chamarGente: 'Chamar mais gente',
-    jogadores: 'À mesa estão…',
-    jaCaEstou: 'Já cá estou!',
-    aEscolher: 'A escolher o petisco…',
-    estouServido: 'Estou servido',
-    naoServido: 'Afinal ainda não estou servido',
-    venhaDeLa: 'Venha de lá isso!',
-    ementa: 'Ementa da casa',
-    levantar: 'Levantar da mesa',
-    convite: (code) => `Senta-te à mesa no Mais Coisa, Menos Coisa! Número da mesa: ${code}`,
+    salaDeAula: 'Sala de aula',
+    qrDica: 'Aponta a câmara do telemóvel para entrares.',
+    chamarColegas: 'Chamar colegas',
+    chamada: 'Chamada',
+    presente: 'Presente!',
+    aArrumar: 'A arrumar a mochila…',
+    estouPresente: 'Estou presente',
+    naoPresente: 'Afinal ainda não estou presente',
+    comecarAula: 'Começar a aula!',
+    regrasAula: 'Regras da aula',
+    sairSala: 'Sair da sala',
+    convite: (code) => `Entra na turma no Mais Coisa, Menos Coisa! Código da turma: ${code}`,
     ligacaoCopiada: 'Ligação copiada.',
-    soAnfitriao: 'Só o anfitrião pode mudar a ementa.',
-    faltaPronto: (name) => `Falta 1 jogador dizer que está servido: ${name}.`,
-    faltamProntos: (n, names) => `Faltam ${n} jogadores dizerem que estão servidos: ${names}.`,
-    carregaServido: 'Carrega em «Estou servido» quando estiveres preparado.',
-    todosServidos: 'Estão todos servidos. Podes começar!',
-    esperaAnfitriao: 'Estás servido. À espera que o anfitrião comece o jogo…',
-    regrasMudaram: 'O anfitrião mudou a ementa. Vê a configuração e diz outra vez que estás servido.',
-    perguntaPrimeiro: 'Escreve primeiro a tua pergunta para ficares servido.',
+    soAnfitriao: 'Só o anfitrião pode mudar as regras da aula.',
+    faltaPronto: (name) => `Falta 1 aluno dizer que está presente: ${name}.`,
+    faltamProntos: (n, names) => `Faltam ${n} alunos dizerem que estão presentes: ${names}.`,
+    carregaPresente: 'Carrega em «Estou presente» quando estiveres preparado.',
+    todosPresentes: 'Estão todos presentes. Podes começar a aula!',
+    esperaAnfitriao: 'Estás presente. À espera que o anfitrião comece a aula…',
+    regrasMudaram: 'O anfitrião mudou as regras da aula. Vê-as e diz outra vez que estás presente.',
+    perguntaPrimeiro: 'Escreve primeiro a tua pergunta para ficares presente.',
     // Pergunta e resposta
-    pratoDoDia: 'Prato do dia',
-    oTeuPedido: 'O teu pedido',
-    estaDito: 'Está dito!',
+    perguntaTeste: 'Pergunta do teste',
+    aTuaResposta: 'A tua resposta',
+    entregar: 'Entregar',
     tocaNoMapa: 'Toca no mapa para escolher',
-    quemJaPediu: 'Quem já pediu',
+    quemJaEntregou: 'Quem já entregou',
     // Votação
-    votarTitulo: 'Quem é que disse a maior barbaridade?',
+    votarTitulo: 'Quem é que disse a maior asneira?',
     votarDica: 'Vota em quem achas que ficou mais longe. Os palpites só se veem no fim.',
-    vaiDisto: 'Vai disto!',
+    votar: 'Votar',
     // Revelação
-    despacha: 'Despacha!',
+    jaChega: 'Já chega!',
     venhaProxima: 'Venha a próxima!',
-    contaCerta: 'A conta certa:',
-    // Classificação e fim do jogo
-    contasDaCasa: 'As contas da casa',
-    totalMesa: 'Total da mesa',
-    pontos: (n) => `${n} ${n === 1 ? 'ponto' : 'pontos'}`,
-    fechaConta: 'Fecha a conta!',
-    ganhou: (name) => `🏆 ${name} paga a próxima rodada!`,
-    empate: (names, last) => `🏆 Empate entre ${names} e ${last}: pagam a próxima rodada a meias!`,
-    brindes: 'Brindes da casa',
-    maisUmaRodada: 'Mais uma rodada!',
+    respostaCerta: 'Resposta certa:',
+    // Pauta e fim do jogo
+    pauta: 'Pauta',
+    mediaTurma: 'Média da turma',
+    pontos: (n) => `${fmt(n)} ${n === 1 ? 'ponto' : 'pontos'}`,
+    toqueSaida: 'Toque de saída!',
+    ganhou: (name) => `🏆 ${name} é o melhor aluno da turma!`,
+    empate: (names, last) => `🏆 ${names} e ${last} são os melhores alunos da turma!`,
+    quadroHonra: 'Quadro de honra',
+    maisUmaAula: 'Mais uma aula!',
   };
   for (const node of document.querySelectorAll('[data-t]')) {
     const value = TEXTOS[node.dataset.t];
@@ -593,11 +592,11 @@
     $('#topbar').hidden = !state;
     if (!state) return;
     $('#tb-code').textContent = state.code;
-    // No fim e na sala de espera, o título está na própria página ("Fecha a conta!", "À mesa").
+    // No fim e na sala de espera, o título está na própria página ("Toque de saída!", "Sala de aula").
     $('#tb-round').textContent = state.phase === 'end' ? ''
       : state.tiebreak ? `Desempate${state.tiebreak.number > 1 ? ` ${state.tiebreak.number}` : ''}`
       : inGame && state.round ? `Pergunta ${state.round} de ${state.totalRounds}`
-      : ''; // na sala de espera, o título "À mesa" está na própria página
+      : '';
   }
 
   function tick() {
@@ -628,13 +627,13 @@
     ]);
   }
 
-  // Linha de um jogador na sala de espera: estado ("Já cá estou!" / "A escolher o petisco…"),
+  // Linha de um jogador na sala de espera: estado ("Presente!" / "A arrumar a mochila…"),
   // a pergunta (no modo "Perguntas dos jogadores") e, para o anfitrião, o botão discreto de
   // expulsar.
   function lobbyRow(p, custom) {
     const extras = el('span', { class: 'lobby-extras' }, [
       custom ? el('span', { class: 'state', text: state.customReady.includes(p.id) ? 'pergunta ✓' : 'a escrever…' }) : null,
-      p.connected ? el('span', { class: `ready-badge ${p.ready ? 'on' : ''}`, text: p.ready ? TEXTOS.jaCaEstou : TEXTOS.aEscolher }) : null,
+      p.connected ? el('span', { class: `ready-badge ${p.ready ? 'on' : ''}`, text: p.ready ? TEXTOS.presente : TEXTOS.aArrumar }) : null,
       isHost() && p.id !== state.me ? el('button', {
         type: 'button', class: 'kick', 'aria-label': `Expulsar ${p.name}`, title: `Expulsar ${p.name}`, text: '✕',
         onclick: () => askConfirm(`Expulsar ${p.name}?`, 'Expulsar').then((ok) => { if (ok) act('player:kick', { playerId: p.id }); }),
@@ -724,7 +723,7 @@
     const waiting = state.players.filter((p) => p.connected && !p.ready).map((p) => p.name);
     $('#btn-start').hidden = !host;
     $('#btn-start').disabled = missing > 0 || noQuestion.length > 0 || waiting.length > 0;
-    $('#btn-start').textContent = TEXTOS.venhaDeLa;
+    $('#btn-start').textContent = TEXTOS.comecarAula;
 
     // "Estou pronto" (todos menos o anfitrião). No modo das perguntas dos jogadores, só depois
     // de escrever a pergunta.
@@ -734,7 +733,7 @@
     $('#btn-ready').hidden = host || !me;
     $('#btn-ready').disabled = !meReady && needsQuestion;
     $('#btn-ready').classList.toggle('is-ready', meReady);
-    $('#btn-ready').textContent = meReady ? TEXTOS.naoServido : TEXTOS.estouServido;
+    $('#btn-ready').textContent = meReady ? TEXTOS.naoPresente : TEXTOS.estouPresente;
 
     const waitingText = waiting.length === 1
       ? TEXTOS.faltaPronto(waiting[0])
@@ -742,8 +741,8 @@
     $('#lobby-hint').textContent = missing > 0
       ? `${missing === 1 ? 'Falta 1 jogador' : `Faltam ${missing} jogadores`} para começar (mínimo ${state.minPlayers}).`
       : noQuestion.length ? `Falta a pergunta de: ${noQuestion.join(', ')}.`
-      : waiting.length ? (host || meReady ? waitingText : TEXTOS.carregaServido)
-      : host ? TEXTOS.todosServidos : TEXTOS.esperaAnfitriao;
+      : waiting.length ? (host || meReady ? waitingText : TEXTOS.carregaPresente)
+      : host ? TEXTOS.todosPresentes : TEXTOS.esperaAnfitriao;
     if (!host && needsQuestion && !meReady) $('#lobby-hint').textContent = TEXTOS.perguntaPrimeiro;
   }
   $('#btn-ready').addEventListener('click', () => {
@@ -1116,7 +1115,7 @@
       $('#ans-map .pins').replaceChildren(...(point ? [pin(point, '', '', colorOf(state.me))] : []));
       $('#btn-map-answer').hidden = answered;
       $('#btn-map-answer').disabled = !mapPick;
-      $('#btn-map-answer').textContent = mapPick ? TEXTOS.estaDito : TEXTOS.tocaNoMapa;
+      $('#btn-map-answer').textContent = mapPick ? TEXTOS.entregar : TEXTOS.tocaNoMapa;
     } else if (answered) {
       $('#ans-mine').textContent = withUnit(state.myAnswer, state.question.unit);
     }
@@ -1197,9 +1196,11 @@
     const prevScores = gained ? state.players.map((p) => p.score - (gained[p.id] || 0)) : [];
     const before = gained && new Set(prevScores).size > 1 ? positionsBy((p) => p.score - (gained[p.id] || 0)) : null;
     const list = $(sel);
-    // Total em baixo do talão ("As contas da casa"): os pontos de toda a mesa.
-    const total = list.closest('.receipt') && list.closest('.receipt').querySelector('.receipt-total b');
-    if (total) total.textContent = TEXTOS.pontos(state.players.reduce((sum, p) => sum + p.score, 0));
+    // Em baixo da pauta: a média de pontos da turma (com uma casa decimal).
+    const avg = list.closest('.grades') && list.closest('.grades').querySelector('.grades-avg b');
+    if (avg && state.players.length) {
+      avg.textContent = TEXTOS.pontos(Math.round((state.players.reduce((sum, p) => sum + p.score, 0) / state.players.length) * 10) / 10);
+    }
     list.replaceChildren(...rows.map(({ p, position, first }) => {
       const classes = [p.id === state.me ? 'me' : '', first ? 'first' : ''].join(' ');
       const moved = before ? before.pos[p.id] - position : 0;
@@ -1410,7 +1411,7 @@
     const ctx = canvas.getContext('2d');
     const W = (canvas.width = window.innerWidth);
     const H = (canvas.height = window.innerHeight);
-    const colors = ['#e6c15a', '#7ed39b', '#f3ead7', '#4dabf7', '#b8323f', '#f783ac'];
+    const colors = ['#f2c230', '#f4f2ea', '#ffe97a', '#4dabf7', '#ff6b5e', '#a6f0bf']; // giz, lápis, post-it, caneta, correção
     const count = W < 500 ? 40 : 60;
     const parts = Array.from({ length: count }, () => ({
       x: W / 2 + (Math.random() - 0.5) * W * 0.3,

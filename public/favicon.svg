@@ -1,14 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <!-- Favicon de "Mais Coisa, Menos Coisa": uma plaquinha de madeira com "±" pintado. -->
-  <defs>
-    <linearGradient id="w" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#8a5a32"/><stop offset=".6" stop-color="#6b4423"/><stop offset="1" stop-color="#4e301a"/>
-    </linearGradient>
-  </defs>
-  <rect x="3" y="3" width="58" height="58" rx="12" fill="url(#w)" stroke="#3e2716" stroke-width="3"/>
-  <path d="M10,22 C26,18 38,26 54,20 M10,44 C26,48 40,40 54,46" fill="none" stroke="#3e2716" stroke-width="1.5" opacity=".35"/>
-  <!-- "±" a pincel, em branco sujo, com o traço de baixo em vermelho tinto -->
-  <path d="M32,13 L32,39 M19,26 L45,26" stroke="#f3ead7" stroke-width="7" stroke-linecap="round"/>
-  <path d="M19,49 L45,49" stroke="#f3ead7" stroke-width="7" stroke-linecap="round"/>
-  <path d="M20,49 L44,49" stroke="#b8323f" stroke-width="3" stroke-linecap="round"/>
+  <!-- Favicon de "Mais Coisa, Menos Coisa": um quadro verde com moldura de madeira clara e "±"
+       escrito a giz. -->
+  <rect x="2" y="2" width="60" height="60" rx="10" fill="#d6aa6c" stroke="#a87a3e" stroke-width="2"/>
+  <rect x="8" y="8" width="48" height="48" rx="4" fill="#2f4f3e"/>
+  <path d="M32,15 L32,37 M21,26 L43,26 M21,47 L43,47" stroke="#f4f2ea" stroke-width="6" stroke-linecap="round"/>
 </svg>

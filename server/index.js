@@ -129,6 +129,18 @@ io.on('connection', (socket) => {
     else broadcast(room);
   });
 
+  // Reação (emoji) durante a revelação: reenviada a todos os jogadores da sala, sem mexer no
+  // estado do jogo (não manda o room:state).
+  handle(socket, 'reaction:send', ({ emoji }) => {
+    const { room, playerId } = context();
+    const reaction = room.react(playerId, emoji);
+    if (!reaction) return { sent: false };
+    for (const p of room.players.values()) {
+      if (p.connected && p.socketId) io.to(p.socketId).emit('room:reaction', reaction);
+    }
+    return { sent: true };
+  });
+
   // Ações dentro da sala: executa e envia o novo estado a todos.
   const actions = {
     'settings:update': (room, id, p) => room.updateSettings(id, p),

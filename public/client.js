@@ -377,6 +377,63 @@
   renderConnection();
   socket.on('room:state', (s) => { state = s; render(); });
 
+  // --- Reações durante a revelação ------------------------------------------
+  // Barra fixa no fundo, com 6 emojis (os mesmos de REACTIONS em server/rooms.js). O servidor
+  // reenvia cada reação a toda a sala; aqui sobe a flutuar ~2 s, com o mini-retrato de quem a
+  // mandou. Só animações de transform/opacity (não pesam nas animações dos temas), no máximo
+  // MAX_REACTIONS ao mesmo tempo, e o retrato é uma cópia de um modelo guardado por jogador.
+  const REACTIONS = ['😂', '😱', '👏', '🤦', '🔥', '🤯'];
+  const REACTION_LABELS = ['A rir', 'Espantado', 'Palmas', 'Que vergonha', 'Fogo', 'Cabeça a explodir'];
+  const REACTION_GAP_MS = 700; // igual ao limite do servidor (não vale a pena mandar antes)
+  const MAX_REACTIONS = 15;
+  const REACTION_MS = 2000;
+  const reactingPhase = (phase) => phase === 'reveal' || phase === 'tiebreak-reveal';
+  let lastReactionSent = 0;
+  const reactionFaces = new Map(); // id -> { key, node } (modelo do mini-retrato)
+
+  $('#reactions-bar').append(...REACTIONS.map((emoji, i) => el('button', {
+    type: 'button', class: 'reaction-btn', text: emoji, 'aria-label': REACTION_LABELS[i],
+    // O botão não fica com o foco (não faz a página saltar no Safari do iPhone).
+    onmousedown: (e) => e.preventDefault(),
+    onclick: () => sendReaction(emoji),
+  })));
+
+  function sendReaction(emoji) {
+    if (!state || !reactingPhase(state.phase)) return;
+    const now = Date.now();
+    if (now - lastReactionSent < REACTION_GAP_MS) return;
+    lastReactionSent = now;
+    socket.emit('reaction:send', { emoji }, () => {}); // sem avisos: uma reação perdida não faz mal
+  }
+
+  function reactionFace(id) {
+    const p = player(id);
+    if (!p) return null;
+    const key = JSON.stringify([p.character, p.color, p.connected, state.hostId === id]);
+    let face = reactionFaces.get(id);
+    if (!face || face.key !== key) {
+      face = { key, node: avatar(p, 's') };
+      reactionFaces.set(id, face);
+    }
+    return face.node.cloneNode(true);
+  }
+
+  socket.on('room:reaction', ({ id, emoji } = {}) => {
+    if (!state || !reactingPhase(state.phase) || !REACTIONS.includes(emoji) || document.hidden) return;
+    const layer = $('#reactions-layer');
+    while (layer.childElementCount >= MAX_REACTIONS) layer.firstElementChild.remove(); // as mais antigas saem
+    const still = reducedMotion();
+    // Sítio ao calhas, na largura do ecrã (sem cortar nas bordas), com um ligeiro desvio na subida.
+    const x = 12 + Math.random() * 76;
+    const node = el('div', {
+      class: `reaction${still ? ' still' : ''}${id === state.me ? ' mine' : ''}`,
+      style: `left:${x.toFixed(1)}%;--dx:${Math.round((Math.random() - 0.5) * 50)}px;--c:${colorOf(id)}${still ? `;--y:${Math.round(Math.random() * 20)}vh` : ''}`,
+    }, [reactionFace(id), el('span', { class: 'reaction-emoji', text: emoji })]);
+    node.addEventListener('animationend', () => node.remove());
+    setTimeout(() => node.remove(), REACTION_MS + 300); // (sem animação, ou se não chegar a acabar)
+    layer.append(node);
+  });
+
   // --- Desenho ------------------------------------------------------------
 
   const SCREENS = {
@@ -432,6 +489,12 @@
     }
     // A barra fixa do fundo só existe na sala de espera (o aviso sobe para não a tapar).
     document.body.classList.toggle('has-actions', phase === 'lobby');
+    // A barra das reações só existe na revelação e nos resultados; fora delas, as que ainda
+    // estavam a subir desaparecem.
+    const reacting = reactingPhase(phase);
+    $('#reactions-bar').hidden = !reacting;
+    document.body.classList.toggle('has-reactions', reacting);
+    if (!reacting) $('#reactions-layer').replaceChildren();
     lastPhase = phase;
     trackProgress(); // feitos para os desbloqueáveis do boneco
     for (const sel of new Set(Object.values(SCREENS))) $(sel).hidden = sel !== SCREENS[phase];

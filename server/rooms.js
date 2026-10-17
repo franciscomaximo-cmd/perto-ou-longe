@@ -70,6 +70,10 @@ const REVEAL_STEP_MS = 1500;
 // (public/reveal/character-options.js).
 const PLAYER_COLORS = CharacterOptions.COLORS;
 const ROOM_IDLE_MS = 10 * 60_000;
+// Reações durante a revelação e os resultados: só estes emojis (os mesmos da barra em
+// public/client.js), no máximo uma por jogador a cada REACTION_GAP_MS. Não ficam guardadas.
+const REACTIONS = ['😂', '😱', '👏', '🤦', '🔥', '🤯'];
+const REACTION_GAP_MS = 700;
 const CODE_LETTERS = 'ABCDEFGHJKLMNPQRSTUVWXYZ'; // sem I nem O, para não confundir com 1 e 0
 
 // Erros "esperados", com mensagem para mostrar ao jogador.
@@ -191,6 +195,7 @@ class Room {
     this.revealStepMs = REVEAL_STEP_MS;
     this.hostTimer = null;
     this.lastActivity = Date.now();
+    this.lastReaction = new Map(); // id -> hora da última reação aceite (só para o limite)
   }
 
   touch() {
@@ -336,6 +341,20 @@ class Room {
     }
     player.ready = Boolean(ready);
     this.touch();
+  }
+
+  // Reação (emoji) durante a revelação ou os resultados da ronda (também do desempate).
+  // Devolve { id, emoji } para reenviar a toda a sala, ou null se chegou cedo demais depois da
+  // anterior (ignorada sem erro: tocar depressa não deve dar avisos). Nada fica guardado além
+  // da hora da última reação de cada jogador.
+  react(playerId, emoji, now = Date.now()) {
+    if (!this.players.has(playerId)) throw new GameError('Não estás nesta sala.');
+    if (!REACTIONS.includes(emoji)) throw new GameError('Essa reação não existe.');
+    if (this.phase !== 'reveal' && this.phase !== 'tiebreak-reveal') throw new GameError('Só podes reagir durante a revelação.');
+    const last = this.lastReaction.get(playerId);
+    if (last !== undefined && now - last < REACTION_GAP_MS) return null;
+    this.lastReaction.set(playerId, now);
+    return { id: playerId, emoji };
   }
 
   // O anfitrião tira um jogador da sala de espera (ex.: alguém que se ausentou e está a
@@ -971,4 +990,6 @@ module.exports = {
   MIN_PLAYERS,
   MAX_PLAYERS,
   DEFAULT_ROUNDS,
+  REACTIONS,
+  REACTION_GAP_MS,
 };

@@ -884,3 +884,28 @@ test('o temporizador fecha a fase de respostas (com poucas respostas, sem votaç
   assert.equal(room.stateFor(ids[0]).result.voting, false);
   room.destroy();
 });
+
+test('reações: só os 6 emojis, só na revelação, no máximo uma a cada 0,7 s por jogador', () => {
+  const { REACTIONS, REACTION_GAP_MS } = require('../server/rooms');
+  const { room, ids } = setup();
+  const [ana, rui] = ids;
+  assert.deepEqual(REACTIONS, ['😂', '😱', '👏', '🤦', '🔥', '🤯']);
+  assert.throws(() => room.react(ana, '😂', 1000), /durante a revelação/, 'na sala de espera não');
+  startWithNumber(room, ana);
+  assert.throws(() => room.react(ana, '😂', 1000), /durante a revelação/, 'a responder não');
+  for (const id of ids) room.submitAnswer(id, 200);
+  for (let i = 0; i < 3 && room.phase !== 'reveal'; i++) room.forceAdvance(ana);
+  assert.equal(room.phase, 'reveal');
+  assert.deepEqual(room.react(rui, '🔥', 1000), { id: rui, emoji: '🔥' });
+  assert.equal(room.react(rui, '😂', 1000 + REACTION_GAP_MS - 1), null, 'depressa demais: ignorada');
+  assert.deepEqual(room.react(ana, '😂', 1001), { id: ana, emoji: '😂' }, 'o limite é por jogador');
+  assert.deepEqual(room.react(rui, '😂', 1000 + REACTION_GAP_MS), { id: rui, emoji: '😂' });
+  assert.throws(() => room.react(rui, 'olá', 9000), /não existe/, 'sem texto livre');
+  assert.throws(() => room.react(rui, '💩', 9000), /não existe/);
+  assert.throws(() => room.react('ninguém', '😂', 9000), /Não estás/);
+  // Também nos resultados (o último passo da revelação) e sem nada guardado no estado.
+  room.revealSkip(ana);
+  assert.ok(room.react(rui, '👏', 20000));
+  assert.ok(!JSON.stringify(room.stateFor(ana)).includes('👏'));
+  room.destroy();
+});

@@ -1324,3 +1324,60 @@ body.has-actions #toast { bottom: calc(132px + env(safe-area-inset-bottom)); }
 }
 .map-inner path { fill: #fbf1cf; stroke: #6b5a3a; }
 .map-inner path.target { fill: #49b86c; stroke: #1d7038; }
+
+/* --- Reações durante a revelação e os resultados (client.js) --- */
+/* Barra fixa no fundo, discreta (meio transparente, no tom do quadro), com 6 botões grandes. */
+.reactions-bar {
+  position: fixed; left: 50%; bottom: calc(8px + env(safe-area-inset-bottom)); z-index: 20;
+  transform: translateX(-50%);
+  display: flex; gap: 6px; padding: 5px 6px; border-radius: 999px;
+  background: rgba(30, 52, 40, .82); border: 1px solid rgba(255, 255, 255, .18);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+}
+.reactions-bar[hidden] { display: none; }
+.reaction-btn {
+  width: 48px; height: 48px; padding: 0; border: 0; border-radius: 50%;
+  background: transparent; box-shadow: none; font-size: 1.65rem; line-height: 1;
+  -webkit-tap-highlight-color: transparent; touch-action: manipulation;
+}
+/* (Só com rato: no telemóvel o "por cima" ficava preso depois de tocar.) */
+@media (hover: hover) { .reaction-btn:hover { background: rgba(255, 255, 255, .12); } }
+.reaction-btn:active { transform: scale(.88); background: rgba(255, 255, 255, .2); }
+/* Com a barra, o fim da página e os botões fixos sobem, para não ficarem por baixo dela. */
+body.has-reactions main { padding-bottom: calc(96px + env(safe-area-inset-bottom)); }
+body.has-reactions #btn-tb-next { bottom: calc(76px + env(safe-area-inset-bottom)); }
+body.has-reactions #toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
+
+/* Reações a subir: por cima de tudo, sem apanhar toques. Só transform e opacity (o browser
+   anima-as à parte, sem pesar nas animações dos temas). */
+.reactions-layer { position: fixed; inset: 0; z-index: 30; pointer-events: none; overflow: hidden; }
+.reaction {
+  position: absolute; bottom: calc(70px + env(safe-area-inset-bottom));
+  display: flex; align-items: center; gap: 3px; padding: 2px 8px 2px 2px; border-radius: 999px;
+  background: rgba(255, 255, 255, .92); border: 2px solid var(--c, #fff);
+  box-shadow: 0 3px 10px rgba(0, 0, 0, .35);
+  transform: translateX(-50%);
+  animation: reaction-fly 2s ease-out forwards;
+  will-change: transform, opacity;
+}
+.reaction .avatar { margin: 0; flex: none; }
+.reaction-emoji { font-size: 1.6rem; line-height: 1; }
+@keyframes reaction-fly {
+  0% { opacity: 0; transform: translate(-50%, 10px) scale(.6); }
+  12% { opacity: 1; transform: translate(-50%, -14px) scale(1.05); }
+  20% { transform: translate(-50%, -30px) scale(1); }
+  /* Sobem pouco e desvanecem cedo: ficam sobretudo por cima da lista, não do cenário. */
+  60% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx, 0px)), -28vh) scale(.95); }
+}
+/* Movimento reduzido: aparece parada (a uma altura ao calhas) e desaparece ao fim de ~2 s,
+   sem voo. */
+.reaction.still {
+  bottom: calc(80px + var(--y, 0vh) + env(safe-area-inset-bottom)); /* (--y: até 20vh) */
+  animation: reaction-still 2s steps(1, end) forwards;
+}
+@keyframes reaction-still { 0% { opacity: 1; } 100% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .reaction { animation: reaction-still 2s steps(1, end) forwards; }
+  .reaction-btn:active { transform: none; }
+}

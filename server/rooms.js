@@ -1342,6 +1342,9 @@ function createRoom(notify) {
   return room;
 }
 
+// Todas as salas abertas (só para o laboratório de desenvolvimento, server/devlab.js).
+const listRooms = () => [...rooms.values()];
+
 function getRoom(code) {
   return rooms.get(normalizeCode(code)) || null;
 }
@@ -1369,6 +1372,7 @@ module.exports = {
   GameError,
   createRoom,
   getRoom,
+  listRooms,
   deleteRoom,
   sweepIdleRooms,
   clampTime,

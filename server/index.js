@@ -6,6 +6,7 @@ const express = require('express');
 const { Server } = require('socket.io');
 const { GameError, createRoom, getRoom, deleteRoom, sweepIdleRooms } = require('./rooms');
 const { devPagesGuard, devMapResult } = require('./devpages');
+const { createLab } = require('./devlab');
 const { hostRedirect } = require('./redirect');
 
 const PORT = process.env.PORT || 3000;
@@ -17,6 +18,8 @@ app.use(hostRedirect());
 app.use(devPagesGuard());
 // Contas dos cenários de mapa da pré-visualização (só fora de produção: o guarda de cima).
 app.get('/dev/map-result', devMapResult);
+// Laboratório da pré-visualização: bots num jogo a sério (só fora de produção: o mesmo guarda).
+app.use('/dev/lab', createLab({ broadcast, emitReaction }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/health', (req, res) => res.send('ok'));
 // Gerador de QR codes (MIT, sem dependências), servido daqui como o socket.io.js.
@@ -29,6 +32,13 @@ const io = new Server(server);
 function broadcast(room) {
   for (const p of room.players.values()) {
     if (p.connected && p.socketId) io.to(p.socketId).emit('room:state', room.stateFor(p.id));
+  }
+}
+
+// Uma reação vai para todos os jogadores da sala (sem mexer no estado do jogo).
+function emitReaction(room, reaction) {
+  for (const p of room.players.values()) {
+    if (p.connected && p.socketId) io.to(p.socketId).emit('room:reaction', reaction);
   }
 }
 
@@ -135,9 +145,7 @@ io.on('connection', (socket) => {
     const { room, playerId } = context();
     const reaction = room.react(playerId, emoji);
     if (!reaction) return { sent: false };
-    for (const p of room.players.values()) {
-      if (p.connected && p.socketId) io.to(p.socketId).emit('room:reaction', reaction);
-    }
+    emitReaction(room, reaction);
     return { sent: true };
   });
 

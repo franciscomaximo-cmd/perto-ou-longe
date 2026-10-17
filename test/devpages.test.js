@@ -43,3 +43,24 @@ test('pré-visualização: contas dos cenários de mapa com as do jogo (e erros 
   assert.equal(call({ country: '999', guesses: '0,0' }).status, 400);
   assert.equal(call({ country: '643', guesses: 'a,b' }).status, 400);
 });
+
+test('laboratório (/dev/lab/…): só em desenvolvimento; os palpites dos bots são válidos', () => {
+  const run = (env, path) => {
+    let status = null;
+    const res = { status(code) { status = code; return { send() {} }; } };
+    devPagesGuard(env)({ path }, res, () => {});
+    return status;
+  };
+  assert.equal(run({ RENDER: 'true' }, '/dev/lab/rooms'), 404);
+  assert.equal(run({ NODE_ENV: 'production' }, '/dev/lab/bots'), 404);
+  assert.equal(run({}, '/dev/lab/rooms'), null);
+  const { guessFor } = require('../server/devlab');
+  const { QUESTIONS } = require('../server/rooms');
+  for (const q of QUESTIONS) {
+    for (let i = 0; i < 5; i++) {
+      const g = guessFor(q);
+      if (q.type === 'map') assert.ok(Math.abs(g.lat) <= 90 && Math.abs(g.lon) <= 180, `${q.text}: ${JSON.stringify(g)}`);
+      else assert.ok(Number.isFinite(g), `${q.text}: ${g}`);
+    }
+  }
+});

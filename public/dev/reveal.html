@@ -20,6 +20,57 @@
 </head>
 <body>
   <main>
+    <!-- Laboratório: experimentar o jogo a sério neste computador, com bots (server/devlab.js). -->
+    <section class="screen dev-lab">
+      <h1 class="logo small">Laboratório (dev)</h1>
+      <p class="dev-note">Para experimentar as novidades num jogo a sério, neste computador e sem publicar nada:</p>
+      <ol class="dev-steps">
+        <li><a href="../" target="_blank" rel="noopener">Abre o jogo noutro separador</a> e cria uma turma. Nas regras da aula
+          escolhe o modo (Turma ou ⚔️ Duelo) e liga ou desliga as rondas especiais e as cartas.</li>
+        <li>Aqui, escolhe essa turma e junta bots (no Duelo, só 1). Os bots ficam presentes, respondem, votam e, se quiseres,
+          usam cartas, reagem na revelação e escrevem no chat.</li>
+        <li>Começa o jogo no outro separador. Podes escolher aqui a próxima ronda especial e dar-te as cartas que queres testar.</li>
+      </ol>
+      <div class="dev-bar">
+        <label>Turma <select id="lab-room"><option value="">(nenhuma turma aberta)</option></select></label>
+        <span id="lab-status" class="dev-note"></span>
+      </div>
+      <div class="dev-bar">
+        <label>Bots <select id="lab-count"></select></label>
+        <button id="lab-add" type="button">🤖 Juntar bots</button>
+        <button id="lab-remove" type="button">Tirar os bots</button>
+      </div>
+      <div class="dev-bar dev-checks">
+        <label><input type="checkbox" id="lab-opt-cards" checked> Bots usam cartas</label>
+        <label><input type="checkbox" id="lab-opt-reactions" checked> Bots reagem</label>
+        <label><input type="checkbox" id="lab-opt-chat" checked> Bots escrevem no chat</label>
+      </div>
+      <h3>Próxima ronda especial</h3>
+      <p class="dev-note">A próxima pergunta que começar é desta ronda especial (mesmo com as rondas especiais desligadas).
+        "Último lugar ataca" com a pauta toda empatada não dá o ponto do mais perto a ninguém.</p>
+      <div class="dev-bar" id="lab-specials"></div>
+      <h3>Dar cartas</h3>
+      <p class="dev-note">Escolhe 1 ou 2 cartas e o jogador (tu, normalmente). Dadas a meio do jogo, ficam logo na mão; na sala de
+        espera, entram quando o jogo começar. As cartas têm de estar ligadas nas regras.</p>
+      <div class="dev-bar"><label>Jogador <select id="lab-player"></select></label></div>
+      <div class="dev-bar" id="lab-card-pick"></div>
+      <div class="dev-bar"><button id="lab-give" type="button">🃏 Dar estas cartas</button></div>
+      <p id="lab-msg" class="dev-note" role="status"></p>
+      <ul id="lab-players" class="dev-lab-players"></ul>
+      <details class="dev-row">
+        <summary>O que experimentar</summary>
+        <ul class="dev-steps">
+          <li><b>⚔️ Duelo</b>: modo Duelo na sala + 1 bot. Anúncio "Duelo!", marcador em cima, sem votação, ecrã final próprio.</li>
+          <li><b>📝 Rondas especiais</b>: os botões acima (anúncio, etiqueta junto à pergunta, efeito nos pontos na revelação).</li>
+          <li><b>🃏 Cartas</b>: a mão no fundo do ecrã enquanto respondes; na revelação, quem usou o quê.</li>
+          <li><b>😂 Reações</b>: na revelação e nos resultados, a barra no fundo; os bots também reagem.</li>
+          <li><b>💬 Chat</b>: na sala de espera e no fim, o botão em cima (os bots também escrevem). Como anfitrião, podes silenciá-los.</li>
+          <li><b>🗺️ Mapa</b>: margens à volta do mapa e Malta, Cabo Verde e São Tomé no mapa (cenários na secção "Mapa", em baixo).</li>
+          <li><b>📺 Legenda</b>: na revelação dos números, a faixa da legenda encolhe no fim (secção de baixo).</li>
+        </ul>
+      </details>
+    </section>
+
     <section class="screen">
       <h1 class="logo small">Revelações (dev)</h1>
       <p class="dev-note">Página de desenvolvimento, fora do jogo: escolhe um tema e um cenário. Usa o mesmo
@@ -97,6 +148,15 @@
     .dev-poses { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 4px; }
     .dev-poses figure { margin: 0; flex: none; display: flex; flex-direction: column; align-items: center; }
     .dev-poses figcaption { font-size: .65rem; color: var(--muted); }
+    .dev-lab { margin-bottom: 28px; padding-bottom: 20px; border-bottom: 2px dashed var(--line); }
+    .dev-steps { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 4px; font-size: .9rem; }
+    .dev-steps a { color: var(--post-it); }
+    .dev-checks label { display: inline-flex; align-items: center; gap: 6px; font-size: .9rem; white-space: nowrap; }
+    .dev-checks input { width: 20px; height: 20px; min-height: 0; flex: none; margin: 0; }
+    .dev-lab h3 { margin: 6px 0 0; }
+    .dev-lab-players { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: .85rem; }
+    .dev-lab-players li { background: var(--card); border-radius: 8px; padding: 6px 10px; }
+    #lab-msg:empty { display: none; }
   </style>
 
   <script src="../reveal/precision.js"></script>
@@ -321,6 +381,28 @@
             ['Lima, Peru', -12.05, -77.04], ['Los Angeles, EUA', 34.05, -118.24], ['Cidade do México', 19.43, -99.13],
           ],
         },
+        // Países pequenos acrescentados ao mapa (vêm da escala 1:50m).
+        'Malta (palpites no Mediterrâneo)': {
+          country: '470', label: 'Malta', q: 'Onde fica Malta?',
+          guesses: [
+            ['Roma, Itália', 41.9, 12.5], ['Catânia, Sicília', 37.5, 15.09], ['Tunes, Tunísia', 36.8, 10.18],
+            ['Trípoli, Líbia', 32.89, 13.19], ['Valeta, Malta', 35.9, 14.51], ['Lisboa', 38.72, -9.14],
+          ],
+        },
+        'Cabo Verde (palpites no Atlântico)': {
+          country: '132', label: 'Cabo Verde', q: 'Onde fica Cabo Verde?',
+          guesses: [
+            ['Dacar, Senegal', 14.69, -17.44], ['Canárias', 28.1, -15.41], ['Lisboa', 38.72, -9.14],
+            ['Praia, Cabo Verde', 14.93, -23.51], ['Bissau', 11.86, -15.6], ['Madeira', 32.65, -16.91],
+          ],
+        },
+        'São Tomé e Príncipe (golfo da Guiné)': {
+          country: '678', label: 'São Tomé e Príncipe', q: 'Onde fica São Tomé e Príncipe?',
+          guesses: [
+            ['Libreville, Gabão', 0.39, 9.45], ['Malabo', 3.75, 8.78], ['Luanda', -8.84, 13.23],
+            ['Lagos, Nigéria', 6.45, 3.39], ['São Tomé', 0.34, 6.73], ['Kinshasa', -4.32, 15.31],
+          ],
+        },
       };
       const mapWrap = $('#dev-map');
       let mapRun = 0;
@@ -404,6 +486,125 @@
         renderMap();
       });
       window.MapView.load('../mapa.svg').then(() => startMap(Object.keys(MAP_SCENARIOS)[0]));
+    })();
+  </script>
+
+  <!-- Laboratório: fala com /dev/lab/ (server/devlab.js), que só existe em desenvolvimento. -->
+  <script>
+    (() => {
+      const $ = (sel) => document.querySelector(sel);
+      const el = (tag, props = {}, children = []) => {
+        const node = document.createElement(tag);
+        for (const [k, v] of Object.entries(props)) {
+          if (k === 'text') node.textContent = v;
+          else if (k === 'class') node.className = v;
+          else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+          else node.setAttribute(k, v);
+        }
+        for (const c of [].concat(children)) if (c) node.append(c);
+        return node;
+      };
+      const SPECIALS = { dobrar: '✖️2 Pontos a dobrar', relampago: '⚡ Ronda relâmpago', todos: '🙌 Toda a turma ganha', ultimo: '🐢 Último lugar ataca', escuras: '🙈 Às escuras' };
+      const CARDS = { aposta: '💰 Aposta', rouba: '🦊 Rouba ao primeiro', cabula: '📝 Cábula', copiar: '👀 Copiar pelo colega', tpc: '📚 Trabalho de casa feito', atestado: '🩹 Atestado médico', tempo: '⏰ Mais tempo', grupo: '🤝 Trabalho de grupo' };
+      const PHASES = { lobby: 'sala de espera', answering: 'a responder', voting: 'a votar', reveal: 'revelação', tiebreak: 'desempate', 'tiebreak-reveal': 'desempate (resultado)', end: 'fim' };
+      let rooms = [];
+      let picked = new Set();
+      const current = () => rooms.find((r) => r.code === $('#lab-room').value) || null;
+      const say = (text) => { $('#lab-msg').textContent = text; };
+
+      async function post(path, body) {
+        const room = current();
+        if (!room) return say('Primeiro escolhe uma turma (cria-a no jogo, noutro separador).');
+        try {
+          const res = await fetch(`/dev/lab/${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: room.code, ...body }) });
+          const data = await res.json();
+          if (!res.ok) { say(`⚠️ ${data.error || 'Não deu.'}`); return null; }
+          refresh();
+          return data;
+        } catch {
+          say('⚠️ Sem ligação ao servidor (o laboratório só existe em desenvolvimento).');
+          return null;
+        }
+      }
+
+      for (let n = 1; n <= 11; n++) $('#lab-count').append(el('option', { value: String(n), text: String(n) }));
+      $('#lab-count').value = '2';
+      $('#lab-add').addEventListener('click', async () => {
+        const data = await post('bots', { count: Number($('#lab-count').value) });
+        if (data) say(`🤖 ${data.added} ${data.added === 1 ? 'bot juntou-se' : 'bots juntaram-se'} à turma.`);
+      });
+      $('#lab-remove').addEventListener('click', async () => {
+        const data = await post('remove-bots', {});
+        if (data) say(`${data.removed} ${data.removed === 1 ? 'bot saiu' : 'bots saíram'}.`);
+      });
+      for (const k of ['cards', 'reactions', 'chat']) {
+        $(`#lab-opt-${k}`).addEventListener('change', (e) => post('options', { [k]: e.target.checked }));
+      }
+      $('#lab-specials').append(
+        el('button', { type: 'button', 'data-type': '', text: '🎲 Ao acaso (normal)', onclick: () => post('special', { type: null }).then((d) => d && say('A próxima ronda segue o sorteio normal.')) }),
+        ...Object.entries(SPECIALS).map(([type, label]) => el('button', {
+          type: 'button', 'data-type': type, text: label,
+          onclick: () => post('special', { type }).then((d) => d && say(`A próxima pergunta vai ser: ${label}.`)),
+        })),
+      );
+      $('#lab-card-pick').append(...Object.entries(CARDS).map(([type, label]) => el('button', {
+        type: 'button', 'data-card': type, text: label,
+        onclick: (e) => {
+          if (picked.has(type)) picked.delete(type);
+          else if (picked.size < 2) picked.add(type);
+          else return say('No máximo 2 cartas.');
+          e.currentTarget.classList.toggle('on', picked.has(type));
+        },
+      })));
+      $('#lab-give').addEventListener('click', async () => {
+        const playerId = $('#lab-player').value;
+        if (!playerId) return say('Escolhe o jogador.');
+        const data = await post('cards', { playerId, cards: [...picked] });
+        if (data) {
+          say(!data.cardsOn ? '⚠️ Cartas guardadas, mas as cartas estão desligadas nas regras da turma.'
+            : data.now ? '🃏 Cartas dadas: já estão na mão.' : '🃏 Cartas guardadas: entram quando o jogo começar.');
+        }
+      });
+      $('#lab-room').addEventListener('change', render);
+
+      function render() {
+        const room = current();
+        const sel = $('#lab-player');
+        const keep = sel.value;
+        sel.replaceChildren(...(room ? room.players : []).map((p) => el('option', { value: p.id, text: `${p.name}${p.bot ? ' 🤖' : ''}${p.host ? ' (anfitrião)' : ''}` })));
+        if (room) sel.value = room.players.some((p) => p.id === keep) ? keep : (room.players.find((p) => !p.bot) || room.players[0] || {}).id || '';
+        $('#lab-status').textContent = room
+          ? `${room.mode === 'duelo' ? '⚔️ Duelo' : '🏫 Turma'} · ${PHASES[room.phase] || room.phase}${room.round ? ` · pergunta ${room.round} de ${room.total}` : ''}`
+            + `${room.special ? ` · ${SPECIALS[room.special]}` : ''} · rondas especiais ${room.specialRounds ? 'ligadas' : 'desligadas'} · cartas ${room.cards ? 'ligadas' : 'desligadas'}`
+          : '';
+        document.querySelectorAll('#lab-specials button').forEach((b) => b.classList.toggle('on', Boolean(room) && (room.forcedSpecial || '') === b.dataset.type && Boolean(room.forcedSpecial)));
+        if (room && room.options) for (const k of ['cards', 'reactions', 'chat']) $(`#lab-opt-${k}`).checked = room.options[k];
+        $('#lab-players').replaceChildren(...(room ? room.players : []).map((p) => el('li', {
+          text: `${p.bot ? '🤖' : '🧑'} ${p.name}${p.host ? ' (anfitrião)' : ''}${p.connected ? '' : ' (desligado)'} · ${p.score} pts`
+            + `${p.hand.length ? ` · cartas: ${p.hand.map((c) => `${CARDS[c.replace('*', '')] || c}${c.endsWith('*') ? ' (usada)' : ''}`).join(', ')}` : ''}`
+            + `${p.override ? ` · escolhidas: ${p.override.map((c) => CARDS[c]).join(', ')}` : ''}`,
+        })));
+      }
+
+      async function refresh() {
+        try {
+          const res = await fetch('/dev/lab/rooms');
+          if (!res.ok) throw new Error();
+          rooms = await res.json();
+        } catch {
+          rooms = [];
+        }
+        const sel = $('#lab-room');
+        const keep = sel.value;
+        sel.replaceChildren(...(rooms.length
+          ? rooms.map((r) => el('option', { value: r.code, text: `${r.code} · ${r.players.map((p) => p.name).join(', ')}` }))
+          : [el('option', { value: '', text: '(nenhuma turma aberta: cria uma no jogo)' })]));
+        // Fica na turma escolhida; senão, a mais recente.
+        sel.value = rooms.some((r) => r.code === keep) ? keep : (rooms[rooms.length - 1] || {}).code || '';
+        render();
+      }
+      refresh();
+      setInterval(refresh, 1500);
     })();
   </script>
 </body>

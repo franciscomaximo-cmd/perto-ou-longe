@@ -281,6 +281,8 @@
         answerText = text({ x: VW / 2 + 22, y: 18, 'text-anchor': 'middle', class: 'malha-answer' }, '?');
         scene.append(
           s('rect', { x: 88, y: 4, width: 124, height: 20, rx: 6, class: 'malha-plaque', 'data-avoid': '' }),
+          // Zona principal (o meco): as etiquetas dos palpites não a tapam.
+          s('rect', { x: MECO.x - 16, y: MECO.y - MECO.h - 4, width: 32, height: AIM.y - (MECO.y - MECO.h - 4), fill: 'none', 'pointer-events': 'none', 'data-avoid': '' }),
           text({ x: 94, y: 16.5, class: 'malha-plaque-label' }, 'RESPOSTA'),
           answerText,
         );

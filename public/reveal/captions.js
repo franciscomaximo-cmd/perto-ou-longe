@@ -26,7 +26,9 @@
  *       maxWidth — com `fixed`, largura máxima em unidades da cena;
  *   - null: sem etiqueta para esse jogador.
  * Sem markOf, procura um elemento com data-mark="<id>" na cena. Os elementos com o atributo
- * data-avoid (a placa da resposta certa) nunca ficam tapados por etiquetas.
+ * data-avoid (a placa da resposta certa e a zona principal do tema: a baliza, o alvo, o cesto…)
+ * nunca ficam tapados por etiquetas. Quando à volta da marca não há lugar, a etiqueta vai para o
+ * lugar livre mais perto, em toda a cena, ligada à marca por uma linha fina.
  */
 (function (root) {
   const numberFormat = new Intl.NumberFormat('pt-PT', { maximumFractionDigits: 3 });
@@ -92,6 +94,11 @@
       }
       // Enquanto há coisas a mexer, as etiquetas acompanham as marcas.
       c.interval = setInterval(layout, 250);
+      // Quando as letras acabam de carregar, as etiquetas mudam de largura: volta a arrumá-las.
+      if (document.fonts) {
+        const round = c;
+        document.fonts.ready.then(() => { if (c === round) { c.lastLayout = null; layout(); } });
+      }
     }
 
     // A vez de um jogador: legenda na faixa de cima; as etiquetas de quem já jogou aparecem
@@ -222,8 +229,29 @@
       return out;
     }
 
+    // Lugar livre mais perto da marca em toda a cena (procura numa grelha de 6 px), para quando
+    // à volta da marca não há espaço (ex.: muitas bolas dentro da baliza, que não se pode tapar).
+    // A etiqueta fica onde houver lugar e uma linha fina liga-a à marca.
+    function nearestFree(a, w, h, bounds, ok) {
+      const ax = (a.l + a.r) / 2;
+      const ay = (a.t + a.b) / 2;
+      let best = null;
+      let bestD = Infinity;
+      for (let t = bounds.t; t + h <= bounds.b; t += 6) {
+        for (let l = bounds.l; l + w <= bounds.r; l += 6) {
+          const q = { l, t, r: l + w, b: t + h };
+          const dx = Math.max(0, q.l - ax, ax - q.r);
+          const dy = Math.max(0, q.t - ay, ay - q.b);
+          const d = dx * dx + dy * dy;
+          if (d < bestD && ok(q)) { best = q; bestD = d; }
+        }
+      }
+      return best;
+    }
+
     // Coloca todas as etiquetas visíveis, sem se sobreporem, dentro da cena e sem tapar a placa
-    // da resposta. O vencedor escolhe primeiro (depois da resposta certa).
+    // da resposta nem a zona principal do tema (data-avoid). O vencedor escolhe primeiro (depois
+    // da resposta certa). Se nada mudou desde a última vez, não faz nada.
     function layout() {
       if (!c || !c.labels.size) return;
       const S = stage.getBoundingClientRect();
@@ -239,9 +267,13 @@
         const spec = specOf(id);
         anchors.set(id, spec ? { spec, rect: anchorOf(spec, S) } : null);
       }
+      const round = (q) => q && [q.l, q.t, q.r, q.b].map(Math.round).join(',');
+      const signature = JSON.stringify([c.answer, ids, round(bounds), avoid.map(round), [...anchors].map(([k, v]) => [k, v && round(v.rect)])]);
+      if (signature === c.lastLayout) return;
+      c.lastLayout = signature;
       const placed = [];
       const leaders = [];
-      const inside =(q) => q.l >= bounds.l && q.t >= bounds.t && q.r <= bounds.r && q.b <= bounds.b;
+      const inside = (q) => q.l >= bounds.l && q.t >= bounds.t && q.r <= bounds.r && q.b <= bounds.b;
       const free = (q, list) => !list.some((o) => overlaps(q, o));
       const apart = (q) => !placed.some((o) => crowds(q, o)) && !avoid.some((o) => crowds(q, o));
       for (const id of ids) {
@@ -256,8 +288,14 @@
             const h = node.offsetHeight;
             if (anchor.spec.maxWidth && anchor.rect.scale && w > anchor.spec.maxWidth * anchor.rect.scale) continue;
             const cands = candidates(anchor.rect, w, h, anchor.spec);
-            spot = cands.find((q) => inside(q) && apart(q) && free(q, avoid) && free(q, marks))
-              || cands.find((q) => inside(q) && apart(q) && free(q, avoid));
+            spot = cands.find((q) => inside(q) && apart(q) && free(q, marks))
+              || cands.find((q) => inside(q) && apart(q));
+            // Sem lugar à volta: o lugar livre mais perto, em toda a cena (sem tapar marcas e,
+            // se não houver, tapando só marcas).
+            if (!spot && !anchor.spec.fixed) {
+              spot = nearestFree(anchor.rect, w, h, bounds, (q) => apart(q) && free(q, marks))
+                || nearestFree(anchor.rect, w, h, bounds, apart);
+            }
             if (spot) break;
           }
         }

@@ -225,6 +225,8 @@
         answerText = text({ x: VW / 2 + 22, y: 18, 'text-anchor': 'middle', class: 'golf-answer' }, '?');
         scene.append(
           s('rect', { x: 88, y: 4, width: 124, height: 20, rx: 6, class: 'golf-plaque', 'data-avoid': '' }),
+          // Zona principal (o buraco e a bandeira): as etiquetas dos palpites não a tapam.
+          s('rect', { x: HOLE.x - 14, y: POLE_TOP - 4, width: 28, height: HOLE.y - POLE_TOP + 14, fill: 'none', 'pointer-events': 'none', 'data-avoid': '' }),
           text({ x: 94, y: 16.5, class: 'golf-plaque-label' }, 'RESPOSTA'),
           answerText,
         );

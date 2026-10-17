@@ -251,6 +251,8 @@
         answerText = text({ x: VW / 2, y: 26, 'text-anchor': 'middle', class: 'dart-answer' }, '?');
         scene.append(
           s('rect', { x: VW / 2 - 62, y: 4, width: 124, height: 30, rx: 8, class: 'dart-plaque', 'data-avoid': '' }),
+          // Zona principal (o alvo, com o anel dos números): as etiquetas dos palpites não a tapam.
+          s('rect', { x: BOARD.x - BOARD.rim, y: BOARD.y - BOARD.rim, width: BOARD.rim * 2, height: BOARD.rim * 2, fill: 'none', 'pointer-events': 'none', 'data-avoid': '' }),
           text({ x: VW / 2 - 56, y: 13, class: 'dart-plaque-label' }, 'RESPOSTA'),
           answerText,
         );

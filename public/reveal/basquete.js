@@ -249,6 +249,8 @@
         answerText = text({ x: 100, y: 22, 'text-anchor': 'middle', class: 'basq-answer' }, '?');
         scene.append(
           s('rect', { x: 10, y: 6, width: 140, height: 24, rx: 7, class: 'basq-plaque', 'data-avoid': '' }),
+          // Zona principal (o cesto e a tabela): as etiquetas dos palpites não a tapam.
+          s('rect', { x: RIM.x - RIM.rx - 4, y: BOARD.top, width: BOARD.x + 8 - (RIM.x - RIM.rx - 4), height: RIM.y + 30 - BOARD.top, fill: 'none', 'pointer-events': 'none', 'data-avoid': '' }),
           text({ x: 17, y: 21, class: 'basq-plaque-label' }, 'RESPOSTA'),
           answerText,
         );

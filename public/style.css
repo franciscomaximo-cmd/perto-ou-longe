@@ -170,6 +170,11 @@ button.label-btn {
 }
 button.label-btn:active { box-shadow: inset 0 0 0 3px var(--papel), inset 0 0 0 4px rgba(31, 78, 158, .35); transform: translateY(2px); }
 button.ghost { background: transparent; border-color: transparent; color: var(--muted); font-weight: 700; padding: 10px; text-decoration: underline; text-underline-offset: 3px; }
+/* Botões principais desativados (ex.: "Começar a aula!" enquanto falta alguém, "Votar" sem
+   escolha): cinzento claro de giz, com o texto bem legível (6,0:1) e o contorno tracejado. */
+button.primary:disabled, button.label-btn:disabled {
+  opacity: 1; background: #e3e7e0; color: #4f574e; border: 2px dashed #9aa39a; box-shadow: none;
+}
 
 .divider { display: flex; align-items: center; gap: 10px; color: var(--muted); font-size: .9rem; margin: 6px 0; }
 .divider::before, .divider::after { content: ""; flex: 1; height: 1px; background: var(--line); }
@@ -795,10 +800,19 @@ html, body { overflow-anchor: none; }
 
 /* Linhas do mapa até ao país certo */
 .map-inner .lines { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+/* Linhas das etiquetas afastadas até aos seus pinos (na cor do jogador, por baixo dos pinos e
+   das etiquetas). */
+.map-inner .leaders { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 1; }
+.map-inner .leaders line { stroke-width: 1.5; stroke-linecap: round; filter: drop-shadow(0 0 1px rgba(0, 0, 0, .7)); }
 .map-inner .lines line { stroke: var(--bg); stroke-width: 2; stroke-dasharray: 4 3; vector-effect: non-scaling-stroke; }
 .map-inner .lines line.near { stroke: #1a7a52; }
 .map-inner .lines line.far { stroke: #c43c3c; }
 .pins { z-index: 2; }
+/* As etiquetas ficam por cima de todos os pinos (um ponto nunca tapa o texto de outra). Para
+   isso, o pino que acabou de aparecer não fica com a animação "presa" no fim (senão criava um
+   contexto próprio e a sua etiqueta ficava por baixo dos pinos seguintes). */
+.pin-label { z-index: 4; }
+.pin.appear { animation-fill-mode: backwards; }
 
 /* Votos */
 .votes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -1218,24 +1232,24 @@ body.has-actions #toast { bottom: calc(132px + env(safe-area-inset-bottom)); }
 .vote-title { font-size: 2.1rem; font-weight: 700; line-height: 1.1; color: var(--giz); }
 
 /* --- Revelação: o cenário projetado num quadro interativo, com moldura FINA --- */
-/* Rebordo de plástico claro (quadro interativo) e, por baixo, o tabuleiro dos marcadores; em
-   cima, a faixa da legenda. A moldura é fina para o cenário ocupar quase toda a largura. */
-.reveal-stage.screen-frame {
-  padding: 5px; border-radius: 10px;
-  background: #e6e9ec;
-  box-shadow: inset 0 0 0 1px #b5bcc2, 0 8px 18px rgba(0, 0, 0, .35);
+/* A moldura é só uma borda fina de plástico claro À VOLTA DO PRÓPRIO CENÁRIO (não do palco):
+   assim não sobra margem cinzenta dos lados quando o cenário é mais estreito do que o ecrã
+   (os cenários quadrados ficam limitados a ~45% da altura do ecrã). Por baixo, o tabuleiro
+   dos marcadores; em cima, a faixa da legenda (transparente). */
+.reveal-stage.screen-frame { padding: 5px 5px 12px; }
+.reveal-stage.screen-frame.has-captions { padding-top: 58px; }
+.reveal-stage.screen-frame .rv-caption { top: 2px; }
+.reveal-stage.screen-frame > svg, .reveal-stage.screen-frame > .tgt-board {
+  border-radius: 6px;
+  box-shadow: 0 0 0 4px #e6e9ec, 0 0 0 5px #b5bcc2, 0 8px 18px 4px rgba(0, 0, 0, .35);
 }
 .reveal-stage.screen-frame::after {
-  content: ""; position: absolute; left: 22%; right: 22%; bottom: -7px; height: 7px;
+  content: ""; position: absolute; left: 30%; right: 30%; bottom: 2px; height: 6px;
   background: #cfd5da; border-radius: 0 0 6px 6px; box-shadow: 0 3px 6px rgba(0, 0, 0, .25);
 }
-.reveal-stage.screen-frame.has-captions { padding-top: 58px; }
-.reveal-stage.screen-frame .rv-caption { top: 4px; }
-.reveal-stage.screen-frame > svg, .reveal-stage.screen-frame > .tgt-board { box-shadow: 0 0 0 1px #9aa3aa; border-radius: 6px; }
-/* No telemóvel, o quadro estende-se quase até às bordas do ecrã (como o mapa). */
+/* No telemóvel, o cenário estende-se quase até às bordas do ecrã (como o mapa). */
 @media (max-width: 599px) {
-  .reveal-stage.screen-frame { margin: 0 -12px; padding: 3px; border-radius: 8px; }
-  .reveal-stage.screen-frame.has-captions { padding-top: 56px; }
+  .reveal-stage.screen-frame { margin: 0 -10px; }
   .reveal-stage.screen-frame > svg, .reveal-stage.screen-frame > .tgt-board { border-radius: 5px; }
 }
 /* Legenda da vez e resumo final: em papel, com a letra manuscrita no nome. */

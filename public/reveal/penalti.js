@@ -311,6 +311,8 @@
         answerText = text({ x: VW / 2 + 22, y: 18, 'text-anchor': 'middle', class: 'pen-answer' }, '?');
         scene.append(
           s('rect', { x: 88, y: 4, width: 124, height: 20, rx: 6, class: 'pen-plaque', 'data-avoid': '' }),
+          // Zona principal (a baliza): as etiquetas dos palpites não a tapam.
+          s('rect', { x: GOAL.l - 4, y: GOAL.t - 4, width: GOAL.r - GOAL.l + 8, height: GOAL.b - GOAL.t + 4, fill: 'none', 'pointer-events': 'none', 'data-avoid': '' }),
           text({ x: 94, y: 16.5, class: 'pen-plaque-label' }, 'RESPOSTA'),
           answerText,
         );

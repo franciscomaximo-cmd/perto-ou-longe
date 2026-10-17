@@ -240,6 +240,8 @@
         answerText = s('text', { x: VW / 2, y: 26, 'text-anchor': 'middle', class: 'arco-answer' }, [document.createTextNode('?')]);
         scene.append(
           s('rect', { x: VW / 2 - 62, y: 4, width: 124, height: 30, rx: 8, class: 'arco-plaque', 'data-avoid': '' }),
+          // Zona principal (o alvo): as etiquetas dos palpites não a tapam.
+          s('rect', { x: TARGET.x - TARGET.r, y: TARGET.y - TARGET.r, width: TARGET.r * 2, height: TARGET.r * 2, fill: 'none', 'pointer-events': 'none', 'data-avoid': '' }),
           s('text', { x: VW / 2 - 56, y: 13, class: 'arco-plaque-label' }, [document.createTextNode('RESPOSTA')]),
           answerText,
         );

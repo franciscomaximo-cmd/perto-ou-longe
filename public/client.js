@@ -1275,10 +1275,12 @@
     });
   }
 
-  // Etiquetas dos pinos no mapa (deteção de colisões): cada etiqueta tenta, por ordem, ficar
-  // por cima do pino, por baixo, e depois cada vez mais afastada (uma fila de cada vez), até
-  // não tapar nenhuma das já postas nem sair do mapa. Quando fica afastada, uma linha fina
-  // liga-a ao seu pino. A lista por baixo do mapa garante que nada fica ilegível.
+  // Etiquetas dos pinos no mapa (deteção de colisões): cada etiqueta experimenta ficar por
+  // cima do pino, por baixo, um pouco para cada lado e depois cada vez mais afastada (uma fila
+  // de cada vez), e fica no sítio menos mau. Nunca tapa o país certo (nem o anel à volta dele)
+  // se houver outro sítio, e evita as outras etiquetas, os pinos e as bordas do mapa. Quando
+  // fica afastada, uma linha fina liga-a ao seu pino. A lista por baixo do mapa garante que
+  // nada fica ilegível.
   function layoutPinLabels(wrap) {
     // Limites: a parte do mapa que está À VISTA (com zoom, o mapa inteiro vai muito além do
     // ecrã e uma etiqueta "dentro do mapa" podia estar cortada pela borda do contentor).
@@ -1288,40 +1290,125 @@
       left: Math.max(inner.left, view.left) + 4, right: Math.min(inner.right, view.right) - 4,
       top: Math.max(inner.top, view.top) + 4, bottom: Math.min(inner.bottom, view.bottom) - 4,
     };
-    const placed = [...wrap.querySelectorAll('.pins .pin')].map((p) => p.getBoundingClientRect());
+    const pins = [...wrap.querySelectorAll('.pins .pin')].map((p) => p.getBoundingClientRect());
+    const labels = [];
+    // A resposta certa: o anel à volta do país e o próprio país (se não ocupar quase toda a
+    // vista, como um país enorme muito aproximado, ou um país com territórios muito afastados).
+    const answer = [];
+    const ring = wrap.querySelector('.pins .pin.target');
+    if (ring) answer.push(ring.getBoundingClientRect());
+    const country = wrap.querySelector('path.target');
+    if (country) {
+      const b = country.getBoundingClientRect();
+      if (b.width < view.width * 0.6 && b.height < view.height * 0.6) answer.push(b);
+    }
     const overlaps = (a, b) => a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-    // Quanto pior é uma posição: choques com etiquetas e pinos e, pior ainda, ficar cortada em
-    // cima ou em baixo (perto de uma borda, a etiqueta vira-se para dentro do mapa).
-    const badness = (a) => placed.filter((b) => overlaps(a, b)).length
-      + (a.top < bounds.top || a.bottom > bounds.bottom ? 3 : 0);
+    const count = (a, list) => list.filter((b) => overlaps(a, b)).length;
+    // Quanto pior é uma posição: tapar a resposta certa (muito mau), chocar com outra etiqueta,
+    // ficar cortada em cima ou em baixo, tapar um pino e, por fim, ficar longe do seu pino.
+    const badness = (a, [, row, shift]) => count(a, answer) * 40 + count(a, labels) * 10
+      + (a.top < bounds.top || a.bottom > bounds.bottom ? 6 : 0) + count(a, pins)
+      + row * 0.2 + (shift ? 0.1 : 0);
     const ROW = 22; // um pouco mais do que a altura de uma etiqueta
-    const options = [0, 1, 2, 3, 4].flatMap((row) => [['above', row], ['below', row]]);
-    const apply = ([side, row], label) => {
-      label.style.top = side === 'below' ? `${14 + row * ROW}px` : 'auto';
-      label.style.bottom = side === 'above' ? `${14 + row * ROW}px` : 'auto';
-      label.classList.toggle('lead', row > 0);
-      label.classList.toggle('below', side === 'below');
-      label.style.setProperty('--lead', `${row * ROW + 7}px`);
-    };
+    const leaders = [];
     for (const label of wrap.querySelectorAll('.pins .pin-label')) {
-      // Primeiro, na horizontal: perto da borda esquerda ou direita, a etiqueta desliza para
-      // dentro (a linha até ao pino continua a apontar para ele).
+      // Pino fora da parte à vista (com zoom): a etiqueta não aparece (ficava encostada à borda,
+      // longe do pino). O palpite continua na lista por baixo do mapa.
+      const p = label.parentElement.getBoundingClientRect();
+      const px = (p.left + p.right) / 2;
+      const py = (p.top + p.bottom) / 2;
+      const offView = px < view.left || px > view.right || py < view.top || py > view.bottom;
+      label.style.visibility = offView ? 'hidden' : '';
+      if (offView) continue;
+      // Na horizontal: perto da borda esquerda ou direita, a etiqueta desliza para dentro (a
+      // linha até ao pino continua a apontar para ele).
       label.style.setProperty('--dx', '0px');
+      label.style.top = 'auto';
+      label.style.bottom = '14px';
       const box = label.getBoundingClientRect();
-      const dx = box.left < bounds.left ? bounds.left - box.left
-        : box.right > bounds.right ? bounds.right - box.right : 0;
-      label.style.setProperty('--dx', `${Math.round(dx)}px`);
-
+      const side = Math.max(0, box.width / 2 - 14); // desvio para o lado (o pino fica por baixo da etiqueta)
+      const dxFor = (shift) => {
+        const left = box.left + shift;
+        const right = box.right + shift;
+        return shift + (left < bounds.left ? bounds.left - left : right > bounds.right ? bounds.right - right : 0);
+      };
+      const options = [0, 1, 2, 3, 4].flatMap((row) => [0, -side, side].flatMap((shift) => [['above', row, shift], ['below', row, shift]]));
+      const apply = ([where, row, shift]) => {
+        label.style.top = where === 'below' ? `${14 + row * ROW}px` : 'auto';
+        label.style.bottom = where === 'above' ? `${14 + row * ROW}px` : 'auto';
+        label.style.setProperty('--dx', `${Math.round(dxFor(shift))}px`);
+        label.classList.toggle('lead', row > 0);
+        label.classList.toggle('below', where === 'below');
+        label.style.setProperty('--lead', `${row * ROW + 7}px`);
+      };
       let best = null;
       for (const option of options) {
-        apply(option, label);
-        const score = badness(label.getBoundingClientRect());
+        apply(option);
+        const score = badness(label.getBoundingClientRect(), option);
         if (!best || score < best.score) best = { option, score };
-        if (score === 0) break;
+        if (score < 0.05) break;
       }
-      apply(best.option, label);
-      placed.push(label.getBoundingClientRect());
+      apply(best.option);
+      // Sem lugar perto do pino (taparia outra etiqueta ou a resposta certa): vai para o lugar
+      // livre mais perto, em toda a parte à vista do mapa, ligado ao pino por uma linha fina.
+      if (best.score >= 10) {
+        const spot = nearestFreeSpot(box.width, box.height, px, py, bounds, (q) => !count(q, labels) && !count(q, answer));
+        if (spot) {
+          placeAt(label, spot);
+          leaders.push({ x1: px, y1: py, ...closestPoint(spot, px, py), color: label.parentElement.style.getPropertyValue('--c') });
+        }
+      }
+      labels.push(label.getBoundingClientRect());
     }
+    drawLeaders(wrap, leaders);
+  }
+
+  // Lugar livre (sem tapar o que `ok` recusa) mais perto do ponto (px, py), numa grelha de 8 px.
+  function nearestFreeSpot(w, h, px, py, bounds, ok) {
+    let best = null;
+    let bestD = Infinity;
+    for (let top = bounds.top; top + h <= bounds.bottom; top += 8) {
+      for (let left = bounds.left; left + w <= bounds.right; left += 8) {
+        const q = { left, top, right: left + w, bottom: top + h };
+        const dx = Math.max(0, q.left - px, px - q.right);
+        const dy = Math.max(0, q.top - py, py - q.bottom);
+        const d = dx * dx + dy * dy;
+        if (d < bestD && ok(q)) { best = q; bestD = d; }
+      }
+    }
+    return best;
+  }
+  // Põe a etiqueta num sítio qualquer (coordenadas do ecrã), mexendo no desvio e na altura em
+  // relação ao seu pino (sem a linha vertical: a ligação é desenhada à parte).
+  function placeAt(label, spot) {
+    label.classList.remove('lead', 'below');
+    label.style.top = 'auto';
+    label.style.bottom = '14px';
+    label.style.setProperty('--dx', '0px');
+    const base = label.getBoundingClientRect();
+    label.style.setProperty('--dx', `${Math.round(spot.left - base.left)}px`);
+    label.style.bottom = `${Math.round(14 + base.top - spot.top)}px`;
+  }
+  const closestPoint = (q, px, py) => ({ x2: Math.max(q.left, Math.min(px, q.right)), y2: Math.max(q.top, Math.min(py, q.bottom)) });
+  // Linhas finas das etiquetas afastadas até aos seus pinos, num SVG por cima do mapa (em
+  // píxeis do mapa, por isso acompanham o zoom e o scroll: são redesenhadas a cada arrumação).
+  function drawLeaders(wrap, leaders) {
+    const inner = wrap.querySelector('.map-inner');
+    let svg = inner.querySelector('svg.leaders');
+    if (!svg) {
+      svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      svg.setAttribute('class', 'leaders');
+      svg.setAttribute('aria-hidden', 'true');
+      inner.append(svg);
+    }
+    const r = inner.getBoundingClientRect();
+    svg.setAttribute('viewBox', `0 0 ${Math.round(r.width)} ${Math.round(r.height)}`);
+    svg.replaceChildren(...leaders.map((d) => {
+      const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+      for (const [k, v] of Object.entries({ x1: d.x1 - r.left, y1: d.y1 - r.top, x2: d.x2 - r.left, y2: d.y2 - r.top })) line.setAttribute(k, v.toFixed(1));
+      line.setAttribute('stroke', d.color || '#26262b');
+      return line;
+    }));
   }
 
   function renderMapReveal(r, order, shown, showCorrect) {

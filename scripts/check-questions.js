@@ -29,13 +29,13 @@ const PORTUGAL = /Portugal|portugu[eê]s|Lisboa|Porto|nacional/i;
 // quase não se veem no mapa e é impossível acertar dentro deles, por isso não podem ser a
 // resposta de uma pergunta de mapa (nem sobre um sítio concreto lá dentro). Código ISO
 // numérico → [nome, área aproximada em km²]. Ficam de fora desta lista, de propósito, Cabo
-// Verde (132) e São Tomé e Príncipe (678), por serem lusófonos. Os países insulares maiores
+// Verde (132) e São Tomé e Príncipe (678), por serem lusófonos, e Malta (470). Os países insulares maiores
 // (Chipre, Jamaica, Bahamas, Vanuatu, Fiji…) e os que partilham uma ilha com outro país
 // (Brunei, Timor-Leste) podem continuar a sair.
 const SMALL_ISLANDS = {
   '028': ['Antígua e Barbuda', 440], '048': ['Barém', 780], '052': ['Barbados', 430],
   '174': ['Comores', 1900], '184': ['Ilhas Cook', 240], '212': ['Dominica', 750], '296': ['Kiribati', 810],
-  '308': ['Granada', 340], '462': ['Maldivas', 300], '470': ['Malta', 320], '480': ['Maurícia', 2000],
+  '308': ['Granada', 340], '462': ['Maldivas', 300], '480': ['Maurícia', 2000],
   '520': ['Nauru', 21], '570': ['Niue', 260], '583': ['Micronésia', 700], '584': ['Ilhas Marshall', 180],
   '585': ['Palau', 460], '659': ['São Cristóvão e Neves', 260], '662': ['Santa Lúcia', 620],
   '670': ['São Vicente e Granadinas', 390], '690': ['Seicheles', 460], '702': ['Singapura', 730],

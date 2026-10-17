@@ -32,13 +32,13 @@ test('verificação das perguntas: apanha os erros mais comuns', () => {
 
 test('verificação das perguntas: países-ilha mais pequenos do que o Chipre não podem ser resposta de mapa', () => {
   const map = (country, label, extra = {}) => ({ type: 'map', country, label, article: '', category: 'geografia', ...extra });
-  // Malta não existe no mapa, Trindade e Tobago existe: os dois dão o erro do país-ilha.
-  assert.match(checkQuestions([map('470', 'Malta')]).join(), /país-ilha demasiado pequeno.*Malta/);
+  // As Maldivas não existem no mapa, Trindade e Tobago existe: os dois dão o erro do país-ilha.
+  assert.match(checkQuestions([map('462', 'Maldivas')]).join(), /país-ilha demasiado pequeno.*Maldivas/);
   assert.match(checkQuestions([map('780', 'Trindade e Tobago')]).join(), /país-ilha demasiado pequeno.*Trindade e Tobago/);
   // Também numa pergunta sobre um sítio concreto.
   assert.match(checkQuestions([map('662', 'Santa Lúcia', { text: 'Onde fica o vulcão Soufrière?' })]).join(), /país-ilha demasiado pequeno/);
-  // Cabo Verde e São Tomé e Príncipe são exceção (dão erro só por não existirem no mapa).
-  for (const [code, label] of [['132', 'Cabo Verde'], ['678', 'São Tomé e Príncipe']]) {
+  // Cabo Verde, São Tomé e Príncipe e Malta são exceção (dão erro só por não existirem no mapa).
+  for (const [code, label] of [['132', 'Cabo Verde'], ['678', 'São Tomé e Príncipe'], ['470', 'Malta']]) {
     const problems = checkQuestions([map(code, label)]).join();
     assert.doesNotMatch(problems, /país-ilha/);
     assert.match(problems, /país inexistente no mapa/);

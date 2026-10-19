@@ -1074,7 +1074,8 @@ test('duelo: sem fase de votação; pontos como no modo normal (1, em cheio 2, e
   // Marcador e estatísticas do duelo.
   assert.deepEqual(room.players.get(ana).score, 2);
   assert.deepEqual(room.players.get(rui).score, 3);
-  assert.deepEqual(room.stateFor(rui).duel, { ids, stats: { [ana]: { won: 2, exact: 0, points: { closest: 2, exact: 0, votes: 0, special: 0, cards: 0 } }, [rui]: { won: 2, exact: 1, points: { closest: 2, exact: 1, votes: 0, special: 0, cards: 0 } } } });
+  assert.deepEqual(room.stateFor(rui).duel.ids, ids);
+  assert.deepEqual({ stats: room.stateFor(rui).duel.stats }, { stats: { [ana]: { won: 2, exact: 0, points: { closest: 2, exact: 0, votes: 0, specials: {}, cards: 0 } }, [rui]: { won: 2, exact: 1, points: { closest: 2, exact: 1, votes: 0, specials: {}, cards: 0 } } } });
   room.destroy();
 });
 
@@ -1100,7 +1101,7 @@ test('duelo: empate no fim vai ao desempate; ecrã final sem o quadro de honra d
   const end = room.stateFor(rui);
   assert.deepEqual(end.standings, [[ana], [rui]]);
   assert.deepEqual(end.awards, [], 'sem prémios de turma');
-  assert.deepEqual(end.duel.stats, { [ana]: { won: 3, exact: 0, points: { closest: 3, exact: 0, votes: 0, special: 0, cards: 0 } }, [rui]: { won: 3, exact: 0, points: { closest: 3, exact: 0, votes: 0, special: 0, cards: 0 } } });
+  assert.deepEqual(end.duel.stats, { [ana]: { won: 3, exact: 0, points: { closest: 3, exact: 0, votes: 0, specials: {}, cards: 0 } }, [rui]: { won: 3, exact: 0, points: { closest: 3, exact: 0, votes: 0, specials: {}, cards: 0 } } });
   // Com "Turma", os prémios continuam lá.
   room.destroy();
 });

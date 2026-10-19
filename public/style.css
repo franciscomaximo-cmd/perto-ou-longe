@@ -1582,4 +1582,10 @@ body.has-reactions #toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
 .card-hand .school-card-state { display: block; font-size: .68rem; }
 .card-hand .school-card-text-wrap { display: flex; flex-direction: column; min-width: 0; }/* Fim do duelo: de onde vieram os pontos de cada um. */
 .duel-sources { list-style: none; margin: 2px 0 0; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: .85rem; line-height: 1.3; }
-.duel-total { margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(0, 0, 0, .2); font-weight: 700; }
+.duel-total { margin-top: 4px; padding-top: 4px; border-top: 1px solid rgba(0, 0, 0, .2); font-weight: 700; }/* Fim do duelo: ronda a ronda (fechado por defeito). */
+.duel-history { padding: 10px 12px; color: var(--grafite); }
+.duel-history summary { cursor: pointer; font-weight: 700; }
+.duel-history ol { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 6px; font-size: .9rem; line-height: 1.35; }
+.duel-history li { display: flex; gap: 6px; align-items: baseline; padding-top: 6px; border-top: 1px solid rgba(0, 0, 0, .12); }
+.duel-history .hist-round { flex: none; font-weight: 700; min-width: 1.6em; }
+.duel-history .hist-special { flex: none; }

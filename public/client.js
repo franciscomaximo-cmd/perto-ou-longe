@@ -2213,12 +2213,15 @@
     const signed = (n) => (n >= 0 ? `+${n}` : `−${-n}`);
     $('#end-duel').replaceChildren(...pair.map((p) => {
       const s = state.duel.stats[p.id] || { won: 0, exact: 0 };
-      const src = s.points || { closest: s.won, exact: s.exact, votes: 0, special: 0, cards: 0 };
+      const src = s.points || { closest: s.won, exact: s.exact, votes: 0, specials: {}, cards: 0 };
+      // "Mais perto" conta as rondas em que recebeu o ponto do mais perto (em "Último lugar
+      // ataca", o último lugar); cada ronda especial tem a sua linha (nunca se anulam).
       const lines = [
         `🎯 Mais perto: ${plural(s.won, 'ronda', 'rondas')} (${signed(src.closest || 0)})`,
         src.exact ? `💯 Em cheio: ${plural(s.exact, 'vez', 'vezes')} (${signed(src.exact)})` : null,
         src.votes ? `🗳️ Votos certos: ${signed(src.votes)}` : null,
-        src.special ? `✨ Rondas especiais: ${signed(src.special)}` : null,
+        ...Object.entries(src.specials || {}).filter(([type, n]) => n && SPECIALS[type])
+          .map(([type, n]) => `${SPECIALS[type].icon} ${SPECIALS[type].name}: ${signed(n)}`),
         src.cards ? `🃏 Cartas: ${signed(src.cards)}` : null,
       ].filter(Boolean);
       return el('div', { class: `duel-card${winner && winner.id === p.id ? ' win' : ''}` }, [
@@ -2226,6 +2229,34 @@
         el('b', { class: 'duel-card-name', text: p.name }),
         el('ul', { class: 'duel-sources' }, lines.map((text) => el('li', { text }))),
         el('span', { class: 'duel-total', text: `= ${plural(p.score, 'ponto', 'pontos')}` }),
+      ]);
+    }));
+    renderDuelHistory(signed);
+  }
+
+  // Fim do duelo: "Ver ronda a ronda" (fechado por defeito), uma linha por ronda: o número, o
+  // ícone da ronda especial (se houve), quem ganhou ou perdeu pontos, quantos e porquê.
+  const HISTORY_REASONS = {
+    closest: 'mais perto', exact: 'em cheio', lastPlace: 'ponto do último lugar', exactBonus: 'bónus do em cheio',
+    vote: 'voto certo', double: 'a dobrar', allWin: 'toda a turma', bet: 'aposta', betLost: 'aposta perdida',
+    steal: 'roubo ao líder', stolen: 'roubado', homework: 'trabalho de casa', group: 'trabalho de grupo', sick: 'atestado médico',
+  };
+  function renderDuelHistory(signed) {
+    const box = $('#end-history');
+    const history = (state.duel && state.duel.history) || [];
+    box.hidden = !history.length;
+    const key = JSON.stringify(history);
+    if (box.dataset.key === key) return; // (não fecha o bloco a cada atualização)
+    box.dataset.key = key;
+    $('#end-history-list').replaceChildren(...history.map((h) => {
+      const sp = h.special && SPECIALS[h.special];
+      const who = h.gains.length
+        ? h.gains.map((g) => `${g.name} ${signed(g.points)}${g.reasons.length ? ` (${g.reasons.map((r) => HISTORY_REASONS[r] || r).join(', ')})` : ''}`).join(' · ')
+        : 'ninguém ganhou pontos';
+      return el('li', {}, [
+        el('span', { class: 'hist-round', text: `${h.round}.` }),
+        sp ? el('span', { class: 'hist-special', text: sp.icon, title: sp.name, 'aria-label': sp.name }) : null,
+        el('span', { class: 'hist-who', text: who }),
       ]);
     }));
   }
@@ -2242,6 +2273,7 @@
     }
     $('.end-title').textContent = state.duel ? TEXTOS.fimDuelo : TEXTOS.toqueSaida;
     $('#end-duel').hidden = !state.duel;
+    if (!state.duel) $('#end-history').hidden = true;
     if (state.duel) {
       renderDuelEnd();
     } else {

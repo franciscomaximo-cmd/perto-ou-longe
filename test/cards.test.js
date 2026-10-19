@@ -513,9 +513,91 @@ test('a origem dos pontos de cada um soma a pontuação (para o ecrã final do d
     const st = room.stateFor(ids[0]);
     for (const id of ids) {
       const p = st.duel.stats[id].points;
-      const sum = p.closest + p.exact + p.votes + p.special + p.cards;
+      const sum = p.closest + p.exact + p.votes + Object.values(p.specials).reduce((a, b) => a + b, 0) + p.cards;
       assert.equal(sum, room.players.get(id).score, `run ${run}: ${JSON.stringify(p)} → ${room.players.get(id).score}`);
     }
     room.destroy();
   }
+});
+// --- Fim do duelo: de onde vêm os pontos e ronda a ronda -----------------------------------------
+
+test('fim do duelo: "mais perto" conta quem RECEBEU o ponto; cada ronda especial à parte; ronda a ronda', () => {
+  // O duelo do laboratório: 1) "Pontos a dobrar", só a Beatriz responde; 2) "Último lugar ataca",
+  // a Beatriz fica mais perto mas o ponto vai para o carlos (último); 3) ronda normal, a Beatriz.
+  const { room, ids } = game(['Beatriz', 'carlos'], { mode: 'duelo', rounds: 3 });
+  const [bea, carlos] = ids;
+  const round = (special, answers) => {
+    room.current.question = Q;
+    if (special) room.current.special = { type: special, introUntil: 0, textUntil: null };
+    answers.forEach((v, i) => { if (v !== null) room.submitAnswer(ids[i], v); });
+    toReveal(room, bea);
+  };
+  round('dobrar', [200, null]);
+  assert.deepEqual(room.stateFor(bea).result.points, { [bea]: 2 });
+  room.nextQuestion(bea);
+  round('ultimo', [200, 150]);
+  assert.deepEqual(room.stateFor(bea).result.points, { [carlos]: 1 });
+  room.nextQuestion(bea);
+  round(null, [200, 150]);
+  const { stats, history } = room.stateFor(carlos).duel;
+  assert.deepEqual(stats[bea], { won: 2, exact: 0, points: { closest: 2, exact: 0, votes: 0, specials: { dobrar: 1 }, cards: 0 } });
+  assert.deepEqual(stats[carlos], { won: 1, exact: 0, points: { closest: 1, exact: 0, votes: 0, specials: {}, cards: 0 } });
+  assert.deepEqual([room.players.get(bea).score, room.players.get(carlos).score], [3, 1]);
+  // Ronda a ronda (com o nome, o motivo e a ronda especial).
+  assert.deepEqual(history.map((h) => [h.round, h.special, h.gains.map((g) => [g.name, g.points, g.reasons])]), [
+    [1, 'dobrar', [['Beatriz', 2, ['closest', 'double']]]],
+    [2, 'ultimo', [['carlos', 1, ['lastPlace', 'closest']]]],
+    [3, null, [['Beatriz', 1, ['closest']]]],
+  ]);
+  room.destroy();
+});
+
+test('origem dos pontos: as rondas especiais não se anulam; ronda a ronda com cartas e em cheio de cima', () => {
+  const { room, ids } = game(['Ana', 'Rui'], { mode: 'duelo', rounds: 3 });
+  const [ana, rui] = ids;
+  // "Pontos a dobrar" (+1) e "Toda a turma ganha" (+1) ficam em linhas próprias.
+  room.current.special = { type: 'dobrar', introUntil: 0, textUntil: null };
+  room.submitAnswer(ana, 200);
+  room.submitAnswer(rui, 100);
+  room.nextQuestion(ana);
+  room.current.question = Q;
+  room.current.special = { type: 'todos', introUntil: 0, textUntil: null };
+  room.submitAnswer(ana, 200);
+  room.submitAnswer(rui, 210);
+  assert.deepEqual(room.stateFor(ana).duel.stats[ana].points.specials, { dobrar: 1, todos: 1 });
+  room.nextQuestion(ana);
+  // "Último lugar ataca": a Ana (à frente) acerta em cheio com a Aposta (bónus do em cheio +
+  // aposta); o Rui é o último e fica com o ponto do mais perto.
+  room.current.question = Q;
+  room.current.special = { type: 'ultimo', introUntil: 0, textUntil: null };
+  give(room, ana, ['aposta', 'tpc']);
+  room.useCard(ana, { card: 'aposta', amount: 2 });
+  room.submitAnswer(ana, 206);
+  room.submitAnswer(rui, 300);
+  const st = room.stateFor(rui);
+  const last = st.duel.history[2];
+  assert.equal(last.special, 'ultimo');
+  assert.deepEqual(last.gains.map((g) => [g.name, g.points, g.reasons]), [['Ana', 3, ['exactBonus', 'bet']], ['Rui', 1, ['lastPlace', 'closest']]]);
+  // A soma continua a dar a pontuação.
+  for (const id of ids) {
+    const p = st.duel.stats[id].points;
+    assert.equal(p.closest + p.exact + p.votes + Object.values(p.specials).reduce((a, b) => a + b, 0) + p.cards, room.players.get(id).score);
+  }
+  room.destroy();
+  // Roubo: o ladrão ("roubo ao líder") e o roubado ("roubado", com pontos negativos).
+  const t = game();
+  setScores(t.room, t.ids, [5, 3, 0]);
+  give(t.room, t.ids[1], ['rouba', 'tpc']);
+  t.room.useCard(t.ids[1], { card: 'rouba' });
+  [100, 200, 50].forEach((v, i) => t.room.submitAnswer(t.ids[i], v));
+  toReveal(t.room, t.ids[0]);
+  assert.deepEqual(t.room.history[0].gains.map((g) => [g.name, g.points, g.reasons]), [['Rui', 1, ['closest', 'steal']], ['Ana', -1, ['stolen']]]);
+  // Em "Turma" o histórico também se guarda (mas só o Duelo o mostra); um jogo novo começa do zero.
+  assert.equal(t.room.stateFor(t.ids[0]).duel, null);
+  t.room.phase = 'end';
+  t.room.backToLobby(t.ids[0]);
+  for (const p of t.room.players.values()) p.ready = true;
+  t.room.startGame(t.ids[0]);
+  assert.deepEqual(t.room.history, []);
+  t.room.destroy();
 });

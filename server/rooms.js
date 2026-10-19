@@ -247,6 +247,7 @@ class Room {
     this.rulesVersion = 0; // sobe quando o anfitrião muda a configuração (aviso nos clientes)
     this.kicked = new Set(); // ids expulsos: não voltam a entrar com a sessão guardada
     this.stats = new Map(); // id -> estatísticas do jogo, para os prémios do fim
+    this.history = []; // ronda a ronda do jogo atual (só em memória, enquanto a sala existir)
     this.phase = 'lobby'; // lobby | answering | voting | reveal | tiebreak | tiebreak-reveal | end
     this.round = 0;
     this.gameNumber = 0; // quantos jogos já começaram nesta sala
@@ -593,6 +594,7 @@ class Room {
     }
     for (const p of this.players.values()) p.score = 0;
     this.stats = new Map();
+    this.history = []; // ronda a ronda, só deste jogo
     this.questions = this.pickQuestions();
     this.specialPlan = new Set(this.settings.specialRounds ? planSpecialRounds(this.questions.length) : []);
     this.lastSpecialType = null;
@@ -960,7 +962,8 @@ class Room {
       if (player) player.score += pts;
     }
     this.recordStats(question, this.current.result, answers.size);
-    this.recordPointSources(base, afterSpecial, this.current.result.points);
+    this.recordPointSources(base, this.current.result, afterSpecial, this.current.result.points);
+    this.recordHistory(base, this.current.result);
     this.current.order = this.revealOrder(question, this.current.result.distances);
     // Revelação em passos, automática: um palpite de cada vez (pela ordem de `order`), depois
     // a resposta certa, os votos (se houve votação) e por fim os pontos.
@@ -1030,42 +1033,100 @@ class Room {
     if (!this.stats.has(id)) {
       this.stats.set(id, {
         closest: 0, exact: 0, farthest: 0, correctVotes: 0, errorSum: 0, answered: 0,
-        // De onde vieram os pontos (a soma dá a pontuação): o ponto do mais perto, o bónus do
-        // em cheio, os votos certos, as rondas especiais e as cartas (estes dois podem ser < 0).
-        points: { closest: 0, exact: 0, votes: 0, special: 0, cards: 0 },
+        // Rondas em que recebeu o ponto do mais perto (em "Último lugar ataca", o último lugar
+        // que o recebeu; `closest` conta quem ficou mesmo mais perto, para os prémios).
+        pointRounds: 0,
+        // De onde vieram os pontos (a soma dá a pontuação): o ponto do mais perto (de quem o
+        // recebeu), o em cheio, os votos certos, cada tipo de ronda especial à parte (para não
+        // se anularem) e as cartas (podem ser < 0).
+        points: { closest: 0, exact: 0, votes: 0, specials: {}, cards: 0 },
       });
     }
     return this.stats.get(id);
   }
 
-  // Separa os pontos da ronda pelas suas origens: os normais (base: scoreRound), o que a ronda
-  // especial mudou (afterSpecial − normais) e o que as cartas mudaram (final − afterSpecial).
-  recordPointSources(base, afterSpecial, final) {
-    const exact = new Set(base.exact);
-    for (const id of base.closest) {
-      this.statsOf(id).points.closest += 1;
-      if (exact.has(id)) this.statsOf(id).points.exact += 1;
+  // Os pontos do "mais perto" e do em cheio como foram DADOS nesta ronda: { id: pontos } e quem
+  // os recebeu. Em "Último lugar ataca", o ponto é do último lugar que o recebeu (1, ou 2 em
+  // cheio) e quem é de cima e acerta em cheio fica com o bónus do em cheio (+1).
+  closestGiven(base, special) {
+    const given = {};
+    const add = (id, n) => { given[id] = (given[id] || 0) + n; };
+    const winners = special && special.type === 'ultimo' ? special.awarded : base.closest;
+    for (const id of winners) add(id, base.distances[id] === 0 ? 2 : 1);
+    const bonus = special && special.type === 'ultimo' ? special.exactBonus || [] : [];
+    for (const id of bonus) add(id, 1);
+    return { given, winners, bonus };
+  }
+
+  // Separa os pontos da ronda pelas suas origens: o mais perto e o em cheio como foram dados,
+  // os votos certos, o que a ronda especial acrescentou (afterSpecial − dados) e o que as
+  // cartas mudaram (final − afterSpecial).
+  recordPointSources(base, result, afterSpecial, final) {
+    const special = result.special || null;
+    const { given, winners, bonus } = this.closestGiven(base, special);
+    for (const id of winners) {
+      const s = this.statsOf(id);
+      s.pointRounds += 1;
+      s.points.closest += 1;
+      if (base.distances[id] === 0) s.points.exact += 1;
     }
-    for (const id of base.correctVoters) this.statsOf(id).points.votes += 1;
-    const ids = new Set([...Object.keys(base.points), ...Object.keys(afterSpecial), ...Object.keys(final)]);
+    for (const id of bonus) this.statsOf(id).points.exact += 1;
+    for (const id of base.correctVoters) {
+      this.statsOf(id).points.votes += 1;
+      given[id] = (given[id] || 0) + 1;
+    }
+    const ids = new Set([...Object.keys(given), ...Object.keys(afterSpecial), ...Object.keys(final)]);
     for (const id of ids) {
-      const special = (afterSpecial[id] || 0) - (base.points[id] || 0);
+      const extra = (afterSpecial[id] || 0) - (given[id] || 0);
       const cards = (final[id] || 0) - (afterSpecial[id] || 0);
-      if (special) this.statsOf(id).points.special += special;
-      if (cards) this.statsOf(id).points.cards += cards;
+      const p = this.statsOf(id).points;
+      if (extra && special) p.specials[special.type] = (p.specials[special.type] || 0) + extra;
+      if (cards) p.cards += cards;
     }
   }
 
-  // Duelo: os dois jogadores (pela ordem em que entraram) e, de cada um, as rondas ganhas e os
-  // "em cheio" (para o ecrã final). Fora do duelo, null.
+  // Histórico ronda a ronda do jogo atual (só em memória): o número da ronda, a ronda especial
+  // (se houve) e quem ganhou ou perdeu pontos, quantos e porquê (códigos curtos; o texto fica
+  // no cliente). Leva o nome, para continuar a ler-se se alguém sair da sala.
+  recordHistory(base, result) {
+    const special = result.special || null;
+    const why = {};
+    const add = (id, reason) => {
+      if (!why[id]) why[id] = [];
+      if (!why[id].includes(reason)) why[id].push(reason);
+    };
+    const { winners, bonus } = this.closestGiven(base, special);
+    for (const id of winners) {
+      if (special && special.type === 'ultimo') add(id, 'lastPlace');
+      add(id, base.distances[id] === 0 ? 'exact' : 'closest');
+    }
+    for (const id of bonus) add(id, 'exactBonus');
+    for (const id of base.correctVoters) add(id, 'vote');
+    if (special && special.type === 'dobrar') for (const id of Object.keys(result.points)) add(id, 'double');
+    if (special && special.type === 'todos' && special.allWin) for (const id of Object.keys(result.distances)) add(id, 'allWin');
+    const CARD_REASONS = { won: 'bet', exactLastPlace: 'bet', lost: 'betLost', stole: 'steal', doubled: 'homework', helped: 'group', saved: 'sick', blockedTheft: 'sick' };
+    for (const o of result.cards || []) {
+      const reason = (o.type === 'aposta' || o.type === 'rouba' || o.type === 'tpc' || o.type === 'grupo' || o.type === 'atestado') && CARD_REASONS[o.result];
+      if (reason) add(o.id, reason);
+      if (o.type === 'rouba' && o.result === 'stole') add(o.victim, 'stolen');
+    }
+    const gains = Object.entries(result.points)
+      .filter(([, points]) => points)
+      .map(([id, points]) => ({ id, name: this.players.get(id) ? this.players.get(id).name : '?', points, reasons: why[id] || [] }));
+    this.history.push({ round: this.round, special: special ? special.type : null, gains });
+  }
+
+  // Duelo: os dois jogadores (pela ordem em que entraram), de cada um as rondas ganhas e de
+  // onde vieram os pontos, e o histórico ronda a ronda (para o ecrã final). Fora do duelo, null.
   duelInfo() {
     if (!this.isDuel() || this.phase === 'lobby') return null;
     const ids = [...this.players.keys()].slice(0, DUEL_PLAYERS);
     const stats = Object.fromEntries(ids.map((id) => {
       const s = this.stats.get(id) || {};
-      return [id, { won: s.closest || 0, exact: s.exact || 0, points: { ...(s.points || { closest: 0, exact: 0, votes: 0, special: 0, cards: 0 }) } }];
+      const p = s.points || { closest: 0, exact: 0, votes: 0, specials: {}, cards: 0 };
+      return [id, { won: s.pointRounds || 0, exact: s.exact || 0, points: { ...p, specials: { ...p.specials } } }];
     }));
-    return { ids, stats };
+    return { ids, stats, history: this.history.map((h) => ({ ...h, gains: h.gains.map((g) => ({ ...g, reasons: [...g.reasons] })) })) };
   }
 
   recordStats(question, result, answerCount) {

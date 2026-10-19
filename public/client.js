@@ -1801,7 +1801,8 @@
   // public/map.js; aqui ficam os nomes, os retratos e a lista por baixo do mapa.
   function renderMapReveal(r, order, shown, showCorrect) {
     const ids = order.slice(0, shown);
-    const clsOf = (id) => (showCorrect && r.closest.includes(id) ? 'near' : showCorrect && r.farthest.includes(id) ? 'far' : '');
+    const far = window.RevealPresentation.farthestShown(r);
+    const clsOf = (id) => (showCorrect && r.closest.includes(id) ? 'near' : showCorrect && far.includes(id) ? 'far' : '');
     window.MapView.drawReveal($('#rev-map'), {
       key: state.round,
       ids,
@@ -1825,8 +1826,9 @@
   }
 
   function renderVotes(r) {
-    $('#rev-farthest').textContent = r.farthest.length
-      ? `Quem ficou mais longe: ${listNames(r.farthest)}.`
+    const farthest = window.RevealPresentation.farthestShown(r);
+    $('#rev-farthest').textContent = farthest.length
+      ? `Quem ficou mais longe: ${listNames(farthest)}.`
       : '';
     const entries = Object.entries(r.votes);
     const hits = r.correctVoters.length;
@@ -2063,10 +2065,12 @@
 
     const votesFor = (id) => Object.values(r.votes).filter((t) => t === id).length;
     const answered = Object.keys(r.answers).sort((a, b) => r.distances[a] - r.distances[b]);
+    // (Com uma só resposta, ou todos empatados, ninguém aparece como "mais longe".)
+    const farthest = window.RevealPresentation.farthestShown(r);
     const rows = answered.map((id) => {
       const near = r.closest.includes(id);
       const exact = (r.exact || []).includes(id);
-      const far = r.farthest.includes(id);
+      const far = farthest.includes(id);
       const votes = votesFor(id);
       const lastPlace = r.special && r.special.type === 'ultimo' && r.special.awarded.includes(id);
       return el('li', { class: near ? 'near' : far ? 'far shake' : '' }, [
@@ -2206,7 +2210,7 @@
     // De onde vieram os pontos de cada um (a soma dá a pontuação): assim percebe-se um 2–1 com
     // "1 ronda ganha" para cada um (ex.: um "Trabalho de casa feito" ou "Pontos a dobrar").
     const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-    const signed = (n) => (n > 0 ? `+${n}` : `−${-n}`);
+    const signed = (n) => (n >= 0 ? `+${n}` : `−${-n}`);
     $('#end-duel').replaceChildren(...pair.map((p) => {
       const s = state.duel.stats[p.id] || { won: 0, exact: 0 };
       const src = s.points || { closest: s.won, exact: s.exact, votes: 0, special: 0, cards: 0 };
@@ -2214,7 +2218,7 @@
         `🎯 Mais perto: ${plural(s.won, 'ronda', 'rondas')} (${signed(src.closest || 0)})`,
         src.exact ? `💯 Em cheio: ${plural(s.exact, 'vez', 'vezes')} (${signed(src.exact)})` : null,
         src.votes ? `🗳️ Votos certos: ${signed(src.votes)}` : null,
-        src.special ? `📝 Rondas especiais: ${signed(src.special)}` : null,
+        src.special ? `✨ Rondas especiais: ${signed(src.special)}` : null,
         src.cards ? `🃏 Cartas: ${signed(src.cards)}` : null,
       ].filter(Boolean);
       return el('div', { class: `duel-card${winner && winner.id === p.id ? ' win' : ''}` }, [

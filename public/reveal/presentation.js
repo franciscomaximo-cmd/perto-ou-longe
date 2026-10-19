@@ -54,7 +54,15 @@
     return out;
   }
 
-  const api = { presentationOf, MIDDLE_MIN, MIDDLE_MAX };
+  // Quem aparece como "mais longe" (etiquetas, listas, resumo): nunca quem também ficou mais
+  // perto. Com uma só resposta (ou com todos empatados), o servidor dá o mesmo jogador como
+  // mais perto e mais longe; mostra-se só "mais perto". (Só a apresentação: os pontos não mudam.)
+  function farthestShown(result) {
+    const closest = new Set(result.closest || []);
+    return (result.farthest || []).filter((id) => !closest.has(id));
+  }
+
+  const api = { presentationOf, farthestShown, MIDDLE_MIN, MIDDLE_MAX };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.RevealPresentation = api;
 })(typeof window !== 'undefined' ? window : globalThis);

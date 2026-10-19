@@ -275,3 +275,28 @@ test('cada tema do servidor tem o seu ficheiro em public/reveal/ e está carrega
   // A posição de apresentação carrega-se antes do código comum (index.js usa-a).
   assert.ok(html.indexOf('reveal/presentation.js') > 0 && html.indexOf('reveal/presentation.js') < html.indexOf('reveal/index.js'));
 });
+
+test('uma só resposta: só "mais perto" (ninguém como "mais longe"), e a pontuação não muda', () => {
+  const { presentationOf, farthestShown } = require('../public/reveal/presentation');
+  // No Duelo, só a Ana responde: o servidor dá-a como mais perto e como mais longe (como
+  // sempre), mas o que se mostra é só "mais perto".
+  const room = new Room('TEST', () => {});
+  const ids = ['Ana', 'Rui'].map((n, i) => { const p = room.addPlayer(n); room.connect(p.id, `s${i}`); return p.id; });
+  Object.assign(room.settings, { mode: 'duelo', specialRounds: false, cards: false });
+  for (const p of room.players.values()) p.ready = true;
+  room.startGame(ids[0]);
+  room.current.question = { text: 'Quantos ossos tem o corpo humano adulto?', answer: 206 };
+  room.submitAnswer(ids[0], 200);
+  room.forceAdvance(ids[0]);
+  const r = room.stateFor(ids[1]).result;
+  assert.deepEqual(r.closest, [ids[0]]);
+  assert.deepEqual(r.points, { [ids[0]]: 1 }, 'a pontuação fica igual (1 ponto, sem votação)');
+  assert.deepEqual(farthestShown(r), [], 'ninguém aparece como "mais longe"');
+  room.destroy();
+  // Nos temas: o único jogador é o vencedor, nunca o "mais longe".
+  const one = presentationOf([{ id: 'a', precision: 0.03 }], { closest: ['a'], farthest: ['a'], exact: [] });
+  assert.deepEqual([one.a.winner, one.a.farthest, one.a.level], [true, false, 0]);
+  // Todos empatados: também só "mais perto". Com respostas diferentes, o mais longe continua.
+  assert.deepEqual(farthestShown({ closest: ['a', 'b'], farthest: ['a', 'b'] }), []);
+  assert.deepEqual(farthestShown({ closest: ['a'], farthest: ['c'] }), ['c']);
+});

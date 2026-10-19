@@ -151,7 +151,7 @@
       const { r } = c;
       const who = (ids) => ids.filter((id) => r.players[id]).map((id) => `${r.players[id].name} (${fmt(r.answers[id])})`).join(', ');
       const near = r.closest.filter((id) => r.players[id]);
-      const far = r.farthest.filter((id) => r.players[id] && !r.closest.includes(id));
+      const far = root.RevealPresentation.farthestShown(r).filter((id) => r.players[id]);
       if (!near.length) return false;
       const box = el('div', { class: `rv-summary${reducedMotion() ? ' still' : ''}` }, [
         el('div', { class: 'near' }, [el('b', { text: 'Mais perto: ' }), who(near)]),
@@ -201,7 +201,7 @@
         v.diff ? el('span', { class: 'df', text: ` · ${v.diff}` }) : null,
       ].filter(Boolean));
       node.classList.toggle('near', c.answer && r.closest.includes(id));
-      node.classList.toggle('far', c.answer && r.farthest.includes(id) && !r.closest.includes(id));
+      node.classList.toggle('far', c.answer && root.RevealPresentation.farthestShown(r).includes(id));
     }
 
     // Onde fica a marca de um jogador (retângulo relativo ao palco), a partir do tema.
